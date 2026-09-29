@@ -1,0 +1,334 @@
+/* Shared styles for the sign-in states and password recovery. */
+.form {
+  width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.wide {
+  width: 420px;
+  gap: 14px;
+}
+
+.title {
+  font-size: 30px;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+
+.hint {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--color-text-muted);
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.labelStrong {
+  color: var(--color-text);
+}
+
+.inputBox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+}
+
+.inputBox:focus-within {
+  border-color: var(--color-primary);
+}
+
+.inputError,
+.inputError:focus-within {
+  border: 1.5px solid var(--color-danger);
+  padding: 12.5px 13.5px;
+}
+
+.inputLocked {
+  background: var(--color-danger-tint);
+  border-color: var(--color-danger);
+}
+
+.disabled {
+  opacity: 0.62;
+  pointer-events: none;
+}
+
+.inputBox input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--color-text);
+  padding: 0;
+}
+
+.inputBox input::placeholder {
+  color: var(--color-text-dim);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.remember input {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border-radius: 4px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.remember input:checked {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.link {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.back {
+  align-self: flex-start;
+}
+
+.primary,
+.outline,
+.muted {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 46px;
+  padding: 0 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.primary {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-primary) 88%, black);
+}
+
+.primary:disabled {
+  opacity: 0.86;
+  cursor: progress;
+}
+
+.outline {
+  background: var(--color-surface);
+  border: 1px solid var(--color-primary);
+  color: var(--color-primary);
+}
+
+.outlineNeutral {
+  border-color: var(--color-border);
+}
+
+.muted {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-dim);
+  cursor: not-allowed;
+}
+
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--tone);
+}
+
+.alertTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tone);
+}
+
+.alertText {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.lockAlert {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 10px;
+  background: var(--color-danger-tint);
+  border: 1px solid var(--color-danger);
+}
+
+.lockBadge {
+  width: 36px;
+  height: 36px;
+  border-radius: 99px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-danger);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.errorText {
+  font-size: 11px;
+  color: var(--color-danger);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+
+.panelPlain {
+  border: none;
+}
+
+.overline {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: var(--color-text-dim);
+}
+
+.bullet {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+  font-size: 11px;
+}
+
+.bullet i {
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  flex-shrink: 0;
+}
+
+.iconCircle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 99px;
+  background: var(--color-primary-tint);
+  color: var(--color-primary);
+  font-size: 22px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.footnote {
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--color-text-dim);
+}
+
+.center {
+  text-align: center;
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+
+.strength {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.meter {
+  display: flex;
+  gap: 6px;
+}
+
+.meter span {
+  flex: 1;
+  height: 6px;
+  border-radius: 99px;
+  background: var(--color-track);
+}
+
+.reqGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 24px;
+}
+
+.req {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+}
+
+.reqOff {
+  color: var(--color-text-dim);
+}
+
+.spin {
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}

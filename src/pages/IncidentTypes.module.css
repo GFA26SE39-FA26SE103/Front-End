@@ -1,0 +1,156 @@
+.list {
+  flex: 1;
+  min-width: 0;
+  gap: 10px;
+  box-shadow: var(--shadow-card-soft);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 196px 130px 132px 1fr 36px;
+  align-items: center;
+  padding: 7px 8px;
+  font-size: 11px;
+}
+
+.row + .row {
+  border-top: 1px solid var(--color-border);
+}
+
+.head {
+  padding: 4px 8px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  color: var(--color-text-dim);
+}
+
+.name {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--color-text-muted);
+}
+
+.dim {
+  font-weight: 500;
+  color: var(--color-text-dim);
+}
+
+.strong {
+  font-weight: 500;
+}
+
+.disabled .name,
+.disabled .strong {
+  color: var(--color-text-dim);
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 8px 4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+}
+
+.group span:last-child {
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--color-text-dim);
+}
+
+.footnote {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 8px 0;
+  font-size: 10.5px;
+  color: var(--color-text-muted);
+}
+
+.drawer {
+  width: 390px;
+  flex-shrink: 0;
+  gap: 13px;
+  border: 1.5px solid var(--color-primary);
+  box-shadow: var(--shadow-card-soft);
+}
+
+.condition {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.condition > * {
+  min-width: 0;
+}
+
+.condition > :nth-child(3) {
+  flex: 1;
+}
+
+.two {
+  display: flex;
+  gap: 10px;
+}
+
+.two > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.help {
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--color-text-muted);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chipBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+}
+
+.chipOn {
+  background: var(--color-primary-tint);
+  color: var(--color-primary);
+}
+
+.error {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-danger);
+}
+
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  text-align: center;
+}

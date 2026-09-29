@@ -1,0 +1,171 @@
+.col {
+  flex: 1;
+  min-width: 0;
+  gap: 14px;
+  box-shadow: 0 2px 10px rgba(15, 23, 41, 0.07);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-dim);
+  text-align: left;
+  width: 100%;
+}
+
+.step:disabled {
+  cursor: default;
+}
+
+.stepDone,
+.stepCurrent {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.stepDone:hover span:nth-child(2) {
+  text-decoration: underline;
+}
+
+.stepState {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.doneDot {
+  width: 22px;
+  height: 22px;
+  border-radius: 99px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-success);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 10px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+
+.formTitle {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.formText {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--color-text-muted);
+}
+
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.error {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-danger);
+}
+
+.mini {
+  position: relative;
+  height: 220px;
+  border-radius: 10px;
+  background: var(--color-canvas);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.miniZone {
+  position: absolute;
+  border-radius: 8px;
+  border: 1.2px solid;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 6px 8px;
+}
+
+.miniCam {
+  position: absolute;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+  align-items: center;
+  padding: 10px 4px;
+  font-size: 12px;
+}
+
+.row + .row {
+  border-top: 1px solid var(--color-border);
+}
+
+.th {
+  padding: 4px 4px 8px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.72px;
+  color: var(--color-text-dim);
+}
+
+.cam {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.reconnect {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--color-primary);
+  background: var(--color-surface);
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.reconnect:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}

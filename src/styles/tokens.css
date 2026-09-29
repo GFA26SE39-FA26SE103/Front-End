@@ -1,0 +1,65 @@
+/* Colour tokens exported from the Figma variable collection "Theme" (Light / Dark). */
+:root {
+  --color-bg: #f4f6f9;
+  --color-surface: #ffffff;
+  --color-surface-2: #f5f7fa;
+  --color-border: #dde1e7;
+  --color-grid: #eef0f3;
+  --color-text: #1c2028;
+  --color-text-muted: #6b7280;
+  --color-text-dim: #9aa1ac;
+  --color-primary: #0d9494;
+  --color-primary-tint: #e2f4f3;
+  --color-on-primary: #ffffff;
+  --color-danger: #dc2d37;
+  --color-danger-tint: #fbe6e7;
+  --color-warning: #c88214;
+  --color-warning-tint: #fbf1df;
+  --color-success: #16965f;
+  --color-success-tint: #e4f3ea;
+  --color-info: #2563eb;
+  --color-info-tint: #eaf1fe;
+  --color-accent: #e0631b;
+  --color-accent-tint: #fff4eb;
+  --color-purple: #7c5cc4;
+  --color-purple-tint: #ede7fb;
+  --color-track: #e6e9ee;
+  --color-canvas: #eef1f5;
+  --color-placeholder: #e4e8ee;
+
+  --shadow-card: 0 4px 6px rgba(15, 23, 41, 0.05), 0 1px 1.5px rgba(15, 23, 41, 0.07);
+  --shadow-card-soft: 0 4px 12px -2px rgba(15, 23, 41, 0.05), 0 1px 3px rgba(15, 23, 41, 0.07);
+  --shadow-float: 0 2px 6px rgba(15, 23, 41, 0.08);
+
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+/* Dark values are ready for when the icon set gets dark variants. */
+:root[data-theme='dark'] {
+  --color-bg: #101218;
+  --color-surface: #1a1d26;
+  --color-surface-2: #212530;
+  --color-border: #343947;
+  --color-grid: #262a34;
+  --color-text: #e6e8ee;
+  --color-text-muted: #969daa;
+  --color-text-dim: #6e7583;
+  --color-primary: #14afaa;
+  --color-primary-tint: #123433;
+  --color-on-primary: #ffffff;
+  --color-danger: #e94a4f;
+  --color-danger-tint: #2e1618;
+  --color-warning: #f0aa37;
+  --color-warning-tint: #2c2210;
+  --color-success: #2daf78;
+  --color-success-tint: #12281e;
+  --color-info: #4682f0;
+  --color-info-tint: #152238;
+  --color-accent: #f08a45;
+  --color-accent-tint: #33211a;
+  --color-purple: #a58bea;
+  --color-purple-tint: #2a2140;
+  --color-track: #2a2e39;
+  --color-canvas: #14171e;
+  --color-placeholder: #262b36;
+}

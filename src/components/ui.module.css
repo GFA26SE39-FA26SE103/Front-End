@@ -1,0 +1,335 @@
+/* ---------- Card ---------- */
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.cardTitle {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.cardSubtitle {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.overline {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.primary {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-primary) 88%, black);
+}
+
+.secondary {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.secondary:hover {
+  background: var(--color-surface-2);
+}
+
+.dangerGhost {
+  color: var(--color-danger);
+}
+
+.dangerGhost:hover {
+  background: var(--color-danger-tint);
+}
+
+.lg {
+  height: 38px;
+  font-size: 12px;
+  padding: 0 14px;
+}
+
+.block {
+  width: 100%;
+}
+
+/* ---------- Chips ---------- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-size: 9px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pill {
+  border-radius: 99px;
+  font-weight: 700;
+  letter-spacing: 0.36px;
+}
+
+.tone-success { background: var(--color-success-tint); color: var(--color-success); }
+.tone-warning { background: var(--color-warning-tint); color: var(--color-warning); }
+.tone-danger { background: var(--color-danger-tint); color: var(--color-danger); }
+.tone-primary { background: var(--color-primary-tint); color: var(--color-primary); }
+.tone-purple { background: var(--color-purple-tint); color: var(--color-purple); }
+.tone-neutral { background: var(--color-surface-2); color: var(--color-text-muted); }
+
+/* ---------- Inputs ---------- */
+.search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+}
+
+.search input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 11px;
+  width: 100%;
+  min-width: 0;
+}
+
+.search input::placeholder {
+  color: var(--color-text-dim);
+}
+
+.search:focus-within {
+  border-color: var(--color-primary);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.fieldLabel {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  font-size: 12px;
+  font-weight: 500;
+  width: 100%;
+}
+
+.input input,
+.input select {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: inherit;
+  font-weight: inherit;
+  appearance: none;
+  cursor: inherit;
+}
+
+.input:focus-within {
+  border: 1.5px solid var(--color-primary);
+  padding: 0 11.5px;
+}
+
+.selectWrap {
+  position: relative;
+  cursor: pointer;
+}
+
+.selectWrap img {
+  pointer-events: none;
+}
+
+/* ---------- Segmented control ---------- */
+.segmented {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--color-surface-2);
+}
+
+.segment {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.segmentActive {
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 600;
+  box-shadow: var(--shadow-card);
+}
+
+/* ---------- Toggle ---------- */
+.toggle {
+  width: 30px;
+  height: 17px;
+  flex-shrink: 0;
+  position: relative;
+  border-radius: 99px;
+}
+
+.toggleMd {
+  width: 34px;
+  height: 20px;
+}
+
+.toggleOff {
+  background: var(--color-track);
+}
+
+.toggleMd.toggleOff::after {
+  width: 16px;
+  height: 16px;
+}
+
+.toggleOff::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  box-shadow: 0 1px 2px rgba(15, 23, 41, 0.2);
+}
+
+/* ---------- Checkbox ---------- */
+.checkbox {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+}
+
+.checkboxOn {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+/* ---------- Callouts ---------- */
+.callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 10.5px;
+  line-height: 15px;
+}
+
+.callout-info { background: var(--color-info-tint); }
+.callout-warning { background: var(--color-warning-tint); }
+
+/* ---------- Stat card ---------- */
+.stat {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+.statValue {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.statValue i {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+}
+
+.statNote {
+  font-size: 9px;
+  color: var(--color-text-muted);
+}
+
+/* ---------- Badge (uppercase status pill) ---------- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 99px;
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+}

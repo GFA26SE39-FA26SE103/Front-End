@@ -1,0 +1,338 @@
+/* Shared by Audit logs and System health (team-built frames with the same layout language). */
+.page {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.stats {
+  display: flex;
+  gap: 16px;
+}
+
+.box {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+.split {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 16px;
+}
+
+.headRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 22px;
+  font-size: 9px;
+}
+
+.headRow span:last-child {
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 4px 0;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auditRow {
+  display: grid;
+  grid-template-columns: 68px 260px 118px 84px 1fr;
+  gap: 8px;
+  align-items: center;
+  min-height: 56px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  text-align: left;
+  width: 100%;
+}
+
+.auditRow:nth-child(odd) {
+  background: var(--color-surface-2);
+}
+
+.auditRow:hover {
+  outline: 1px solid var(--color-border);
+}
+
+.auditSelected,
+.auditSelected:nth-child(odd) {
+  background: var(--color-primary-tint);
+}
+
+.time {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.evTitle {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.evSub {
+  font-size: 9px;
+  color: var(--color-text-muted);
+  margin-top: 3px;
+}
+
+.actor {
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.source {
+  font-size: 9px;
+  color: var(--color-text-muted);
+}
+
+.details {
+  width: 356px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 16px;
+}
+
+.kv p:first-child {
+  font-size: 8px;
+  font-weight: 600;
+  color: var(--color-text-dim);
+}
+
+.kv p:last-child {
+  font-size: 10px;
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+.change {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 11px 12px;
+  border-radius: 9px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+
+.outlineBtn {
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--color-primary);
+  background: var(--color-surface);
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.outlineBtn:hover {
+  background: var(--color-primary-tint);
+}
+
+.empty {
+  padding: 32px 10px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+/* ---------- System health ---------- */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--color-warning-tint);
+  border: 1px solid var(--color-warning);
+}
+
+.banner > i {
+  width: 10px;
+  height: 10px;
+  border-radius: 99px;
+  background: var(--color-warning);
+  flex-shrink: 0;
+}
+
+.bannerTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-warning);
+}
+
+.bannerText {
+  font-size: 10px;
+  margin-top: 4px;
+}
+
+.warnBtn {
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--color-warning);
+  background: var(--color-surface);
+  color: var(--color-warning);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.service {
+  display: grid;
+  grid-template-columns: 8px 334px 152px 112px;
+  gap: 10px;
+  align-items: center;
+  min-height: 39px;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+
+.service:nth-child(odd) {
+  background: var(--color-surface-2);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+}
+
+.svcName {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.svcDetail {
+  font-size: 9px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.metric {
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.charts {
+  display: flex;
+  gap: 13px;
+}
+
+.chart {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+
+.chartValue {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.chartValue span {
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  padding-bottom: 4px;
+}
+
+.bars {
+  height: 96px;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.bars i {
+  flex: 1;
+  border-radius: 3px;
+}
+
+.alertCard {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  border-radius: 9px;
+}
+
+.alertHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.pipeStep {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.pipeStep + .pipeStep {
+  border-top: 1px solid var(--color-border);
+}
+
+.pipeStep i {
+  width: 10px;
+  height: 10px;
+  border-radius: 99px;
+}
+
+.pipeStep span:last-child {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.runbook {
+  margin: 0;
+  padding: 10px 14px 10px 32px;
+  border-radius: 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  font-size: 11px;
+  line-height: 18px;
+}

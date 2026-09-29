@@ -1,0 +1,37 @@
+import { Navigate, Route, Routes } from 'react-router-dom';
+import AiConfig from './pages/AiConfig';
+import AuditLog from './pages/AuditLog';
+import Cameras from './pages/Cameras';
+import IncidentTypes from './pages/IncidentTypes';
+import Routing from './pages/Routing';
+import SetupHealth from './pages/SetupHealth';
+import StoreLayout from './pages/StoreLayout';
+import SystemHealth from './pages/SystemHealth';
+import UsersRoles from './pages/UsersRoles';
+import Login from './pages/auth/Login';
+import { ForgotPassword, PasswordUpdated, ResetLinkExpired, ResetLinkSent, SetNewPassword } from './pages/auth/Recovery';
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/forgot-password/sent" element={<ResetLinkSent />} />
+      <Route path="/reset-password" element={<SetNewPassword />} />
+      <Route path="/reset-password/done" element={<PasswordUpdated />} />
+      <Route path="/reset-password/expired" element={<ResetLinkExpired />} />
+
+      <Route path="/admin/dashboard" element={<SetupHealth />} />
+      <Route path="/admin/setup" element={<Navigate to="/admin/dashboard" replace />} />
+      <Route path="/admin/store-layout" element={<StoreLayout />} />
+      <Route path="/admin/cameras" element={<Cameras />} />
+      <Route path="/admin/ai-config" element={<AiConfig />} />
+      <Route path="/admin/incident-types" element={<IncidentTypes />} />
+      <Route path="/admin/routing" element={<Routing />} />
+      <Route path="/admin/users" element={<UsersRoles />} />
+      <Route path="/admin/audit-logs" element={<AuditLog />} />
+      <Route path="/admin/system-health" element={<SystemHealth />} />
+      <Route path="*" element={<Navigate to="/login" replace />} />
+    </Routes>
+  );
+}

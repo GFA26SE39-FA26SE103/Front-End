@@ -1,0 +1,248 @@
+.left {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-card-soft);
+}
+
+.title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.sub {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.bar {
+  position: relative;
+  height: 64px;
+  user-select: none;
+  touch-action: none;
+}
+
+.seg {
+  position: absolute;
+  top: 24px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.knob {
+  position: absolute;
+  top: 20px;
+  width: 18px;
+  height: 18px;
+  margin-left: -9px;
+  cursor: grab;
+  border-radius: 50%;
+}
+
+.knob:active {
+  cursor: grabbing;
+}
+
+.knobTag {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--color-text);
+  color: var(--color-surface);
+  font-size: 10px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.scale {
+  position: absolute;
+  top: 44px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--color-text-dim);
+}
+
+.bands {
+  display: flex;
+  gap: 12px;
+}
+
+.band {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 10px;
+}
+
+.bandHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.bandHead span:nth-child(2) {
+  flex: 1;
+}
+
+.bandHead span:last-child {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.bandText {
+  font-size: 10.5px;
+  line-height: 15px;
+  color: var(--color-text-muted);
+}
+
+.note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: var(--color-surface-2);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.steps {
+  display: flex;
+}
+
+.step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stepTop {
+  display: flex;
+  align-items: center;
+}
+
+.stepTop i {
+  flex: 1;
+  height: 2px;
+  background: var(--color-border);
+}
+
+.stepIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stepTitle {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.stepText {
+  width: 150px;
+  font-size: 10.5px;
+  line-height: 15px;
+  color: var(--color-text-muted);
+}
+
+.inputs {
+  display: flex;
+  gap: 14px;
+}
+
+.inputs > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.toggles {
+  display: flex;
+  flex-direction: column;
+}
+
+.toggleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.example {
+  width: 360px;
+  flex-shrink: 0;
+  gap: 14px;
+}
+
+.case {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--color-surface-2);
+}
+
+.caseHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.caseHead span:first-child {
+  flex: 1;
+}
+
+.tl {
+  display: flex;
+  gap: 10px;
+}
+
+.tlText {
+  padding-bottom: 8px;
+}
+
+.tlTitle {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.tlMeta {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  margin-top: 1px;
+}
+
+.saved {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-success);
+  text-align: center;
+}

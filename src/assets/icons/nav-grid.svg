@@ -1,0 +1,8 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="icon/grid">
+<path id="Vector" d="M6 2.33333H3.33333C2.78105 2.33333 2.33333 2.78105 2.33333 3.33333V6C2.33333 6.55228 2.78105 7 3.33333 7H6C6.55228 7 7 6.55228 7 6V3.33333C7 2.78105 6.55228 2.33333 6 2.33333Z" stroke="#6B7280" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_2" d="M12.6667 2.33333H10C9.44772 2.33333 9 2.78105 9 3.33333V6C9 6.55228 9.44772 7 10 7H12.6667C13.219 7 13.6667 6.55228 13.6667 6V3.33333C13.6667 2.78105 13.219 2.33333 12.6667 2.33333Z" stroke="#6B7280" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_3" d="M6 9H3.33333C2.78105 9 2.33333 9.44772 2.33333 10V12.6667C2.33333 13.219 2.78105 13.6667 3.33333 13.6667H6C6.55228 13.6667 7 13.219 7 12.6667V10C7 9.44772 6.55228 9 6 9Z" stroke="#6B7280" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_4" d="M12.6667 9H10C9.44772 9 9 9.44772 9 10V12.6667C9 13.219 9.44772 13.6667 10 13.6667H12.6667C13.219 13.6667 13.6667 13.219 13.6667 12.6667V10C13.6667 9.44772 13.219 9 12.6667 9Z" stroke="#6B7280" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</svg>
