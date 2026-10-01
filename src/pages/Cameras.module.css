@@ -79,9 +79,15 @@ button.row:hover {
 }
 
 .detail {
-  width: 372px;
+  width: 460px;
   flex-shrink: 0;
   gap: 14px;
+}
+
+.detailHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .detailTitle {
@@ -110,7 +116,13 @@ button.row:hover {
 
 .media {
   display: flex;
+  align-items: flex-start;
   gap: 10px;
+}
+
+.trackedPreview {
+  flex: 1;
+  min-width: 0;
 }
 
 .snapshot {
@@ -256,4 +268,53 @@ button.row:hover {
   font-size: 11px;
   font-weight: 500;
   text-align: center;
+}
+
+.streamInfo {
+  margin: 0;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.previewNote {
+  margin: -4px 0 0;
+  color: var(--color-text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.errorBanner {
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+  color: var(--color-danger);
+  font-size: 11px;
+}
+
+.planBase {
+  position: absolute;
+  left: 7px;
+  top: 7px;
+  width: 96px;
+  height: 96px;
+  border: 1px solid var(--color-text-dim);
+  border-radius: 2px;
+  background: var(--color-surface);
+}
+
+.planLabel {
+  position: absolute;
+  left: 11px;
+  top: 11px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 7.5px;
+  font-weight: 600;
 }

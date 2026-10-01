@@ -78,26 +78,27 @@ export function Field({ label, children }: { label: string; children: ReactNode 
   );
 }
 
-export function TextInput({ value, onChange, suffix, style }: { value: string; onChange: (v: string) => void; suffix?: ReactNode; style?: CSSProperties }) {
+export function TextInput({ value, onChange, suffix, style, type = 'text', placeholder, autoComplete, disabled }: { value: string; onChange: (v: string) => void; suffix?: ReactNode; style?: CSSProperties; type?: string; placeholder?: string; autoComplete?: string; disabled?: boolean }) {
   return (
     <span className={s.input} style={style}>
-      <input value={value} onChange={(e) => onChange(e.target.value)} />
+      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} autoComplete={autoComplete} disabled={disabled} />
       {suffix}
     </span>
   );
 }
 
-export function Select<T extends string>({ value, options, onChange, chevron = 'chevron-down', chevronSize = 14, height }: {
+export function Select<T extends string>({ value, options, onChange, chevron = 'chevron-down', chevronSize = 14, height, disabled }: {
   value: T;
   options: readonly { value: T; label: string }[];
   onChange: (v: T) => void;
   chevron?: string;
   chevronSize?: number;
   height?: number;
+  disabled?: boolean;
 }) {
   return (
     <span className={cx(s.input, s.selectWrap)} style={{ height }}>
-      <select value={value} onChange={(e) => onChange(e.target.value as T)}>
+      <select value={value} onChange={(e) => onChange(e.target.value as T)} disabled={disabled}>
         {options.map((o) => (
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}

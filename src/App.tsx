@@ -10,6 +10,7 @@ import SystemHealth from './pages/SystemHealth';
 import UsersRoles from './pages/UsersRoles';
 import Login from './pages/auth/Login';
 import { ForgotPassword, PasswordUpdated, ResetLinkExpired, ResetLinkSent, SetNewPassword } from './pages/auth/Recovery';
+import { ProtectedRoute } from './auth/ProtectedRoute';
 
 export default function App() {
   return (
@@ -21,16 +22,18 @@ export default function App() {
       <Route path="/reset-password/done" element={<PasswordUpdated />} />
       <Route path="/reset-password/expired" element={<ResetLinkExpired />} />
 
-      <Route path="/admin/dashboard" element={<SetupHealth />} />
-      <Route path="/admin/setup" element={<Navigate to="/admin/dashboard" replace />} />
-      <Route path="/admin/store-layout" element={<StoreLayout />} />
-      <Route path="/admin/cameras" element={<Cameras />} />
-      <Route path="/admin/ai-config" element={<AiConfig />} />
-      <Route path="/admin/incident-types" element={<IncidentTypes />} />
-      <Route path="/admin/routing" element={<Routing />} />
-      <Route path="/admin/users" element={<UsersRoles />} />
-      <Route path="/admin/audit-logs" element={<AuditLog />} />
-      <Route path="/admin/system-health" element={<SystemHealth />} />
+      <Route element={<ProtectedRoute />}>
+        <Route path="/admin/dashboard" element={<SetupHealth />} />
+        <Route path="/admin/setup" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="/admin/store-layout" element={<StoreLayout />} />
+        <Route path="/admin/cameras" element={<Cameras />} />
+        <Route path="/admin/ai-config" element={<AiConfig />} />
+        <Route path="/admin/incident-types" element={<IncidentTypes />} />
+        <Route path="/admin/routing" element={<Routing />} />
+        <Route path="/admin/users" element={<UsersRoles />} />
+        <Route path="/admin/audit-logs" element={<AuditLog />} />
+        <Route path="/admin/system-health" element={<SystemHealth />} />
+      </Route>
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
