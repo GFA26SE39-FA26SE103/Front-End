@@ -2,12 +2,16 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { listCameras, updateCamera } from '../api/cameras';
+import { getCameraPreview, listCameraMappings, listCameras, updateCamera } from '../api/cameras';
 import { createZone, getFloorMap, listFloors, listSupermarkets, listZones, updateZone, uploadFloorMap } from '../api/floors';
 import StoreLayout from './StoreLayout';
 
 vi.mock('../api/cameras', () => ({
+  getCameraPreview: vi.fn(),
+  listCameraMappings: vi.fn(),
   listCameras: vi.fn(),
+  removeCameraMapping: vi.fn(),
+  saveCameraMapping: vi.fn(),
   updateCamera: vi.fn(),
 }));
 
@@ -58,6 +62,8 @@ describe('StoreLayout', () => {
     vi.mocked(listFloors).mockResolvedValue([floor]);
     vi.mocked(listZones).mockResolvedValue([]);
     vi.mocked(listCameras).mockResolvedValue([camera]);
+    vi.mocked(listCameraMappings).mockResolvedValue([]);
+    vi.mocked(getCameraPreview).mockResolvedValue(new Blob(['preview'], { type: 'image/jpeg' }));
     vi.mocked(getFloorMap).mockResolvedValue(new Blob(['map'], { type: 'image/png' }));
     vi.mocked(uploadFloorMap).mockResolvedValue({
       floorId: floor.floorId,
@@ -105,6 +111,24 @@ describe('StoreLayout', () => {
     expect(screen.queryByText(/Saving placement does not test/i)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Edit zones' }));
+    expect(screen.queryByRole('heading', { name: 'Camera placement' })).not.toBeInTheDocument();
+  });
+
+  it('opens camera coverage for the selected camera using zones from its floor', async () => {
+    vi.mocked(listZones).mockResolvedValueOnce([{
+      zoneId: 'zone-1', floorId: floor.floorId, code: 'FROZEN', name: 'Frozen aisle', zoneType: 'AISLES',
+      mapPolygon: [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.1 }, { x: 0.5, y: 0.5 }],
+      colorHex: '#3B82F6', areaM2: null, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
+    }]);
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole('img', { name: /uploaded floor plan/i });
+
+    await user.click(screen.getByRole('button', { name: /CAM-01 Entrance camera/i }));
+    await user.click(screen.getByRole('button', { name: 'Configure coverage' }));
+
+    expect(await screen.findByRole('heading', { name: 'Camera coverage' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Frozen aisle (FROZEN)' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Camera placement' })).not.toBeInTheDocument();
   });
 
