@@ -92,6 +92,23 @@ describe('AnnotatedPreview', () => {
     await waitFor(() => expect(stop).toHaveBeenCalled());
   });
 
+  it('does not offer viewer restart to replay backend-owned monitoring', async () => {
+    start.mockResolvedValue({ ...live(), purpose: 'MONITORING', annotationContext: 'confidence:0.7' });
+    status.mockResolvedValue({ ...live(), state: 'COMPLETED', purpose: 'MONITORING', annotationContext: 'confidence:0.7' });
+    render(<AnnotatedPreview cameraId="camera-a" enabled pollInterval={5} />);
+    expect(await screen.findByText(/Deactivate → Activate/)).toBeInTheDocument();
+    expect(screen.getByText(/confidence:0.7/)).toBeInTheDocument();
+    expect(screen.queryByText(/Stop then start/)).not.toBeInTheDocument();
+  });
+
+  it('waits for the worker when an attached monitoring session has not started yet', async () => {
+    start.mockResolvedValue({ ...live(), state: 'STARTING', purpose: 'MONITORING' });
+    status.mockResolvedValueOnce({ ...live(), state: 'STOPPED' }).mockResolvedValue(live());
+    render(<AnnotatedPreview cameraId="camera-a" enabled pollInterval={5} />);
+    expect(await screen.findByRole('img')).toBeInTheDocument();
+    expect(status.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
   it('aborts requests and revokes the final URL on unmount', async () => {
     let observedSignal: AbortSignal | undefined;
     frame.mockImplementation(async (_cameraId, signal) => {
@@ -170,5 +187,11 @@ describe('AnnotatedPreview', () => {
     render(<AnnotatedPreview cameraId="camera-b" enabled pollInterval={5} />);
 
     expect(await screen.findByText('Waiting for first tracked frame…')).toBeInTheDocument();
+  });
+
+  it('explains why a Draft preview cannot restart active monitoring', async () => {
+    start.mockRejectedValue(new ApiError(409, 'AI_SESSION_MONITORING_OWNED', 'Deactivate monitoring first.'));
+    render(<AnnotatedPreview cameraId="camera-a" zoneId="draft-zone" enabled />);
+    expect(await screen.findByText(/Deactivate monitoring before testing Draft confidence/)).toBeInTheDocument();
   });
 });

@@ -5,6 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCamera, listCameraMappings, listCameras } from '../../api/cameras';
 import { getFloorMap, listFloors, listSupermarkets, listZones } from '../../api/floors';
 import OperatorCameraLive from './OperatorCameraLive';
+vi.mock('../../api/monitoringRuntime', () => ({
+  getCameraMonitoringRuntime: vi.fn(async (cameraId: string) => ({ cameraId, state: 'STOPPED', reason: 'NO_ACTIVE_CONFIGURATION', zones: [], sourceElapsedMs: null })),
+  getCameraIncidents: vi.fn(async () => ({ items: [], hasMore: false, nextCreatedAt: null, nextIncidentId: null })),
+}));
 
 vi.mock('../../components/AnnotatedPreview', () => ({
   AnnotatedPreview: ({ cameraId, enabled, regions = [] }: { cameraId: string; enabled: boolean; regions?: { label: string; color: string }[] }) => (

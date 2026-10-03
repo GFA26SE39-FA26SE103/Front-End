@@ -84,6 +84,10 @@ export type AiPreviewStatus = {
   updatedAt: string;
   frameSequence: number;
   errorCode: string | null;
+  sessionId?: string | null;
+  purpose?: 'PREVIEW' | 'MONITORING';
+  configurationFingerprint?: string | null;
+  annotationContext?: string | null;
 };
 
 export const listCameras = (floorId: string, signal?: AbortSignal) =>

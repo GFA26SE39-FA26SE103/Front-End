@@ -7,6 +7,7 @@ import { ApiError } from '../api/client';
 import { listFloors, listSupermarkets, listZones, type ZoneRecord } from '../api/floors';
 import { getMonitoring, listIncidentTypes, reviewMonitoring, saveMonitoring, setMonitoringActive, type IncidentType, type MonitoringConfiguration, type MonitoringReview, type MonitoringRule } from '../api/monitoring';
 import s from './AiConfig.module.css';
+import { convertToPeopleCount, measurementMode, modeLabel } from './monitoringRuleMode';
 
 type RuleInput = Omit<MonitoringRule, 'warningThreshold' | 'criticalThreshold' | 'sustainSec' | 'cooldownSec'> & {
   warningThreshold: string; criticalThreshold: string; sustainSec: string; cooldownSec: string;
@@ -33,6 +34,7 @@ async function loadConfig(zoneId: string, signal?: AbortSignal) {
 }
 const statusTone = (status: string | undefined): Tone => status === 'ACTIVE' ? 'success' : status === 'DRAFT' ? 'warning' : 'neutral';
 const ruleName = (rule: MonitoringRule, types: IncidentType[]) => rule.incidentName ?? types.find(t => t.incidentTypeId === rule.incidentTypeId)?.name ?? 'Unknown incident type';
+const ruleMode = (rule: Pick<MonitoringRule, 'incidentTypeId' | 'incidentCode' | 'thresholdUnit' | 'parametersJson'>, types: IncidentType[]) => measurementMode({ ...rule, incidentCode: rule.incidentCode ?? types.find(t => t.incidentTypeId === rule.incidentTypeId)?.code });
 const formatTime = (value: string) => { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString(); };
 
 const units: Record<string, string> = { PEOPLE: 'people', MINUTES: 'minutes', PEOPLE_PER_M2: 'people/m²' };
@@ -219,12 +221,12 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
     if (!version || (value && (!review?.canActivate || dirty))) return;
     await operation(async () => {
       const saved = await setMonitoringActive(zoneId, value, version);
-      if (mounted.current) { apply(saved); setReview(null); setNotice(value ? 'Configuration activated. MF-02 incident processing is not started by this action.' : 'Monitoring deactivated. Edit and save a new Draft before reactivation.'); }
+      if (mounted.current) { apply(saved); setReview(null); setNotice(value ? 'Configuration activated. Monitoring worker requested; check live monitoring status to confirm it is running.' : 'Monitoring deactivated. Edit and save a new Draft before reactivation.'); }
     });
   }
   function addRule() {
     if (!selectedType) return;
-    setRules(all => [...all, inputRule({ incidentTypeId: selectedType.incidentTypeId, warningThreshold: selectedType.defaultWarningThreshold ?? 0, criticalThreshold: selectedType.defaultCriticalThreshold ?? 1, thresholdUnit: selectedType.thresholdUnit ?? '', sustainSec: 30, cooldownSec: 300, enabled: selectedType.supported, parametersJson: null })]);
+    setRules(all => [...all, inputRule({ incidentTypeId: selectedType.incidentTypeId, incidentCode: selectedType.code, warningThreshold: selectedType.defaultWarningThreshold ?? 0, criticalThreshold: selectedType.defaultCriticalThreshold ?? 1, thresholdUnit: selectedType.thresholdUnit ?? '', sustainSec: 30, cooldownSec: 300, enabled: selectedType.supported, parametersJson: null })]);
     touch(); setRulesMissing(false);
   }
 
@@ -256,7 +258,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
           {config.rules.length ? <div className={s.ruleTable} role="table" aria-label="Incident rules">
             <div role="row" className={s.ruleHeadRow}><span role="columnheader">Incident type</span><span role="columnheader">Warning ≥</span><span role="columnheader">Critical ≥</span><span role="columnheader">Sustain</span><span role="columnheader">Cooldown</span><span role="columnheader">State</span></div>
             {config.rules.map(r => <div role="row" key={r.incidentTypeId}>
-              <span role="cell"><strong>{ruleName(r, types)}</strong></span>
+              <span role="cell"><strong>{ruleName(r, types)}</strong><small>{modeLabel(ruleMode(r, types))}</small></span>
               <span role="cell">{r.warningThreshold} {unitName(r.thresholdUnit)}</span>
               <span role="cell">{r.criticalThreshold} {unitName(r.thresholdUnit)}</span>
               <span role="cell">{r.sustainSec}s</span>
@@ -288,7 +290,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
         <div className={`${s.addRule} ${rulesMissing ? s.addRuleMissing : ''}`}>
           <label className={s.field}>Incident type<select ref={typeSelect} aria-label="Incident type" aria-invalid={rulesMissing || undefined} disabled={locked || !available.length} value={selectedType?.incidentTypeId ?? ''} onChange={e => setTypeId(e.target.value)}>
             {!available.length && <option value="">No more incident types</option>}
-            {available.map(t => <option key={t.incidentTypeId} value={t.incidentTypeId}>{t.name}{!t.supported ? ' (disabled Draft only)' : ''}</option>)}
+            {available.map(t => <option key={t.incidentTypeId} value={t.incidentTypeId}>{t.name}{!t.supported ? t.measurementOptions?.some(o => o.supported) ? ' (choose measurement mode)' : ' (disabled Draft only)' : ''}</option>)}
           </select></label>
           <Button disabled={locked || !selectedType} onClick={addRule}>Add rule</Button>
         </div>
@@ -296,20 +298,29 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
         {rules.map(r => {
           const t = types.find(t => t.incidentTypeId === r.incidentTypeId);
           const label = t?.name ?? r.incidentName ?? 'Unknown incident type';
+          const mode = ruleMode(r, types);
+          const supported = mode === 'PEOPLE_COUNT' ? !!t?.measurementOptions?.some(o => o.mode === mode && o.supported) : !!t?.supported && mode === 'QUEUE_LENGTH';
           return <section key={r.incidentTypeId} className={s.rule}>
             <div className={s.head}><h3>{label}</h3><Button variant="secondary" disabled={locked} onClick={() => { setRules(all => all.filter(x => x.incidentTypeId !== r.incidentTypeId)); touch(); }}>Remove {label}</Button></div>
-            {t?.unsupportedReason && <p className={s.help}>{t.unsupportedReason}</p>}
+            <p className={s.help}>{modeLabel(mode)}</p>
+            {!supported && t?.unsupportedReason && <p className={s.help}>{t.unsupportedReason}</p>}
+            {t?.code === 'OVERCROWDING_CONGESTION' && mode !== 'PEOPLE_COUNT' && <CountModeEditor disabled={locked} onConvert={(warning, critical) => {
+              try {
+                const converted = convertToPeopleCount({ ...r, incidentCode: t.code, warningThreshold: Number(r.warningThreshold), criticalThreshold: Number(r.criticalThreshold), sustainSec: Number(r.sustainSec), cooldownSec: Number(r.cooldownSec) }, warning, critical);
+                changeRule(r.incidentTypeId, { thresholdUnit: converted.thresholdUnit, parametersJson: converted.parametersJson, warningThreshold: String(converted.warningThreshold), criticalThreshold: String(converted.criticalThreshold) });
+              } catch (e) { setError(message(e)); }
+            }} />}
             <fieldset disabled={locked} className={s.fields}>
               <label className={s.field}>Warning threshold ≥<input aria-label={label + ' warning'} type="number" min="0" step={r.thresholdUnit === 'PEOPLE' ? '1' : '.0001'} value={r.warningThreshold} onChange={e => changeRule(r.incidentTypeId, { warningThreshold: e.target.value })} /></label>
               <label className={s.field}>Critical threshold ≥<input aria-label={label + ' critical'} type="number" min="0" step={r.thresholdUnit === 'PEOPLE' ? '1' : '.0001'} value={r.criticalThreshold} onChange={e => changeRule(r.incidentTypeId, { criticalThreshold: e.target.value })} /></label>
               <label className={s.field}>Threshold unit<input aria-label={label + ' unit'} value={t?.thresholdUnit ? unitName(r.thresholdUnit) : r.thresholdUnit} maxLength={30} readOnly={!!t?.thresholdUnit} onChange={e => changeRule(r.incidentTypeId, { thresholdUnit: e.target.value })} /></label>
               <label className={s.field}>Sustain time (seconds)<input aria-label={label + ' sustain time'} type="number" min="0" step="1" value={r.sustainSec} onChange={e => changeRule(r.incidentTypeId, { sustainSec: e.target.value })} /></label>
               <label className={s.field}>Cooldown (seconds)<input aria-label={label + ' cooldown'} type="number" min="0" step="1" value={r.cooldownSec} onChange={e => changeRule(r.incidentTypeId, { cooldownSec: e.target.value })} /></label>
-              <label className={s.check}><input type="checkbox" aria-label={label + ' enabled'} checked={r.enabled} disabled={!t?.supported || t.status !== 'ACTIVE'} onChange={e => changeRule(r.incidentTypeId, { enabled: e.target.checked })} />Enabled</label>
+              <label className={s.check}><input type="checkbox" aria-label={label + ' enabled'} checked={r.enabled} disabled={!r.enabled && (!supported || t?.status !== 'ACTIVE')} onChange={e => changeRule(r.incidentTypeId, { enabled: e.target.checked })} />Enabled</label>
             </fieldset>
           </section>;
         })}
-        <p className={s.help}>Warning &lt; critical. Sustain is the continuous time above threshold. Cooldown starts after incident closure (MF-02). Crowd density needs a positive zone area.</p>
+        <p className={s.help}>Warning &lt; critical. Sustain is continuous source-video time above threshold. Queue length counts people only after 5 seconds continuously in the ROI, then applies sustain. Cooldown starts after incident closure. Temporary people count needs no area; density runtime is deferred.</p>
         <div className={s.actions}>
           <Button type="submit" disabled={locked}>{busy ? 'Saving…' : 'Save configuration'}</Button>
           <Button variant="secondary" disabled={busy} onClick={() => {
@@ -325,7 +336,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       <h2 className={s.title}>Review & activate</h2>
       <p>Zone: {review.zone.name} · Configuration: {review.configuration.name} · {review.configuration.status}</p>
       <p className={s.help}>Saved version: {review.configuration.updatedAt} · Confidence: {review.configuration.confidenceThreshold}</p>
-      <ul>{review.configuration.rules.map(r => <li key={r.incidentTypeId}>{ruleName(r, types)}: {r.enabled ? 'Enabled' : 'Disabled'} · warning ≥ {r.warningThreshold}, critical ≥ {r.criticalThreshold} {unitName(r.thresholdUnit)} · sustain {r.sustainSec}s · cooldown {r.cooldownSec}s</li>)}</ul>
+      <ul>{review.configuration.rules.map(r => <li key={r.incidentTypeId}>{ruleName(r, types)}: {r.enabled ? 'Enabled' : 'Disabled'} · {modeLabel(ruleMode(r, types))} · warning ≥ {r.warningThreshold}, critical ≥ {r.criticalThreshold} {unitName(r.thresholdUnit)} · sustain {r.sustainSec}s · cooldown {r.cooldownSec}s</li>)}</ul>
       <h3>Mapped cameras & camera ROI</h3>
       <p className={s.help}><a href="/admin/store-layout">Review or edit camera ROI in Store layout</a> (deactivate an active configuration before editing).</p>
       {!review.cameras.length && <p>No active camera mapping.</p>}
@@ -339,9 +350,19 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       {previewCameraId && <div className={s.zonePreview}><AnnotatedPreview cameraId={previewCameraId} zoneId={zoneId} enabled /></div>}
       <ul>{review.issues.map((i, n) => <li key={n} className={s.error}><strong>{i.code}: </strong><span>{i.message}</span></li>)}</ul>
       {review.warnings.map(w => <p key={w} className={s.help}>{w}</p>)}
-      <p className={s.help}>Zone preview restarts the shared camera session to apply saved confidence (track IDs reset; another viewer may be interrupted). Boxes cover the camera frame; this preview does not compute ROI incident measurements.</p>
+      <p className={s.help}>Draft confidence preview is unavailable while this camera is owned by active monitoring. An active preview attaches without restarting monitoring. Boxes use an annotation context; ROI counts can differ between zones with different confidence filters.</p>
       <Button disabled={busy || dirty || active || !review.canActivate} onClick={() => void changeActive(true)}>Activate configuration</Button>
-      <p className={s.help}>The backend rechecks source, mapping, ROI and rules at activation. MF-01 activation does not start MF-02 measurements or generate incidents.</p>
+      <p className={s.help}>The backend rechecks source, mapping, ROI and rules at activation. The worker then measures active rules continuously, even with no viewer. Incidents created here remain DETECTED; dispatch is not implemented in this increment.</p>
     </section>}
   </>;
+}
+
+function CountModeEditor({ disabled, onConvert }: { disabled: boolean; onConvert: (warning: string, critical: string) => void }) {
+  const [warning, setWarning] = useState(''), [critical, setCritical] = useState('');
+  return <fieldset disabled={disabled} className={s.fields}>
+    <p className={s.help}>Explicit conversion only: enter new people counts. Existing density thresholds are not reused; area calibration is deferred.</p>
+    <label className={s.field}>New people-count warning<input aria-label="New people-count warning" type="number" min="0" step="1" value={warning} onChange={e => setWarning(e.target.value)} /></label>
+    <label className={s.field}>New people-count critical<input aria-label="New people-count critical" type="number" min="0" step="1" value={critical} onChange={e => setCritical(e.target.value)} /></label>
+    <Button variant="secondary" onClick={() => onConvert(warning, critical)}>Use people count (temporary)</Button>
+  </fieldset>;
 }

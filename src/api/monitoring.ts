@@ -6,6 +6,7 @@ export type IncidentType = {
   sourceType: string; measurementType: string | null; status: string; supported: boolean;
   thresholdUnit: string | null; defaultWarningThreshold: number | null;
   defaultCriticalThreshold: number | null; unsupportedReason: string | null;
+  measurementOptions?: { mode: string; unit: string; supported: boolean; reason: string | null; defaultWarningThreshold?: number | null; defaultCriticalThreshold?: number | null }[];
 };
 export type MonitoringRule = {
   incidentTypeId: string; warningThreshold: number; criticalThreshold: number;

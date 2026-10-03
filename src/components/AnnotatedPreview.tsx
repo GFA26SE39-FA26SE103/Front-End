@@ -10,7 +10,7 @@ import {
 } from '../api/cameras';
 import s from './AnnotatedPreview.module.css';
 
-type ViewState = 'idle' | 'starting' | 'waiting' | 'live' | 'completed' | 'reconnecting' | 'error' | 'unauthorized' | 'unavailable';
+type ViewState = 'idle' | 'starting' | 'waiting' | 'live' | 'completed' | 'reconnecting' | 'error' | 'unauthorized' | 'unavailable' | 'monitoring-owned';
 
 /** A zone ROI drawn over the frame; points are normalized to the camera image (0..1). */
 export type PreviewRegion = {
@@ -34,6 +34,8 @@ export function AnnotatedPreview({ cameraId, enabled, pollInterval = 250, zoneId
   const [frameSize, setFrameSize] = useState<{ width: number; height: number } | null>(null);
   const imageUrlRef = useRef<string | null>(null);
   const stopChainRef = useRef<Promise<void>>(Promise.resolve());
+  const [purpose, setPurpose] = useState('PREVIEW');
+  const [annotationContext, setAnnotationContext] = useState<string | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
@@ -43,11 +45,15 @@ export function AnnotatedPreview({ cameraId, enabled, pollInterval = 250, zoneId
     let failures = 0;
     const controller = new AbortController();
     const precedingStop = stopChainRef.current;
+    let monitoringAttached = false;
     const startPromise = (async () => {
       await precedingStop;
       if (!active) return;
-      if (zoneId) await startAiPreview(cameraId, undefined, zoneId);
-      else await startAiPreview(cameraId);
+      const started = zoneId ? await startAiPreview(cameraId, undefined, zoneId) : await startAiPreview(cameraId);
+      if (!active) return;
+      monitoringAttached = started.purpose === 'MONITORING';
+      setPurpose(started.purpose ?? 'PREVIEW');
+      setAnnotationContext(started.annotationContext ?? null);
     })();
 
     const replaceImage = (blob: Blob) => {
@@ -66,6 +72,11 @@ export function AnnotatedPreview({ cameraId, enabled, pollInterval = 250, zoneId
       try {
         const current = await getAiPreviewStatus(cameraId, controller.signal);
         if (!active) return;
+        if (current.purpose === 'MONITORING') { monitoringAttached = true; setPurpose('MONITORING'); }
+        if (current.annotationContext) setAnnotationContext(current.annotationContext);
+        if (current.state === 'STOPPED' && monitoringAttached) {
+          setViewState('starting'); schedule(); return;
+        }
         setViewState(statusView(current.state));
         if (current.state === 'ERROR' || current.state === 'STOPPED') {
           if (imageUrlRef.current) URL.revokeObjectURL(imageUrlRef.current);
@@ -117,7 +128,7 @@ export function AnnotatedPreview({ cameraId, enabled, pollInterval = 250, zoneId
         if (active) await poll();
       } catch (error) {
         if (!active || controller.signal.aborted) return;
-        setViewState(error instanceof ApiError && error.status === 401 ? 'unauthorized' : 'unavailable');
+        setViewState(error instanceof ApiError && error.status === 401 ? 'unauthorized' : error instanceof ApiError && error.code === 'AI_SESSION_MONITORING_OWNED' ? 'monitoring-owned' : 'unavailable');
       }
     };
 
@@ -158,8 +169,8 @@ export function AnnotatedPreview({ cameraId, enabled, pollInterval = 250, zoneId
       )}
       {enabled && imageUrl && frameSize && regions.length > 0 && <RegionLayer regions={regions} {...frameSize} />}
       {visibleState !== 'live' && visibleState !== 'completed' && <div className={s.state}>{stateLabel(visibleState)}</div>}
-      {visibleState === 'live' && <span className={s.badge}>YOLO · BYTETRACK · LIVE</span>}
-      {visibleState === 'completed' && <span className={s.badge}>Video completed · Stop then start to replay</span>}
+      {visibleState === 'live' && <span className={s.badge}>YOLO · BYTETRACK · LIVE{annotationContext ? ' · ' + annotationContext : ''}</span>}
+      {visibleState === 'completed' && <span className={s.badge}>Video completed · {purpose === 'MONITORING' ? 'Deactivate → Activate to replay monitoring' : 'Stop then start to replay'}{annotationContext ? ' · ' + annotationContext : ''}</span>}
     </div>
   );
 }
@@ -213,5 +224,6 @@ function stateLabel(state: ViewState): string {
   if (state === 'unauthorized') return 'Session expired';
   if (state === 'error') return 'AI preview stopped after a camera error';
   if (state === 'unavailable') return 'AI preview is unavailable';
+  if (state === 'monitoring-owned') return 'Deactivate monitoring before testing Draft confidence. Active monitoring has not been interrupted.';
   return '';
 }

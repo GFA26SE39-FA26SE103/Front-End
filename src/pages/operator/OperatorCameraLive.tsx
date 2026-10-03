@@ -20,6 +20,8 @@ import {
   type FloorDetails,
 } from './operatorData';
 import s from './OperatorCameraLive.module.css';
+import { useCameraMonitoring } from './useCameraMonitoring';
+import { CameraMonitoringPanel } from './CameraMonitoringPanel';
 
 // Same fallback colour as the Admin ROI editor, so a zone looks the same in both places.
 const ROI_COLOR = '#3B82F6';
@@ -37,6 +39,7 @@ function CameraLiveView({ cameraId }: { cameraId: string }) {
   const [error, setError] = useState('');
   const [live, setLive] = useState(true);
   const map = useFloorMap(floor);
+  const monitoring = useCameraMonitoring(cameraId, Boolean(camera));
 
   useEffect(() => {
     const controller = new AbortController();
@@ -118,7 +121,7 @@ function CameraLiveView({ cameraId }: { cameraId: string }) {
           <Button variant={live ? 'secondary' : 'primary'} disabled={!camera} onClick={() => setLive((value) => !value)}>
             {live ? 'Stop live view' : 'Start live view'}
           </Button>
-          <span className={s.controlNote}>Frames are tracked by YOLO + ByteTrack in the AI service before they reach this page.</span>
+          <span className={s.controlNote}>Stop live view only stops viewing, not active monitoring. Frames are tracked by YOLO + ByteTrack.</span>
           <Link className={s.back} to={floorLink}>Back to floor map</Link>
         </div>
       </section>
@@ -153,11 +156,7 @@ function CameraLiveView({ cameraId }: { cameraId: string }) {
           {camera && zones.length === 0 && <p className={s.muted}>An Admin has not mapped this camera to any zone yet.</p>}
         </div>
 
-        <Overline>RELATED INCIDENT</Overline>
-        <div className={s.incident}>
-          <strong>No incident feed yet</strong>
-          <p>Incidents raised from this camera appear here once MF-02 monitoring is connected.</p>
-        </div>
+        <CameraMonitoringPanel state={monitoring} />
 
         <Overline>CAMERAS ON THIS FLOOR</Overline>
         <nav className={s.switcher} aria-label="Cameras on this floor">
