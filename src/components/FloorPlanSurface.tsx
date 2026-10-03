@@ -181,7 +181,7 @@ export function FloorPlanSurface({
   );
 }
 
-function PdfPage({ url }: { url: string }) {
+export function PdfPage({ url }: { url: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState(false);
 

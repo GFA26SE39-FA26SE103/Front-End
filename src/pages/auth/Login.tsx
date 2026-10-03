@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AuthLayout } from '../../components/AuthLayout';
 import { Icon } from '../../components/Icon';
 import { LOCK_SECONDS, MAX_FAILED_ATTEMPTS, signIn } from '../../api/auth';
+import { loadSession } from '../../auth/session';
 import s from './auth.module.css';
 
 type Status = 'idle' | 'loading' | 'invalid' | 'error' | 'suspended' | 'rate-limited';
@@ -39,7 +40,7 @@ export default function Login() {
     setStatus('loading');
     const result = await signIn(email, password, remember);
     if (result === 'ok') {
-      navigate('/admin/dashboard'); // TODO: route by role once the API returns it
+      navigate(loadSession()?.user.role === 'OPERATOR' ? '/operator/floor-map' : '/admin/dashboard');
       return;
     }
     if (result === 'invalid') {

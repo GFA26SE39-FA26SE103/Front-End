@@ -100,6 +100,12 @@ export const configureCameraConnection = (cameraId: string, body: ConfigureConne
     body: JSON.stringify(body),
   });
 
+export const getCamera = (cameraId: string, signal?: AbortSignal) =>
+  apiFetch<CameraRecord>(`/api/cameras/${cameraId}`, { signal });
+
+export const getCameraPreview = (cameraId: string, signal?: AbortSignal) =>
+  apiFetch<Blob>(`/api/cameras/${cameraId}/preview`, { signal, responseType: 'blob' });
+
 export const listCameraMappings = (cameraId: string, signal?: AbortSignal) =>
   apiFetch<CameraZoneMapping[]>(`/api/cameras/${cameraId}/zones`, { signal });
 
