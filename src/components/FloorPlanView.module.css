@@ -1,0 +1,203 @@
+.viewport {
+  width: 100%;
+  overflow: auto;
+  border-radius: 10px;
+  background: var(--color-canvas);
+}
+
+.surface {
+  position: relative;
+  width: min(100%, 1180px);
+  min-width: 520px;
+  margin: 0 auto;
+  line-height: 0;
+  user-select: none;
+}
+
+.map {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--color-surface);
+}
+
+.zones {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.zone {
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 6 4;
+  transition: fill-opacity 0.15s ease, stroke-width 0.15s ease;
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.tone-success { fill: var(--color-success); fill-opacity: 0.12; stroke: var(--color-success); }
+.tone-warning { fill: var(--color-warning); fill-opacity: 0.14; stroke: var(--color-warning); }
+.tone-danger { fill: var(--color-danger); fill-opacity: 0.16; stroke: var(--color-danger); stroke-dasharray: none; }
+.tone-primary { fill: var(--color-primary); fill-opacity: 0.12; stroke: var(--color-primary); }
+.tone-purple { fill: var(--color-purple); fill-opacity: 0.12; stroke: var(--color-purple); }
+.tone-neutral { fill: var(--color-text-dim); fill-opacity: 0.1; stroke: var(--color-text-dim); }
+
+.highlighted {
+  fill-opacity: 0.26;
+  stroke-width: 3;
+  stroke-dasharray: none;
+}
+
+.dimmed {
+  fill-opacity: 0.04;
+  stroke-opacity: 0.45;
+}
+
+.zoneLabel {
+  position: absolute;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0 8px;
+  padding: 4px 8px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: 600 11px/1.2 var(--font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.label-success { color: var(--color-success); }
+.label-warning { color: var(--color-warning); }
+.label-danger { color: var(--color-danger); }
+.label-primary { color: var(--color-primary); }
+.label-purple { color: var(--color-purple); }
+.label-neutral { color: var(--color-text-muted); }
+
+.camera {
+  position: absolute;
+  z-index: 3;
+  width: 0;
+  height: 0;
+}
+
+.fov {
+  position: absolute;
+  left: 0;
+  top: -40px;
+  width: 110px;
+  height: 80px;
+  transform-origin: 0 50%;
+  transform: rotate(var(--fov-rotation));
+  clip-path: polygon(0 50%, 100% 0, 100% 100%);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--tone) 32%, transparent), transparent);
+  pointer-events: none;
+}
+
+.marker {
+  position: absolute;
+  left: -15px;
+  top: -15px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 2px solid var(--tone);
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--tone);
+  box-shadow: var(--shadow-float);
+  cursor: pointer;
+}
+
+.marker:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.selected .marker {
+  background: var(--tone);
+  color: var(--color-surface);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--tone) 25%, transparent);
+}
+
+.camera-success { --tone: var(--color-success); }
+.camera-warning { --tone: var(--color-warning); }
+.camera-danger { --tone: var(--color-danger); }
+.camera-primary { --tone: var(--color-primary); }
+.camera-purple { --tone: var(--color-purple); }
+.camera-neutral { --tone: var(--color-text-dim); }
+
+.popup {
+  position: absolute;
+  z-index: 5;
+  width: 290px;
+  margin: 22px 0 0 22px;
+  line-height: normal;
+}
+
+.popupLeft {
+  transform: translateX(-100%);
+  margin-left: -22px;
+}
+
+.popupUp {
+  margin-top: 0;
+  transform: translateY(calc(-100% - 22px));
+}
+
+.popupLeft.popupUp {
+  transform: translate(-100%, calc(-100% - 22px));
+}
+
+.compact {
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.compact .surface {
+  min-width: 0;
+  width: 100%;
+}
+
+.compact .fov {
+  top: -18px;
+  width: 50px;
+  height: 36px;
+}
+
+.compact .marker {
+  left: -6px;
+  top: -6px;
+  width: 12px;
+  height: 12px;
+  border-width: 2px;
+  box-shadow: none;
+  cursor: default;
+}
+
+.compact .selected .marker {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--tone) 35%, transparent);
+}
+
+.compact .zone {
+  stroke-width: 1.5;
+  stroke-dasharray: none;
+  cursor: default;
+}

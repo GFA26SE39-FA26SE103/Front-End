@@ -26,7 +26,8 @@ export function loadSession(): AuthSession | null {
   if (!raw) return null;
   try {
     const session = JSON.parse(raw) as AuthSession;
-    if (!session.accessToken || !session.expiresAt || Date.parse(session.expiresAt) <= Date.now()) {
+    const expiry = Date.parse(session.expiresAt);
+    if (!session.accessToken || !Number.isFinite(expiry) || expiry <= Date.now() || !session.user?.userId) {
       clearSession();
       return null;
     }
@@ -35,6 +36,14 @@ export function loadSession(): AuthSession | null {
     clearSession();
     return null;
   }
+}
+
+export function updateSessionUser(user: AuthUser): void {
+  const session = loadSession();
+  if (!session) return;
+  if (JSON.stringify(session.user) === JSON.stringify(user)) return;
+  const storage = sessionStorage.getItem(SESSION_KEY) ? sessionStorage : localStorage;
+  storage.setItem(SESSION_KEY, JSON.stringify({ ...session, user }));
 }
 
 export function clearSession(): void {

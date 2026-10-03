@@ -23,6 +23,42 @@ describe('Cameras registration', () => {
     }, true);
   });
 
+  it('registers a recorded camera without a phone URL, uploads video, then tests and enables it', async () => {
+    const calls: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      calls.push(`${init?.method ?? 'GET'} ${path}`);
+      if (path === '/api/supermarkets') return json([{ supermarketId: storeId }]);
+      if (path === `/api/supermarkets/${storeId}/floors`) return json([{ floorId, floorNumber: 1, name: 'Ground floor' }]);
+      if (path === `/api/floors/${floorId}/zones`) return json([]);
+      if (path === `/api/floors/${floorId}/cameras`) {
+        if (init?.method !== 'POST') return json([]);
+        return json({ cameraId, floorId, ...JSON.parse(String(init.body)), healthStatus: 'UNKNOWN', lastSeenAt: null }, 201);
+      }
+      if (path === `/api/cameras/${cameraId}/recorded-video`) return json({ cameraId, sourceType: 'RECORDED', protocol: 'FILE' });
+      if (path === `/api/cameras/${cameraId}/connection/test`) return json({ cameraId, protocol: 'FILE', lastTestResult: 'SUCCESS', lastTestMessage: 'FRAME_RECEIVED', isEnabled: false });
+      if (path === `/api/cameras/${cameraId}/connection/enable`) return json({ cameraId, protocol: 'FILE', isEnabled: true });
+      return json({ code: 'UNEXPECTED_REQUEST' }, 500);
+    });
+    const user = userEvent.setup();
+    render(<MemoryRouter><Cameras /></MemoryRouter>);
+    await screen.findByText('No camera matches “”.');
+    await user.click(screen.getByRole('button', { name: 'Add camera' }));
+    await user.selectOptions(screen.getByLabelText('Camera source'), 'RECORDED');
+    expect(screen.queryByLabelText('IP Webcam URL')).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText('Camera code'), 'CAM-VIDEO');
+    await user.click(screen.getByRole('button', { name: 'Save camera' }));
+    await screen.findByRole('form', { name: 'Upload recorded video' });
+    await user.upload(screen.getByLabelText('Video file'), new File(['video'], 'sample.mp4', { type: 'video/mp4' }));
+    await user.click(screen.getByRole('button', { name: 'Save video source' }));
+    await screen.findByText('RECORDED · MP4 · test & enable next');
+    await user.click(screen.getByRole('button', { name: 'Test & enable' }));
+    await screen.findByText('Stream ready · FRAME_RECEIVED');
+    expect(calls).not.toContain(`PUT /api/cameras/${cameraId}/connection`);
+    expect(calls).toContain(`POST /api/cameras/${cameraId}/recorded-video`);
+    expect(calls).toContain(`POST /api/cameras/${cameraId}/connection/enable`);
+  });
+
   it('registers an active camera and its LIVE HTTP connection, then selects it', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = new URL(String(input));

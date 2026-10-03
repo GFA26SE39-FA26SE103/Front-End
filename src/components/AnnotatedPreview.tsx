@@ -9,7 +9,7 @@ import {
 } from '../api/cameras';
 import s from './AnnotatedPreview.module.css';
 
-type ViewState = 'idle' | 'starting' | 'waiting' | 'live' | 'reconnecting' | 'error' | 'unauthorized' | 'unavailable';
+type ViewState = 'idle' | 'starting' | 'waiting' | 'live' | 'completed' | 'reconnecting' | 'error' | 'unauthorized' | 'unavailable';
 
 export type AnnotatedPreviewProps = {
   cameraId: string;
@@ -60,11 +60,15 @@ export function AnnotatedPreview({ cameraId, enabled, pollInterval = 250 }: Anno
           setImageUrl(null);
           return;
         }
-        if (current.state === 'LIVE') {
+        if (current.state === 'LIVE' || current.state === 'COMPLETED') {
           try {
             const blob = await getAiPreviewFrame(cameraId, controller.signal);
             if (!active || controller.signal.aborted) return;
             replaceImage(blob);
+            if (current.state === 'COMPLETED') {
+              setViewState('completed');
+              return;
+            }
             failures = 0;
           } catch (error) {
             if (!active || controller.signal.aborted) return;
@@ -129,14 +133,16 @@ export function AnnotatedPreview({ cameraId, enabled, pollInterval = 250 }: Anno
   return (
     <div className={s.preview} aria-live="polite">
       {enabled && imageUrl && <img className={s.image} src={imageUrl} alt="Tracked preview for camera" />}
-      {visibleState !== 'live' && <div className={s.state}>{stateLabel(visibleState)}</div>}
+      {visibleState !== 'live' && visibleState !== 'completed' && <div className={s.state}>{stateLabel(visibleState)}</div>}
       {visibleState === 'live' && <span className={s.badge}>YOLO · BYTETRACK · LIVE</span>}
+      {visibleState === 'completed' && <span className={s.badge}>Video completed · Stop then start to replay</span>}
     </div>
   );
 }
 
 function statusView(state: AiPreviewState): ViewState {
   if (state === 'LIVE') return 'live';
+  if (state === 'COMPLETED') return 'completed';
   if (state === 'RECONNECTING') return 'reconnecting';
   if (state === 'ERROR') return 'error';
   if (state === 'STOPPED') return 'idle';

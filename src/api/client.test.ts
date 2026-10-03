@@ -42,6 +42,25 @@ describe('apiFetch', () => {
     expect(blob.type).toBe('image/jpeg');
   });
 
+  it('lets the browser set the multipart boundary and keeps bearer authentication', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'));
+    const body = new FormData();
+    body.append('file', new File(['video'], 'sample.mp4'));
+    await apiFetch('/api/upload', { method: 'POST', body });
+    const init = fetchMock.mock.calls[0][1];
+    expect(init?.body).toBe(body);
+    expect(new Headers(init?.headers).has('Content-Type')).toBe(false);
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer jwt-token');
+  });
+
+  it('shows ASP.NET field validation messages to the form', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      title: 'One or more validation errors occurred.',
+      errors: { Password: ['Password must contain at least 12 characters.'] },
+    }), { status: 400 }));
+    await expect(apiFetch('/api/users')).rejects.toThrow('Password must contain at least 12 characters.');
+  });
+
   it('parses backend ProblemDetails', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       title: 'CONNECTION_NOT_READY',

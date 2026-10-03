@@ -17,6 +17,7 @@ npm install
 npm run dev      # http://localhost:5173
 npm run build    # type-check + production build
 npm run lint
+npm test -- --run
 ```
 
 ## Screens (Main flow 1 — Admin setup)
@@ -33,15 +34,46 @@ npm run lint
 | `/admin/ai-config` | AI incident rules, zone overrides, detection and health thresholds | Admin — AI Config |
 | `/admin/incident-types` | Incident catalogue + new type form | Admin — Incident types |
 | `/admin/routing` | Confidence routing (draggable 50 % / 80 %), broadcast & escalation | Admin — Routing & alerts |
-| `/admin/users` | Users and role permissions | Admin — Users & Roles |
+| `/admin/users` | API-backed account creation, edit, enable/disable and system role list | Admin — Users & Roles |
 | `/admin/audit-logs` | Audit events, filters, details, CSV / JSON export | Admin — Audit log |
 | `/admin/system-health` | Services, performance, alerts, incident pipeline | Admin — System health |
 
-### Demo sign-in rules (mock, `src/data/mockAuth.ts`)
+## Current integration status (2026-10-03)
 
-- Any email with `@` and any password signs in and opens the admin dashboard.
-- Password `wrong` → "Email or password is incorrect"; 5 wrong attempts lock sign-in for 15 minutes.
-- Email containing `suspended` → account suspended; email containing `error` → unable to sign in.
+Login uses the backend JWT API. Set `VITE_API_URL=http://localhost:5080` in a local `.env` (also the default). Requests attach the bearer token; a 401 clears the session. Protected routes verify the current user with `GET /api/auth/me` before rendering and again on navigation. A failed access check offers retry without displaying protected content. Session expiry and logout in another tab remove access.
+
+Only ADMIN can enter `/admin/*` and login lands at `/admin/dashboard`. OPERATOR lands at `/operator/floor-map` (`/operator/dashboard` redirects there); ADMIN and OPERATOR can open `/operator/floor-map` and `/operator/cameras/:cameraId`. These screens need the backend branch that grants OPERATOR read access to store, floor, zone, map and camera APIs and to AI preview; without it they return 403. MANAGER and STAFF land at `/manager/dashboard` and `/staff/dashboard`, which identify the signed-in role; their operational workflows are not implemented. Cross-role URLs show Access denied; unknown roles never fall back to Admin. The first access check on a protected area blocks rendering; later checks on navigation run in the background, so the current screen stays mounted unless the role no longer qualifies.
+
+Users & Roles uses `GET /api/users`, `GET /api/roles`, `POST /api/users`, `PATCH /api/users/{id}` and `POST /api/users/{id}/enable|disable`. Create assigns a backend role and an initial password of 12–128 characters; new accounts are ACTIVE. Edit changes full name and role; email is read-only. There is no invite, hard-delete or editable permission API. The role list is read-only. The UI protects the last active Admin, while the backend remains authoritative for concurrent changes. Changing your own role or disabling your own account signs you out immediately.
+
+Create and Edit open an account dialog only after the corresponding button is clicked. Cancel, the close button and Escape discard the draft; a successful mutation closes the dialog and displays feedback in the Users card. Closing returns focus to the action that opened the dialog. The four role descriptions appear in equal-width cards below Users. Admin and camera-preview headers share a profile dropdown displaying full name, email and Logout; the profile icon itself does not sign out. Outside click, Escape and keyboard navigation dismiss the dropdown.
+
+Verification on 2026-10-03: `npm test -- --run` passed **100 tests in 16 files**; `npm run build` and `npm run lint` passed. Account tests exercise the HTTP contract with controlled fetch responses, including create/edit/enable/disable, duplicate email, last-Admin rejection, retry, self-access changes and dialog cancellation. Access tests cover all four login destinations, direct cross-role URLs, server-role verification, revoked/disabled sessions, expiry, network failure and sign-out. Profile tests cover information display, Logout, outside click and keyboard interaction. Playwright checked the layout and account/profile dialogs in Edge at 1920×1080 and 1280×720 using synthetic read-only API responses, including native Escape cancellation, focus restoration and storage clearing on Logout. These checks do not claim an account mutation against the shared live database.
+
+| MF-01 step | Current implementation | Remaining work |
+| --- | --- | --- |
+| Store / floor / zone | Store Layout loads real stores/floors/zones; uploads floor plans and saves zone polygons, color and physical area | Store/floor creation UI and dashboard integration |
+| Register & configure camera | Real registry, creation, live HTTP configuration and MP4 upload | Other live protocols are backend capabilities, not options in this form |
+| Test & preview | Real test/enable and annotated YOLO + ByteTrack frames in React | Preview is a controlled test, not monitoring activation |
+| Map camera to zone | Store Layout saves camera floor-plan placement; backend has same-floor N:M mapping and camera-frame ROI; Cameras lists saved mappings | Camera-to-zone mapping UI and camera-frame ROI drawing/saving; Cameras mini floor plan still uses sample geometry |
+| Configure monitoring rule | Basic per-zone MonitoringConfiguration in BE; AI Config/Incident Types remain mock | ERD v3 rule persistence, warning/critical, units, sustain/cooldown and readiness validation |
+| Activate & health | BE activation status and camera-health worker | Dashboard Activate changes local state only; connect readiness checks and continuous monitoring runtime |
+
+Forgot/reset-password and other operational screens remain prototypes unless separately integrated. Local UI state is not evidence of saved backend configuration.
+
+## Test AI with uploaded video (no phone required)
+
+Start native AI, ASP.NET and React; see backend/AI-service READMEs. Backend needs FFmpeg. Backend and native AI must share the recorded-video directory on the same machine.
+
+1. Ensure a store and floor exist in the backend (create through Swagger if needed). Store Layout loads these records and saves floor plans, zone edits and camera placement through the APIs.
+2. **Cameras → Add camera → Uploaded video (test source)**, fill floor/code/name/dates, then **Save camera**. No phone URL is required. Or select an existing ACTIVE camera → **Upload video**.
+3. Choose a non-empty MP4, maximum 200 MB → **Save video source**. Backend validates/decode-checks it and configures RECORDED/FILE. Old AI session is stopped; credentials/test/enabled flag are reset. Deactivate monitoring first if this camera is mapped to an ACTIVE configuration.
+4. **Test & enable → Start AI preview**. React displays person boxes and camera-local ByteTrack IDs. Only the newest annotated JPEG is polled; not every processed frame is displayed.
+5. At EOF, **Video completed** appears and the final frame remains. **Stop AI preview → Start AI preview** replays with a fresh tracker. Switching cameras/leaving stops the old preview.
+
+Upload replaces the source, not camera identity or zone mappings. Review the ROI if the scene changes. Restore live input with **Configure connection**, then test again. Upload is a controlled fallback/demo, not incident creation or full MF-01 completion.
+
+API: `POST /api/cameras/{cameraId}/recorded-video`, multipart `file`, ADMIN JWT. Browser sets the multipart boundary; React never calls Python or the phone directly.
 
 ## Structure
 
@@ -75,5 +107,6 @@ Camera creation/connection remains a separate flow. Placement saving does not te
 
 ## Notes
 
-- Authentication, Cameras, and Store Layout have API-backed slices. Other screens still use mock/component state until their backend contracts are implemented.
+- Authentication, Users & Roles, Cameras, and Store Layout have API-backed slices. Other screens still use mock/component state until their backend contracts are implemented.
+- Model confidence is an input filter, not an incident severity/routing threshold; legacy Routing mock does not represent current AGENTS.md rules.
 - Only the Light theme is wired. Dark colour tokens exist (`[data-theme='dark']`), but the Figma icons are exported in light-theme colours, so dark mode needs dark icon variants first.

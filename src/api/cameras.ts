@@ -69,7 +69,13 @@ export type CameraConnection = {
   lastTestMessage: string | null;
 };
 
-export type AiPreviewState = 'STOPPED' | 'STARTING' | 'LIVE' | 'RECONNECTING' | 'ERROR';
+export type AiPreviewState = 'STOPPED' | 'STARTING' | 'LIVE' | 'RECONNECTING' | 'ERROR' | 'COMPLETED';
+
+export const uploadRecordedVideo = (cameraId: string, file: File) => {
+  const body = new FormData();
+  body.append('file', file);
+  return apiFetch<{ cameraId: string; sourceType: 'RECORDED'; protocol: 'FILE' }>(`/api/cameras/${cameraId}/recorded-video`, { method: 'POST', body, timeoutMs: 0 });
+};
 
 export type AiPreviewStatus = {
   cameraId: string;
@@ -101,6 +107,12 @@ export const configureCameraConnection = (cameraId: string, body: ConfigureConne
     body: JSON.stringify(body),
   });
 
+export const getCamera = (cameraId: string, signal?: AbortSignal) =>
+  apiFetch<CameraRecord>(`/api/cameras/${cameraId}`, { signal });
+
+export const getCameraPreview = (cameraId: string, signal?: AbortSignal) =>
+  apiFetch<Blob>(`/api/cameras/${cameraId}/preview`, { signal, responseType: 'blob' });
+
 export const listCameraMappings = (cameraId: string, signal?: AbortSignal) =>
   apiFetch<CameraZoneMapping[]>(`/api/cameras/${cameraId}/zones`, { signal });
 
@@ -112,9 +124,6 @@ export const saveCameraMapping = (cameraId: string, zoneId: string, body: Camera
 
 export const removeCameraMapping = (cameraId: string, zoneId: string) =>
   apiFetch<void>(`/api/cameras/${cameraId}/zones/${zoneId}`, { method: 'DELETE' });
-
-export const getCameraPreview = (cameraId: string, signal?: AbortSignal) =>
-  apiFetch<Blob>(`/api/cameras/${cameraId}/preview`, { signal, responseType: 'blob' });
 
 export const getCameraConnection = (cameraId: string, signal?: AbortSignal) =>
   apiFetch<CameraConnection>(`/api/cameras/${cameraId}/connection`, { signal });
