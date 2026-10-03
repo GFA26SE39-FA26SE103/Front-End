@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createAccount, listAccounts, listRoles, setAccountEnabled, updateAccount, type AccountRecord, type RoleRecord } from '../api/accounts';
 import { ApiError } from '../api/client';
@@ -33,6 +33,31 @@ function errorMessage(reason: unknown): string {
   return 'Could not complete the request. Check your connection and try again.';
 }
 
+function AccountDialog({ title, busy, onClose, children }: { title: string; busy: boolean; onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  useEffect(() => {
+    const dialog = ref.current;
+    const previousFocus = document.activeElement;
+    dialog?.showModal();
+    dialog?.querySelector<HTMLInputElement>('input')?.focus();
+    return () => {
+      dialog?.close();
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
+    };
+  }, []);
+  return <dialog ref={ref} className={s.dialog} aria-labelledby={titleId} onCancel={(event) => {
+    event.preventDefault();
+    if (!busy) onClose();
+  }}>
+    <div className={s.dialogHeader}>
+      <h2 id={titleId}>{title}</h2>
+      <button type="button" className={s.dialogClose} aria-label="Close account form" disabled={busy} onClick={onClose}>×</button>
+    </div>
+    {children}
+  </dialog>;
+}
+
 export default function UsersRoles() {
   const navigate = useNavigate();
   const [accounts, setAccounts] = useState<AccountRecord[]>([]);
@@ -52,7 +77,6 @@ export default function UsersRoles() {
       if (controller.signal.aborted) return;
       setAccounts(users);
       setRoles(availableRoles);
-      setEditor(users[0] ? editUser(users[0]) : newUser(availableRoles));
       setReady(true);
       setLoadError('');
     }).catch((reason: unknown) => {
@@ -72,11 +96,16 @@ export default function UsersRoles() {
     setError('');
     setNotice('');
   }
+  function closeEditor() {
+    if (busy) return;
+    setEditor(null);
+    setError('');
+  }
   function accept(updated: AccountRecord, message: string) {
     setAccounts((current) => current.some((user) => user.userId === updated.userId)
       ? current.map((user) => user.userId === updated.userId ? updated : user)
       : [...current, updated]);
-    setEditor(editUser(updated));
+    setEditor(null);
     setNotice(message);
     const currentUser = loadSession()?.user;
     if (currentUser?.userId === updated.userId) {
@@ -117,6 +146,7 @@ export default function UsersRoles() {
     finally { setBusy(false); }
   }
   function refresh() {
+    setEditor(null);
     setReady(false);
     setLoadError('');
     setError('');
@@ -125,13 +155,14 @@ export default function UsersRoles() {
   }
 
   return (
-    <AdminLayout title="Users & Roles" subtitle={ready ? `${accounts.length} accounts · ${roles.length} roles` : 'Account administration'}>
+    <AdminLayout title="Users & Roles" subtitle={ready ? `${accounts.length} account${accounts.length === 1 ? '' : 's'} · ${roles.length} roles` : 'Account administration'}>
       <div className={s.workspace}>
         <Card className={s.users}>
           <CardHeader title="Users" subtitle="Create accounts and manage their access.">
             <Button variant="secondary" disabled={busy || !ready} onClick={refresh}>Refresh</Button>
             <Button disabled={busy || !ready || !roles.length} onClick={() => choose(newUser(roles))}>Create account</Button>
           </CardHeader>
+          {notice && <p className={s.success} role="status">{notice}</p>}
           {loadError ? <div className={s.feedback} role="alert"><p>{loadError}</p><Button variant="secondary" onClick={refresh}>Retry loading accounts</Button></div>
             : !ready ? <p role="status" className={s.note}>Loading accounts and roles…</p>
             : <>
@@ -153,9 +184,18 @@ export default function UsersRoles() {
             </>}
         </Card>
 
-        {ready && editor && <aside className={s.sidebar}>
-          <Card className={s.editor}>
-            <CardHeader title={editor.userId ? 'Edit account' : 'Create account'} subtitle={self ? 'You are editing your own account.' : undefined} />
+        {ready && <Card className={s.roles}>
+          <CardHeader title="Roles" subtitle="System roles and their responsibilities." />
+          <div className={s.roleGrid}>
+            {roles.map((role) => <div className={s.role} key={role.roleId}>
+              <Chip tone={roleTone[role.name] ?? 'neutral'} pill>{roleLabel(role.name)}</Chip>
+              <p>{role.description || scopes[role.name] || 'Access is defined by the system.'}</p>
+            </div>)}
+          </div>
+        </Card>}
+
+        {ready && editor && <AccountDialog title={editor.userId ? 'Edit account' : 'Create account'} busy={busy} onClose={closeEditor}>
+            {self && <p className={s.note}>You are editing your own account.</p>}
             <form className={s.form} onSubmit={save} aria-busy={busy}>
               <fieldset disabled={busy}>
                 <label>Full name<input autoComplete="name" required maxLength={150} value={editor.fullName} onChange={(event) => setEditor({ ...editor, fullName: event.target.value })} /></label>
@@ -166,22 +206,15 @@ export default function UsersRoles() {
                 </select></label>
                 {lastAdmin && <p className={s.note}>This is the last active Administrator. Its role and active status must be preserved.</p>}
                 {self && !lastAdmin && <p className={s.note}>Changing your own role or disabling your account signs you out immediately.</p>}
-                <Button type="submit" block disabled={busy || !roles.length}>{busy ? 'Saving…' : editor.userId ? 'Save changes' : 'Create account'}</Button>
+                <div className={s.formActions}>
+                  <Button variant="secondary" disabled={busy} onClick={closeEditor}>Cancel</Button>
+                  <Button type="submit" disabled={busy || !roles.length}>{busy ? 'Saving…' : editor.userId ? 'Save changes' : 'Create account'}</Button>
+                </div>
                 {selected && <Button block variant={selected.status === 'ACTIVE' ? 'dangerGhost' : 'secondary'} disabled={busy || lastAdmin} onClick={() => void changeStatus()}>{selected.status === 'ACTIVE' ? 'Disable account' : 'Enable account'}</Button>}
               </fieldset>
               {error && <p className={s.error} role="alert">{error}</p>}
-              {notice && <p className={s.success} role="status">{notice}</p>}
             </form>
-          </Card>
-          <Card className={s.roles}>
-            <CardHeader title="Roles" subtitle="Fixed system roles; permissions are enforced by the backend." />
-            {roles.map((role) => <div className={s.role} key={role.roleId}>
-              <Chip tone={roleTone[role.name] ?? 'neutral'} pill>{roleLabel(role.name)}</Chip>
-              <p>{role.description || scopes[role.name] || 'Access is defined by the system.'}</p>
-            </div>)}
-            <p className={s.note}>Operational screens for Operator, Manager and Staff will be connected as their workflows are implemented.</p>
-          </Card>
-        </aside>}
+        </AccountDialog>}
       </div>
     </AdminLayout>
   );

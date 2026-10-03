@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { clearSession, loadSession } from '../auth/session';
+import { Link, NavLink } from 'react-router-dom';
+import { loadSession } from '../auth/session';
 import { Icon } from './Icon';
+import { AccountMenu } from './AccountMenu';
 import s from './OperatorLayout.module.css';
 
 export function OperatorLayout({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
-  const navigate = useNavigate();
   const isAdmin = loadSession()?.user.role === 'ADMIN';
 
   return (
@@ -25,17 +25,7 @@ export function OperatorLayout({ title, subtitle, children }: { title: string; s
           <NavLink to="/operator/floor-map" className={({ isActive }) => `${s.navLink} ${isActive ? s.active : ''}`}>Floor map</NavLink>
           {isAdmin && <Link to="/admin/store-layout" className={s.navLink}>Admin setup</Link>}
         </nav>
-        <button
-          className={s.avatar}
-          aria-label="Sign out"
-          title="Sign out"
-          onClick={() => {
-            clearSession();
-            navigate('/login');
-          }}
-        >
-          <Icon name="header-user" size={19} />
-        </button>
+        <AccountMenu />
       </header>
       <main className={s.content}>{children}</main>
     </div>
