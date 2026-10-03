@@ -6,20 +6,31 @@ import {
   startAiPreview,
   stopAiPreview,
   type AiPreviewState,
+  type MapPoint,
 } from '../api/cameras';
 import s from './AnnotatedPreview.module.css';
 
 type ViewState = 'idle' | 'starting' | 'waiting' | 'live' | 'completed' | 'reconnecting' | 'error' | 'unauthorized' | 'unavailable';
 
+/** A zone ROI drawn over the frame; points are normalized to the camera image (0..1). */
+export type PreviewRegion = {
+  id: string;
+  label: string;
+  color: string;
+  points: MapPoint[];
+};
+
 export type AnnotatedPreviewProps = {
   cameraId: string;
   enabled: boolean;
   pollInterval?: number;
+  regions?: PreviewRegion[];
 };
 
-export function AnnotatedPreview({ cameraId, enabled, pollInterval = 250 }: AnnotatedPreviewProps) {
+export function AnnotatedPreview({ cameraId, enabled, pollInterval = 250, regions = [] }: AnnotatedPreviewProps) {
   const [viewState, setViewState] = useState<ViewState>('idle');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [frameSize, setFrameSize] = useState<{ width: number; height: number } | null>(null);
   const imageUrlRef = useRef<string | null>(null);
   const stopChainRef = useRef<Promise<void>>(Promise.resolve());
 
@@ -132,11 +143,54 @@ export function AnnotatedPreview({ cameraId, enabled, pollInterval = 250 }: Anno
   const visibleState = enabled ? viewState : 'idle';
   return (
     <div className={s.preview} aria-live="polite">
-      {enabled && imageUrl && <img className={s.image} src={imageUrl} alt="Tracked preview for camera" />}
+      {enabled && imageUrl && (
+        <img
+          className={s.image}
+          src={imageUrl}
+          alt="Tracked preview for camera"
+          onLoad={(event) => {
+            const { naturalWidth: width, naturalHeight: height } = event.currentTarget;
+            if (width > 0 && height > 0) setFrameSize((current) => (current?.width === width && current.height === height ? current : { width, height }));
+          }}
+        />
+      )}
+      {enabled && imageUrl && frameSize && regions.length > 0 && <RegionLayer regions={regions} {...frameSize} />}
       {visibleState !== 'live' && visibleState !== 'completed' && <div className={s.state}>{stateLabel(visibleState)}</div>}
       {visibleState === 'live' && <span className={s.badge}>YOLO · BYTETRACK · LIVE</span>}
       {visibleState === 'completed' && <span className={s.badge}>Video completed · Stop then start to replay</span>}
     </div>
+  );
+}
+
+// The viewBox matches the frame's pixel size and uses "meet", so the overlay lines up with the
+// letterboxed image (object-fit: contain) at any panel size.
+function RegionLayer({ regions, width, height }: { regions: PreviewRegion[]; width: number; height: number }) {
+  const fontSize = Math.max(12, Math.round(width * 0.016));
+  return (
+    <svg className={s.regions} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" data-testid="roi-overlay" aria-hidden="true">
+      {regions.map((region) => {
+        const anchor = region.points.reduce((top, point) => (point.y < top.y || (point.y === top.y && point.x < top.x) ? point : top));
+        return (
+          <g key={region.id}>
+            <polygon
+              className={s.region}
+              points={region.points.map(({ x, y }) => `${x * width},${y * height}`).join(' ')}
+              fill={region.color}
+              stroke={region.color}
+            />
+            <text
+              className={s.regionLabel}
+              x={anchor.x * width + fontSize * 0.4}
+              y={anchor.y * height + fontSize * 1.3}
+              fontSize={fontSize}
+              strokeWidth={fontSize * 0.3}
+            >
+              {region.label}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
   );
 }
 

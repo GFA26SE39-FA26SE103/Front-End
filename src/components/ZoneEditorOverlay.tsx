@@ -491,3 +491,30 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onCancel }: ZoneEdito
     </div>
   );
 }
+
+/** Read-only zone polygons and labels, kept on the plan while the zone editor is closed. */
+export function ZoneLayer({ zones }: { zones: ZoneRecord[] }) {
+  return (
+    <div className={s.zoneLayer} data-testid="zone-layer" aria-hidden="true">
+      <svg viewBox="0 0 1000 1000" preserveAspectRatio="none">
+        {zones.map((zone) => {
+          const color = zone.colorHex ?? DEFAULT_COLOR;
+          return <polygon key={zone.zoneId} points={pointsAttribute(zone.mapPolygon)} fill={color} stroke={color} className={s.zone} />;
+        })}
+      </svg>
+      {zones.map((zone) => {
+        const center = centerOf(zone.mapPolygon);
+        const color = zone.colorHex ?? DEFAULT_COLOR;
+        return (
+          <span
+            key={`label-${zone.zoneId}`}
+            className={s.zoneLabel}
+            style={{ left: percentage(center.x), top: percentage(center.y), backgroundColor: color, color: textColorFor(color) }}
+          >
+            {zone.name}
+          </span>
+        );
+      })}
+    </div>
+  );
+}

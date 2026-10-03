@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api/client';
 import {
@@ -61,6 +61,22 @@ describe('AnnotatedPreview', () => {
     await waitFor(() => expect(vi.mocked(URL.createObjectURL).mock.calls.length).toBeGreaterThanOrEqual(2));
 
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:frame-1');
+  });
+
+  it('draws zone ROIs over the frame in frame pixel coordinates', async () => {
+    const regions = [{ id: 'm1', label: 'Checkout', color: '#F97316', points: [{ x: 0.1, y: 0.2 }, { x: 0.5, y: 0.2 }, { x: 0.5, y: 0.6 }] }];
+    render(<AnnotatedPreview cameraId="camera-a" enabled pollInterval={50} regions={regions} />);
+    const image = await screen.findByRole('img', { name: /tracked preview/i });
+    expect(screen.queryByTestId('roi-overlay')).not.toBeInTheDocument();
+
+    Object.defineProperty(image, 'naturalWidth', { configurable: true, value: 1280 });
+    Object.defineProperty(image, 'naturalHeight', { configurable: true, value: 720 });
+    fireEvent.load(image);
+
+    const overlay = await screen.findByTestId('roi-overlay');
+    expect(overlay).toHaveAttribute('viewBox', '0 0 1280 720');
+    expect(overlay.querySelector('polygon')).toHaveAttribute('points', '128,144 640,144 640,432');
+    expect(overlay).toHaveTextContent('Checkout');
   });
 
   it('keeps the final annotated frame and stops polling at recorded-video completion', async () => {

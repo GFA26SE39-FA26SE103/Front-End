@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getCamera, type CameraRecord } from '../../api/cameras';
 import type { FloorRecord, ZoneRecord } from '../../api/floors';
-import { AnnotatedPreview } from '../../components/AnnotatedPreview';
+import { AnnotatedPreview, type PreviewRegion } from '../../components/AnnotatedPreview';
 import { FloorPlanView } from '../../components/FloorPlanView';
 import { OperatorLayout } from '../../components/OperatorLayout';
 import { Button, Chip, Overline } from '../../components/ui';
@@ -20,6 +20,9 @@ import {
   type FloorDetails,
 } from './operatorData';
 import s from './OperatorCameraLive.module.css';
+
+// Same fallback colour as the Admin ROI editor, so a zone looks the same in both places.
+const ROI_COLOR = '#3B82F6';
 
 export default function OperatorCameraLive() {
   const { cameraId = '' } = useParams();
@@ -58,6 +61,15 @@ function CameraLiveView({ cameraId }: { cameraId: string }) {
 
   const zones = useMemo(() => (details && camera ? zonesForCamera(camera.cameraId, details.zones, details.mappings) : []), [camera, details]);
   const zoneIds = useMemo(() => new Set(zones.map((zone) => zone.zoneId)), [zones]);
+  // ROIs the Admin drew on this camera's image (Store layout → Configure coverage).
+  const regions = useMemo<PreviewRegion[]>(() => {
+    if (!details) return [];
+    return details.mappings.flatMap((mapping) => {
+      const zone = details.zones.find((item) => item.zoneId === mapping.zoneId);
+      if (mapping.cameraId !== cameraId || mapping.status !== 'ACTIVE' || !zone || mapping.roiPolygon.length < 3) return [];
+      return [{ id: mapping.cameraZoneId, label: zone.name, color: zone.colorHex ?? ROI_COLOR, points: mapping.roiPolygon }];
+    });
+  }, [cameraId, details]);
   const zoneTone = (zone: ZoneRecord) => (details ? COVERAGE[zoneCoverage(zone, details.cameras, details.mappings).status].tone : 'neutral');
   const floorLink = `/operator/floor-map${floor ? `?floor=${floor.floorId}` : ''}`;
 
@@ -78,7 +90,7 @@ function CameraLiveView({ cameraId }: { cameraId: string }) {
     <OperatorLayout title={title} subtitle={camera ? `${camera.name} · live` : 'Loading camera…'}>
       <section className={s.stage}>
         <div className={s.video}>
-          <AnnotatedPreview cameraId={cameraId} enabled={live && Boolean(camera)} />
+          <AnnotatedPreview cameraId={cameraId} enabled={live && Boolean(camera)} regions={regions} />
           {map.status === 'ready' && details && camera && (
             <div className={s.minimap}>
               <p className={s.minimapTitle}>{floor?.name ?? 'Floor'} <span>· minimap</span></p>

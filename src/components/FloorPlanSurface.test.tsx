@@ -98,4 +98,17 @@ describe('FloorPlanSurface', () => {
     expect(screen.getByRole('button', { name: /rotate cam-01/i })).toBeDisabled();
     expect(screen.getByRole('toolbar', { name: 'Zone drawing tools' })).toBeInTheDocument();
   });
+  it('keeps zones visible on the plan while the zone editor is closed', () => {
+    const zone = {
+      zoneId: 'zone-1', floorId: 'floor-1', code: 'CHK', name: 'Checkout', zoneType: 'CHECKOUT',
+      mapPolygon: [{ x: 0.1, y: 0.1 }, { x: 0.4, y: 0.1 }, { x: 0.4, y: 0.4 }, { x: 0.1, y: 0.4 }],
+      colorHex: '#F97316', areaM2: null, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
+    };
+    renderSurface({ zones: [zone] });
+
+    const layer = screen.getByTestId('zone-layer');
+    expect(layer).toHaveTextContent('Checkout');
+    expect(layer.querySelector('polygon')).toHaveAttribute('points', '100,100 400,100 400,400 100,400');
+    expect(screen.getByRole('button', { name: /place cam-01/i })).toBeEnabled();
+  });
 });
