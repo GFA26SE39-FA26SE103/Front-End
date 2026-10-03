@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getCamera, getCameraConnection, listCameraMappings, listCameras } from '../../api/cameras';
+import { getCamera, listCameraMappings, listCameras } from '../../api/cameras';
 import { getFloorMap, listFloors, listSupermarkets, listZones } from '../../api/floors';
 import OperatorCameraLive from './OperatorCameraLive';
 
@@ -14,7 +14,6 @@ vi.mock('../../components/AnnotatedPreview', () => ({
 
 vi.mock('../../api/cameras', () => ({
   getCamera: vi.fn(),
-  getCameraConnection: vi.fn(),
   listCameraMappings: vi.fn(),
   listCameras: vi.fn(),
 }));
@@ -68,10 +67,6 @@ const renderPage = () => render(
 describe('OperatorCameraLive', () => {
   beforeEach(() => {
     vi.mocked(getCamera).mockResolvedValue(camera);
-    vi.mocked(getCameraConnection).mockResolvedValue({
-      cameraId: 'cam-3', sourceType: 'LIVE', protocol: 'RTSP', streamUri: 'rtsp://10.0.1.23/main',
-      hasCredentials: true, isEnabled: true, lastTestedAt: null, lastTestResult: 'SUCCESS', lastTestMessage: null,
-    });
     vi.mocked(listSupermarkets).mockResolvedValue([{ supermarketId: 'store-1', code: 'STORE', name: 'Central store', address: null, status: 'ACTIVE' }]);
     vi.mocked(listFloors).mockResolvedValue([{
       floorId: 'floor-1', supermarketId: 'store-1', floorNumber: 1, name: 'Ground floor',
@@ -93,8 +88,7 @@ describe('OperatorCameraLive', () => {
 
     expect(await screen.findByRole('heading', { name: 'CAM-03 · Checkout, Aisles' })).toBeInTheDocument();
     expect(screen.getByTestId('annotated-preview')).toHaveTextContent('cam-3:on');
-    expect(screen.getByText('LIVE · RTSP')).toBeInTheDocument();
-    expect(screen.queryByText('rtsp://10.0.1.23/main')).not.toBeInTheDocument();
+    expect(screen.queryByText('Source')).not.toBeInTheDocument();
     expect(await screen.findByTestId('floor-minimap')).toBeInTheDocument();
     const zoneRows = screen.getAllByText(/Checkout|Aisles/);
     expect(zoneRows.length).toBeGreaterThanOrEqual(2);

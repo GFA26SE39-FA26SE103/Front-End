@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 import { getCurrentUser, signIn } from '../api/auth';
@@ -11,8 +11,8 @@ import { clearSession, loadSession, saveSession, type AuthUser } from './session
 vi.mock('../api/auth', () => ({ getCurrentUser: vi.fn(), signIn: vi.fn(), MAX_FAILED_ATTEMPTS: 5, LOCK_SECONDS: 900 }));
 vi.mock('../pages/SetupHealth', () => ({ default: () => <AdminLayout title="Dashboard" subtitle="Setup"><p>Admin dashboard content</p></AdminLayout> }));
 vi.mock('../pages/UsersRoles', () => ({ default: () => <p>Account admin content</p> }));
-vi.mock('../pages/operator/OperatorFloorMap', () => ({ default: () => <p>Admin floor-map preview</p> }));
-vi.mock('../pages/operator/OperatorCameraLive', () => ({ default: () => <p>Admin camera preview</p> }));
+vi.mock('../pages/operator/OperatorFloorMap', () => ({ default: () => <h1>Floor map screen</h1> }));
+vi.mock('../pages/operator/OperatorCameraLive', () => ({ default: () => <h1>Camera live screen</h1> }));
 
 const makeUser = (role = 'ADMIN', status = 'ACTIVE'): AuthUser => ({
   userId: 'user-1', email: 'account@example.test', fullName: 'Test Account', roleId: `role-${role}`, role, status,
@@ -36,7 +36,7 @@ describe('role routing and authenticated access', () => {
 
   it.each([
     ['ADMIN', '/admin/dashboard', 'Dashboard'],
-    ['OPERATOR', '/operator/dashboard', 'Operator workspace'],
+    ['OPERATOR', '/operator/floor-map', 'Floor map screen'],
     ['MANAGER', '/manager/dashboard', 'Manager workspace'],
     ['STAFF', '/staff/dashboard', 'Staff workspace'],
   ])('sends %s login to its own workspace', async (role, path, heading) => {
@@ -66,14 +66,25 @@ describe('role routing and authenticated access', () => {
 
   it.each([
     ['ADMIN', '/manager/dashboard'], ['MANAGER', '/staff/dashboard'],
-    ['STAFF', '/operator/dashboard'], ['OPERATOR', '/operator/floor-map'],
-    ['MANAGER', '/operator/cameras/camera-1'],
+    ['STAFF', '/operator/dashboard'], ['STAFF', '/operator/floor-map'],
+    ['MANAGER', '/operator/floor-map'], ['MANAGER', '/operator/cameras/camera-1'],
   ])('blocks %s from %s when the route requires another role', async (role, path) => {
     session(makeUser(role));
     vi.mocked(getCurrentUser).mockResolvedValue(makeUser(role));
     show(path);
     await screen.findByRole('heading', { name: 'Access denied' });
-    expect(screen.queryByText(/Admin .* preview/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /Floor map screen|Camera live screen/ })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['/operator/floor-map', 'Floor map screen'],
+    ['/operator/cameras/camera-1', 'Camera live screen'],
+    ['/operator/dashboard', 'Floor map screen'],
+  ])('lets OPERATOR open %s', async (path, heading) => {
+    session(makeUser('OPERATOR'));
+    vi.mocked(getCurrentUser).mockResolvedValue(makeUser('OPERATOR'));
+    show(path);
+    await screen.findByRole('heading', { name: heading });
   });
 
   it('uses the backend role even if the stored user has been changed to ADMIN', async () => {
@@ -111,6 +122,39 @@ describe('role routing and authenticated access', () => {
     show('/admin/users');
     await screen.findByText('Session expired');
     expect(loadSession()).toBeNull();
+  });
+
+  it('keeps the current screen while re-checking access after navigation', async () => {
+    const user = userEvent.setup();
+    session(makeUser('OPERATOR'));
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(makeUser('OPERATOR')).mockReturnValue(new Promise<AuthUser>(() => {}));
+    function GoToCamera() {
+      const navigate = useNavigate();
+      return <button onClick={() => navigate('/operator/cameras/camera-1')}>Go to camera</button>;
+    }
+    render(<MemoryRouter initialEntries={['/operator/floor-map']}><App /><GoToCamera /></MemoryRouter>);
+    await screen.findByRole('heading', { name: 'Floor map screen' });
+
+    await user.click(screen.getByRole('button', { name: 'Go to camera' }));
+    expect(screen.getByRole('heading', { name: 'Camera live screen' })).toBeInTheDocument();
+    expect(screen.queryByText(/Checking your account/)).not.toBeInTheDocument();
+    expect(getCurrentUser).toHaveBeenCalledTimes(2);
+  });
+
+  it('redirects when a background re-check finds the role has changed', async () => {
+    const user = userEvent.setup();
+    session(makeUser('OPERATOR'));
+    vi.mocked(getCurrentUser).mockResolvedValueOnce(makeUser('OPERATOR')).mockResolvedValue(makeUser('STAFF'));
+    function GoToCamera() {
+      const navigate = useNavigate();
+      return <button onClick={() => navigate('/operator/cameras/camera-1')}>Go to camera</button>;
+    }
+    render(<MemoryRouter initialEntries={['/operator/floor-map']}><App /><GoToCamera /><Location /></MemoryRouter>);
+    await screen.findByRole('heading', { name: 'Floor map screen' });
+
+    await user.click(screen.getByRole('button', { name: 'Go to camera' }));
+    await screen.findByRole('heading', { name: 'Access denied' });
+    expect(screen.getByTestId('location')).toHaveTextContent('/access-denied');
   });
 
   it('fails closed on a network error and allows verification retry', async () => {
@@ -158,7 +202,7 @@ describe('role routing and authenticated access', () => {
     const user = userEvent.setup();
     session(makeUser());
     const rendered = show('/operator/floor-map');
-    await screen.findByText('Admin floor-map preview');
+    await screen.findByRole('heading', { name: 'Floor map screen' });
     rendered.unmount();
     show('/admin/dashboard');
     await screen.findByRole('heading', { name: 'Dashboard' });

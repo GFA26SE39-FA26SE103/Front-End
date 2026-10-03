@@ -59,14 +59,16 @@ export function ProtectedRoute({ allowedRoles }: { allowedRoles?: readonly AppRo
   if (expired || !loadSession()) {
     return <Navigate to="/login?reason=session-expired" replace state={{ from: location.pathname }} />;
   }
-  if (failure?.key === key) {
+  // Only the first check blocks rendering. Later checks (each navigation) run in the background so the
+  // current screen stays mounted; a role change still redirects below once the new answer arrives.
+  if (!verified && failure?.key === key) {
     return <main className={s.shell}><section className={s.card}>
       <h1>Access check unavailable</h1><p role="alert">{failure.message}</p>
       <Button onClick={() => setAttempt((value) => value + 1)}>Retry access check</Button>
       <Button variant="secondary" onClick={() => { clearSession(); setExpired(true); }}>Sign out</Button>
     </section></main>;
   }
-  if (verified?.key !== key) {
+  if (!verified) {
     return <main className={s.shell}><p role="status">Checking your account and permissions…</p></main>;
   }
   if (allowedRoles && !allowedRoles.some((role) => role === verified.user.role)) {

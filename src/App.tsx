@@ -36,11 +36,11 @@ export default function App() {
         <Route path="/admin/users" element={<UsersRoles />} />
         <Route path="/admin/audit-logs" element={<AuditLog />} />
         <Route path="/admin/system-health" element={<SystemHealth />} />
+      </Route>
+      <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'OPERATOR']} />}>
+        <Route path="/operator/dashboard" element={<Navigate to="/operator/floor-map" replace />} />
         <Route path="/operator/floor-map" element={<OperatorFloorMap />} />
         <Route path="/operator/cameras/:cameraId" element={<OperatorCameraLive />} />
-      </Route>
-      <Route element={<ProtectedRoute allowedRoles={['OPERATOR']} />}>
-        <Route path="/operator/dashboard" element={<RoleWorkspace />} />
       </Route>
       <Route element={<ProtectedRoute allowedRoles={['MANAGER']} />}>
         <Route path="/manager/dashboard" element={<RoleWorkspace />} />

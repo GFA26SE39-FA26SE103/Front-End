@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { getCamera, getCameraConnection, type CameraConnection, type CameraRecord } from '../../api/cameras';
+import { getCamera, type CameraRecord } from '../../api/cameras';
 import type { FloorRecord, ZoneRecord } from '../../api/floors';
 import { AnnotatedPreview } from '../../components/AnnotatedPreview';
 import { FloorPlanView } from '../../components/FloorPlanView';
@@ -29,7 +29,6 @@ export default function OperatorCameraLive() {
 
 function CameraLiveView({ cameraId }: { cameraId: string }) {
   const [camera, setCamera] = useState<CameraRecord | null>(null);
-  const [connection, setConnection] = useState<CameraConnection | null>(null);
   const [floor, setFloor] = useState<FloorRecord | null>(null);
   const [details, setDetails] = useState<FloorDetails | null>(null);
   const [error, setError] = useState('');
@@ -41,16 +40,15 @@ function CameraLiveView({ cameraId }: { cameraId: string }) {
     void (async () => {
       try {
         const loaded = await getCamera(cameraId, controller.signal);
-        const [{ floors }, floorDetails, loadedConnection] = await Promise.all([
+        // Connection details (stream URI) are Admin-only, so the operator view never requests them.
+        const [{ floors }, floorDetails] = await Promise.all([
           loadStoreFloors(controller.signal),
           loadFloorDetails(loaded.floorId, controller.signal),
-          getCameraConnection(cameraId, controller.signal).catch(() => null),
         ]);
         if (controller.signal.aborted) return;
         setCamera(loaded);
         setFloor(floors.find((item) => item.floorId === loaded.floorId) ?? null);
         setDetails(floorDetails);
-        setConnection(loadedConnection);
       } catch (reason) {
         if (!controller.signal.aborted) setError(messageOf(reason, 'Could not load this camera.'));
       }
@@ -124,8 +122,6 @@ function CameraLiveView({ cameraId }: { cameraId: string }) {
             <dl className={s.facts}>
               <dt>Zones</dt><dd>{zones.length ? zones.map((zone) => zone.name).join(', ') : 'Not mapped'}</dd>
               <dt>Floor</dt><dd>{floor?.name ?? '—'}</dd>
-              <dt>Source</dt><dd>{connection ? `${connection.sourceType} · ${connection.protocol}` : '—'}</dd>
-              <dt>Last test</dt><dd>{connection?.lastTestResult ?? 'Not tested'}</dd>
               <dt>Last seen</dt><dd>{formatSeen(camera.lastSeenAt)}</dd>
             </dl>
           </>
