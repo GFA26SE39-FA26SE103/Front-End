@@ -22,7 +22,8 @@ export async function apiFetch<T = void>(path: string, init: ApiFetchInit = {}):
   const headers = new Headers(requestInit.headers);
   const session = loadSession();
   if (session) headers.set('Authorization', `Bearer ${session.accessToken}`);
-  if (requestInit.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  const isFormData = typeof FormData !== 'undefined' && requestInit.body instanceof FormData;
+  if (requestInit.body && !isFormData && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
 
   const response = await fetch(`${apiUrl()}${path.startsWith('/') ? path : `/${path}`}`, {
     ...requestInit,

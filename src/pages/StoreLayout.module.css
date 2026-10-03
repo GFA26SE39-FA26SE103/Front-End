@@ -1,393 +1,230 @@
 .structure {
-  width: 252px;
-  flex-shrink: 0;
-  padding: 16px;
-  gap: 12px;
+  width: 270px;
+  flex: 0 0 270px;
+  gap: 14px;
+  overflow: auto;
 }
 
-.storeName {
+.workspace {
+  flex: 1;
+  min-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.canvas {
+  flex: 1;
+  min-height: 500px;
+  gap: 14px;
+}
+
+.canvasHeader,
+.cameraTitle,
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.canvasHeader > :first-child,
+.cameraTitle > div,
+.actions > :first-child {
+  flex: 1;
+}
+
+.props {
+  width: 300px;
+  flex: 0 0 300px;
+  gap: 16px;
+  overflow: auto;
+}
+
+.floorList,
+.cameraList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.floorRow,
+.cameraRow {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
-  font-weight: 600;
+  padding: 9px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  text-align: left;
 }
 
-.tree {
+.floorRow:hover,
+.cameraRow:hover {
+  background: var(--color-surface-2);
+}
+
+.activeRow,
+.activeRow:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
+  background: var(--color-primary-tint);
+}
+
+.floorRow > span,
+.cameraRow > span {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.treeRow {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 6px 8px 6px 6px;
-  border-radius: 6px;
+.floorRow strong,
+.cameraRow strong,
+.cameraTitle strong {
   font-size: 11.5px;
-  font-weight: 500;
-  text-align: left;
+  font-weight: 650;
 }
 
-.treeRow:hover {
-  background: var(--color-surface-2);
-}
-
-.treeRow > span:first-of-type {
-  flex: 1;
-  min-width: 0;
-}
-
-.floorRow {
-  font-weight: 600;
-}
-
-.zoneRow {
-  padding-left: 20px;
-}
-
-.camRow {
-  padding-left: 34px;
-}
-
-.treeSelected,
-.treeSelected:hover {
-  background: var(--color-primary-tint);
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
-.count {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--color-text-dim);
-}
-
-.treeSelected .count {
-  color: var(--color-primary);
-}
-
-.addFloor {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--color-primary);
-}
-
-.hint {
-  font-size: 10.5px;
-  line-height: 15px;
+.floorRow small,
+.cameraRow small,
+.cameraTitle small {
+  overflow: hidden;
   color: var(--color-text-muted);
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cameraRow i {
+  color: var(--color-warning);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 .source {
+  margin-top: auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 12px;
-  border-radius: 8px;
   border: 1px solid var(--color-border);
+  border-radius: 9px;
   background: var(--color-surface-2);
 }
 
-.sourceFile {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .sourceName {
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
+  line-height: 1.4;
 }
 
-.sourceMeta {
-  font-size: 10px;
-  color: var(--color-text-muted);
-}
-
-/* ---------- Canvas ---------- */
-.canvas {
-  flex: 1;
-  min-width: 0;
-  padding: 16px;
-  gap: 12px;
-}
-
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.stageWrap {
-  flex: 1;
-  min-height: 0;
-  border-radius: 10px;
-  background: var(--color-canvas);
-  overflow: auto;
-  display: flex;
-  justify-content: center;
-}
-
-.stage {
-  position: relative;
-  flex-shrink: 0;
-}
-
-.abs {
+.fileInput {
   position: absolute;
-}
-
-.walls {
-  position: absolute;
-  background: var(--color-surface);
-  border: 2px solid var(--color-text-muted);
-  border-radius: 2px;
-}
-
-.zone {
-  position: absolute;
-  cursor: pointer;
-  --tone: var(--color-primary);
-  background: color-mix(in srgb, var(--tone) 6%, transparent);
-  border: 1.2px dashed color-mix(in srgb, var(--tone) 55%, transparent);
-}
-
-.zone:hover {
-  background: color-mix(in srgb, var(--tone) 10%, transparent);
-}
-
-.zoneSelected,
-.zoneSelected:hover {
-  background: color-mix(in srgb, var(--tone) 12%, transparent);
-  border: 2px solid var(--tone);
-}
-
-.fixture {
-  position: absolute;
-  background: var(--color-placeholder);
-  border: 1px solid var(--color-border);
-  border-radius: 2px;
-  pointer-events: none;
-}
-
-.counterLabel {
-  position: absolute;
-  font-size: 9px;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  pointer-events: none;
-}
-
-.blindSpot {
-  position: absolute;
-  background: color-mix(in srgb, var(--color-danger) 20%, transparent);
-  border: 1.2px dashed var(--color-danger);
-  pointer-events: none;
-}
-
-.fov {
-  position: absolute;
-  pointer-events: none;
-}
-
-.marker {
-  position: absolute;
-  width: 22px;
-  height: 22px;
-  border-radius: 11px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  --tone: var(--color-primary);
-  background: var(--color-surface);
-  border: 1.5px solid var(--tone);
-}
-
-.markerFilled {
-  background: var(--tone);
-}
-
-.markerActive {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 30%, transparent);
-}
-
-.camTag {
-  position: absolute;
-  padding: 2px 5px;
-  border-radius: 4px;
-  background: var(--color-text);
-  color: var(--color-surface);
-  font-size: 8.5px;
-  font-weight: 600;
-  pointer-events: none;
-}
-
-.zoneTag {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 7px;
-  border-radius: 5px;
-  background: var(--color-surface);
-  border: 1px solid var(--tone);
-  box-shadow: var(--shadow-float);
-  font-size: 10px;
-  font-weight: 600;
-  pointer-events: none;
-}
-
-.handle {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  border-radius: 1px;
-  background: var(--color-surface);
-  border: 1.5px solid var(--color-primary);
-  pointer-events: none;
-}
-
-.entrance {
-  position: absolute;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: var(--color-success);
-  color: var(--color-on-primary);
-  font-size: 8.5px;
-  font-weight: 700;
-  letter-spacing: 0.6px;
-}
-
-.legend {
-  position: absolute;
-  display: flex;
-  gap: 12px;
-  padding: 7px 10px;
-  border-radius: 8px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  font-size: 9.5px;
-  font-weight: 500;
-  color: var(--color-text-muted);
-}
-
-.legend span {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.swatch {
-  width: 12px;
-  height: 8px;
-  border-radius: 1px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .emptyPlan {
-  margin: auto;
-  text-align: center;
-  color: var(--color-text-muted);
-  font-size: 12px;
+  flex: 1;
+  min-height: 400px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-}
-
-/* ---------- Properties ---------- */
-.props {
-  width: 300px;
-  flex-shrink: 0;
-  gap: 14px;
-}
-
-.camList {
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-}
-
-.camItem {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 10px;
-}
-
-.camItem + .camItem {
-  border-top: 1px solid var(--color-border);
-}
-
-.camCode {
-  font-size: 11.5px;
-  font-weight: 600;
-}
-
-.camNote {
-  font-size: 10px;
-  color: var(--color-text-muted);
-  margin-top: 1px;
-}
-
-.stepper {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  align-self: flex-start;
-}
-
-.stepper button {
-  width: 36px;
-  height: 34px;
-  display: flex;
-  align-items: center;
   justify-content: center;
-}
-
-.stepper button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.stepper output {
-  width: 60px;
+  gap: 12px;
+  border: 1px dashed var(--color-border);
+  border-radius: 10px;
+  background: var(--color-canvas);
+  color: var(--color-text-muted);
+  font-size: 12px;
   text-align: center;
-  font-size: 13px;
+}
+
+.cameraTitle {
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: var(--color-surface-2);
+}
+
+.cameraTitle > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.coordinates {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.coordinates > div {
+  padding: 10px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface-2);
+}
+
+.coordinates dt {
+  color: var(--color-text-muted);
+  font-size: 8.5px;
+}
+
+.coordinates dd {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.state,
+.meta,
+.error,
+.success,
+.unsaved {
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.state,
+.meta {
+  color: var(--color-text-muted);
+}
+
+.error {
+  padding: 9px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--color-danger) 9%, transparent);
+  color: var(--color-danger);
+}
+
+.success {
+  color: var(--color-success);
   font-weight: 600;
 }
 
-.toggleRow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 0;
-  font-size: 11.5px;
-  font-weight: 500;
+.unsaved {
+  color: var(--color-warning);
+  font-weight: 700;
 }
 
-.saved {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--color-success);
-  text-align: center;
-}
+@media (max-width: 1450px) {
+  .structure {
+    width: 240px;
+    flex-basis: 240px;
+  }
 
-.zoneChoice {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  font-size: 11.5px;
-  font-weight: 500;
-}
-
-.zoneChoice + .zoneChoice {
-  border-top: 1px solid var(--color-border);
+  .props {
+    width: 275px;
+    flex-basis: 275px;
+  }
 }

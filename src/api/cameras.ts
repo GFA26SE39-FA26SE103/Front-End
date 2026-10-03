@@ -1,27 +1,6 @@
 import { apiFetch } from './client';
-
-export type SupermarketRecord = {
-  supermarketId: string;
-  code: string;
-  name: string;
-  address: string | null;
-  status: string;
-};
-
-export type FloorRecord = {
-  floorId: string;
-  supermarketId: string;
-  floorNumber: number;
-  name: string;
-};
-
-export type ZoneRecord = {
-  zoneId: string;
-  floorId: string;
-  code: string;
-  name: string;
-  status: string;
-};
+export { listFloors, listSupermarkets, listZones } from './floors';
+export type { FloorRecord, SupermarketRecord, ZoneRecord } from './floors';
 
 export type CameraZoneMapping = {
   cameraZoneId: string;
@@ -40,6 +19,9 @@ export type CameraRecord = {
   serialNumber: string | null;
   installedAt: string | null;
   warrantyExpiresAt: string | null;
+  mapX: number | null;
+  mapY: number | null;
+  mapRotationDeg: number | null;
   status: string;
   healthStatus: string;
   lastSeenAt: string | null;
@@ -56,7 +38,7 @@ export type CreateCameraRequest = {
   mapX: number | null;
   mapY: number | null;
   mapRotationDeg: number | null;
-  status: 'ACTIVE';
+  status: string;
 };
 
 export type ConfigureConnectionRequest = {
@@ -91,12 +73,6 @@ export type AiPreviewStatus = {
   errorCode: string | null;
 };
 
-export const listSupermarkets = (signal?: AbortSignal) =>
-  apiFetch<SupermarketRecord[]>('/api/supermarkets', { signal });
-
-export const listFloors = (supermarketId: string, signal?: AbortSignal) =>
-  apiFetch<FloorRecord[]>(`/api/supermarkets/${supermarketId}/floors`, { signal });
-
 export const listCameras = (floorId: string, signal?: AbortSignal) =>
   apiFetch<CameraRecord[]>(`/api/floors/${floorId}/cameras`, { signal });
 
@@ -106,14 +82,17 @@ export const createCamera = (floorId: string, body: CreateCameraRequest) =>
     body: JSON.stringify(body),
   });
 
+export const updateCamera = (cameraId: string, body: CreateCameraRequest) =>
+  apiFetch<CameraRecord>(`/api/cameras/${cameraId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+
 export const configureCameraConnection = (cameraId: string, body: ConfigureConnectionRequest) =>
   apiFetch<CameraConnection>(`/api/cameras/${cameraId}/connection`, {
     method: 'PUT',
     body: JSON.stringify(body),
   });
-
-export const listZones = (floorId: string, signal?: AbortSignal) =>
-  apiFetch<ZoneRecord[]>(`/api/floors/${floorId}/zones`, { signal });
 
 export const listCameraMappings = (cameraId: string, signal?: AbortSignal) =>
   apiFetch<CameraZoneMapping[]>(`/api/cameras/${cameraId}/zones`, { signal });
