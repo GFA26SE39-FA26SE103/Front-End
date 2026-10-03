@@ -234,3 +234,61 @@
 .roi polygon { fill: var(--color-primary-tint); stroke: var(--color-primary); stroke-width: 1; }
 .zonePreview { width: min(100%, 640px); aspect-ratio: 16 / 9; margin-top: 12px; }
 @media (max-width: 700px) { .head { flex-wrap: wrap; gap: 10px; } .panel { padding: 16px; } }
+
+/* Overview: zones grouped by floor */
+.zoneTable { display: flex; flex-direction: column; }
+.zoneRow {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.3fr) 130px 100px minmax(160px, 2fr) 70px;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 11px 8px;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.zoneRow:hover { background: var(--color-surface-2); }
+.zoneRow:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+.zoneHeadRow, .zoneHeadRow:hover { border-top: 0; background: transparent; cursor: default; padding-top: 0; font-size: 9px; font-weight: 600; letter-spacing: .72px; color: var(--color-text-dim); }
+.zoneName { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.zoneName i { flex: none; width: 10px; height: 10px; border-radius: 3px; }
+.zoneName > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.zoneName strong { font-size: 13px; font-weight: 600; }
+.zoneName small { color: var(--color-text-muted); font-size: 10.5px; }
+.ruleNames { color: var(--color-text-muted); }
+.missingText { color: var(--color-warning); font-style: normal; font-weight: 600; }
+.open { justify-self: end; color: var(--color-primary); font-weight: 600; }
+
+/* Detail */
+.back { align-self: flex-start; border: 0; background: none; padding: 0; color: var(--color-primary); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 4px 0 16px; }
+.facts > div { padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface-2); }
+.facts dt { font-size: 10px; font-weight: 600; letter-spacing: .4px; color: var(--color-text-muted); text-transform: uppercase; }
+.facts dd { margin: 4px 0 0; font-size: 14px; font-weight: 600; }
+.section { display: flex; align-items: center; gap: 8px; margin: 18px 0 8px; font-size: 13px; font-weight: 600; }
+.required { padding: 2px 7px; border-radius: 999px; background: var(--color-danger-tint); color: var(--color-danger); font-size: 9.5px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; }
+.ruleTable { display: flex; flex-direction: column; border: 1px solid var(--color-border); border-radius: 8px; overflow: hidden; }
+.ruleTable > div { display: grid; grid-template-columns: minmax(150px, 1.6fr) repeat(4, minmax(90px, 1fr)) 100px; gap: 10px; align-items: center; padding: 10px 12px; font-size: 12px; }
+.ruleTable > div + div { border-top: 1px solid var(--color-border); }
+.ruleTable > .ruleHeadRow { background: var(--color-surface-2); font-size: 9.5px; font-weight: 600; letter-spacing: .5px; color: var(--color-text-dim); text-transform: uppercase; }
+.missingBox { margin: 0; padding: 12px; border: 1px dashed var(--color-warning); border-radius: 8px; color: var(--color-warning); font-size: 12px; font-weight: 600; }
+.empty { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 18px; border: 1px dashed var(--color-border); border-radius: 8px; color: var(--color-text-muted); font-size: 13px; }
+
+/* Edit form */
+.addRule { display: flex; align-items: flex-end; gap: 10px; padding: 12px; border: 1px solid var(--color-border); border-radius: 8px; }
+.addRuleMissing { border-color: var(--color-danger); background: var(--color-danger-tint); }
+@media (max-width: 900px) {
+  .zoneRow { grid-template-columns: 1fr 110px; }
+  .zoneRow > :nth-child(3), .zoneRow > :nth-child(4) { display: none; }
+  .zoneRow > :nth-child(5) { display: none; }
+  .ruleTable { overflow-x: auto; }
+  .ruleTable > div { min-width: 640px; }
+}
+.alertBox { display: flex; gap: 8px; align-items: flex-start; margin: 10px 0; padding: 10px 12px; border-radius: 8px; background: var(--color-danger-tint); color: var(--color-danger); font-size: 12px; font-weight: 600; line-height: 1.5; }
+.alertBox::before { content: '⚠'; }

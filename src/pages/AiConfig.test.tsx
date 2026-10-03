@@ -13,7 +13,13 @@ let failSave: boolean;
 let ready: boolean;
 let failLoad: boolean;
 let requests: string[];
-const show = () => render(<MemoryRouter initialEntries={['/admin/ai-config?zoneId=zone-1']}><AiConfig /></MemoryRouter>);
+const show = (path = '/admin/ai-config?zoneId=zone-1') => render(<MemoryRouter initialEntries={[path]}><AiConfig /></MemoryRouter>);
+const savedDraft = (overrides: Record<string, unknown> = {}) => ({ configId: 'config-1', zoneId: 'zone-1', name: 'Queue watch', confidenceThreshold: .6, status: 'DRAFT', createdByUserId: 'admin', createdAt: '2026-10-03T00:00:00Z', updatedAt: '2026-10-03T01:00:00Z', rules: [{ incidentTypeId: 'type-1', warningThreshold: 3, criticalThreshold: 5, thresholdUnit: 'PEOPLE', sustainSec: 30, cooldownSec: 300, enabled: true, parametersJson: '{}' }], ...overrides });
+// Opens the edit form for zone-1 from its detail view, creating a configuration when none exists.
+const openForm = async () => {
+  fireEvent.click(await screen.findByRole('button', { name: /^(Create|Edit) configuration$/ }));
+  await screen.findByRole('button', { name: 'Save configuration' });
+};
 
 describe('API-backed monitoring configuration', () => {
   beforeEach(() => {
@@ -48,20 +54,74 @@ describe('API-backed monitoring configuration', () => {
     });
   });
 
+  it('starts with an overview of zones grouped by floor and their AI configuration', async () => {
+    config = savedDraft();
+    show('/admin/ai-config');
+    expect(await screen.findByRole('heading', { name: 'Real floor' })).toBeInTheDocument();
+    const row = screen.getByRole('button', { name: 'Open AI configuration for Actual queue zone' });
+    await waitFor(() => expect(row).toHaveTextContent('DRAFT'));
+    expect(row).toHaveTextContent('Long Queue');
+    expect(row).toHaveTextContent('0.6');
+    expect(screen.queryByLabelText('Configuration name')).not.toBeInTheDocument();
+
+    fireEvent.click(row);
+    expect(await screen.findByRole('heading', { name: 'Actual queue zone' })).toBeInTheDocument();
+    expect(await screen.findByText('Queue watch')).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: 'Incident rules' })).toHaveTextContent('Long Queue');
+    expect(screen.queryByLabelText('Configuration name')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit configuration' }));
+    expect(await screen.findByLabelText('Configuration name')).toHaveValue('Queue watch');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByLabelText('Configuration name')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: '‹ All zones' }));
+    expect(await screen.findByRole('heading', { name: 'AI configuration by zone' })).toBeInTheDocument();
+  });
+
+  it('shows zones without a configuration as not configured', async () => {
+    show('/admin/ai-config');
+    const row = await screen.findByRole('button', { name: 'Open AI configuration for Actual queue zone' });
+    await waitFor(() => expect(row).toHaveTextContent('Not configured'));
+    fireEvent.click(row);
+    expect(await screen.findByText('This zone has no AI configuration yet.')).toBeInTheDocument();
+  });
+
+  it('requires at least one incident rule before saving', async () => {
+    show(); await openForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Add at least one incident rule before saving. Choose an incident type and click Add rule.');
+    expect(screen.getByLabelText('Incident type')).toHaveAttribute('aria-invalid', 'true');
+    expect(writes).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add rule' }));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
+    await screen.findByText('Configuration saved as Draft. Review it before activating.');
+    expect(writes.filter((r) => r.method === 'PUT')).toHaveLength(1);
+  });
+
+  it('blocks saving after the last rule is removed', async () => {
+    config = savedDraft();
+    show(); await openForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Long Queue' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Add at least one incident rule before saving.');
+    expect(writes).toHaveLength(0);
+  });
+
   it('selects a real zone, saves numeric rules with bearer, and reviews before activation', async () => {
-    show();
-    await screen.findByRole('option', { name: /Actual queue zone/ });
-    await screen.findByRole('button', { name: 'Add rule' });
+    show(); await openForm();
     fireEvent.click(screen.getByRole('button', { name: 'Add rule' }));
     fireEvent.change(screen.getByLabelText('Detection confidence'), { target: { value: '0.7' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save Draft' }));
-    await screen.findByText('Draft saved to database.');
+    fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
+    await screen.findByText('Configuration saved as Draft. Review it before activating.');
+    await waitFor(() => expect(screen.queryByLabelText('Configuration name')).not.toBeInTheDocument());
     const saved = writes.find((r) => r.method === 'PUT')!;
     expect(saved.path).toBe('/api/zones/zone-1/monitoring');
     expect(saved.bearer).toBe('Bearer admin-token');
     expect(saved.body.confidenceThreshold).toBe(.7);
     expect(saved.body.rules).toEqual([{ incidentTypeId: 'type-1', warningThreshold: 3, criticalThreshold: 5, thresholdUnit: 'PEOPLE', sustainSec: 30, cooldownSec: 300, enabled: true, parametersJson: null }]);
-    fireEvent.click(screen.getByRole('button', { name: 'Review configuration' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Review & activate' }));
     await screen.findByText('CAM-01');
     fireEvent.click(screen.getByRole('button', { name: 'Activate configuration' }));
     await waitFor(() => expect(writes.some((r) => r.path.endsWith('/activate'))).toBe(true));
@@ -69,23 +129,18 @@ describe('API-backed monitoring configuration', () => {
   });
 
   it('preserves draft input and never claims a failed save succeeded', async () => {
-    failSave = true; show();
-    await screen.findByRole('button', { name: 'Add rule' });
+    failSave = true; show(); await openForm();
     fireEvent.click(screen.getByRole('button', { name: 'Add rule' }));
     fireEvent.change(screen.getByLabelText('Configuration name'), { target: { value: 'Keep my edit' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save Draft' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
     await screen.findByText('Save failed; retry.');
     expect(screen.getByLabelText('Configuration name')).toHaveValue('Keep my edit');
-    expect(screen.queryByText('Draft saved to database.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Configuration saved as Draft. Review it before activating.')).not.toBeInTheDocument();
   });
 
   it('shows readiness blockers and does not allow activation', async () => {
-    ready = false; show();
-    await screen.findByRole('button', { name: 'Add rule' });
-    fireEvent.click(screen.getByRole('button', { name: 'Add rule' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save Draft' }));
-    await screen.findByText('Draft saved to database.');
-    fireEvent.click(screen.getByRole('button', { name: 'Review configuration' }));
+    ready = false; config = savedDraft(); show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Review & activate' }));
     await screen.findByText('Fix camera ROI before activation.');
     expect(screen.getByRole('button', { name: 'Activate configuration' })).toBeDisabled();
     expect(writes.some((r) => r.path.endsWith('/activate'))).toBe(false);
@@ -94,48 +149,46 @@ describe('API-backed monitoring configuration', () => {
   it('does not overwrite an unknown existing configuration after a load failure', async () => {
     failLoad = true; show();
     await screen.findByText('Configuration could not be loaded.');
-    expect(screen.queryByRole('button', { name: 'Save Draft' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /configuration$/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save configuration' })).not.toBeInTheDocument();
     expect(writes).toHaveLength(0);
   });
 
   it('requires deactivate before changing an active configuration', async () => {
-    config = { configId: 'config-1', zoneId: 'zone-1', name: 'Active config', confidenceThreshold: .6, status: 'ACTIVE', updatedAt: '2026-10-03T01:00:00Z', rules: [{ incidentTypeId: 'type-1', warningThreshold: 3, criticalThreshold: 5, thresholdUnit: 'PEOPLE', sustainSec: 30, cooldownSec: 300, enabled: true, parametersJson: '{}' }] };
+    config = savedDraft({ name: 'Active config', status: 'ACTIVE' });
     show();
-    await screen.findByDisplayValue('Active config');
-    expect(screen.getByLabelText('Detection confidence')).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Save Draft' })).toBeDisabled();
+    await screen.findByText('Active config');
+    expect(screen.getByRole('button', { name: 'Edit configuration' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Deactivate configuration' }));
     await screen.findByText('Monitoring deactivated. Edit and save a new Draft before reactivation.');
-    expect(screen.getByLabelText('Detection confidence')).toBeEnabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Save Draft' }));
-    await screen.findByText('Draft saved to database.');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit configuration' }));
+    expect(await screen.findByLabelText('Detection confidence')).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
+    await screen.findByText('Configuration saved as Draft. Review it before activating.');
     const savedRules = writes.find(r => r.method === 'PUT')!.body.rules as Record<string, unknown>[];
     expect(savedRules[0].parametersJson).toBe('{}');
   });
 
-  it('rejects invalid thresholds locally and invalidates review when edited', async () => {
-    show(); await screen.findByRole('button', { name: 'Add rule' });
+  it('rejects invalid thresholds locally and hides the review while editing', async () => {
+    show(); await openForm();
     fireEvent.click(screen.getByRole('button', { name: 'Add rule' }));
     fireEvent.change(screen.getByLabelText('Long Queue warning'), { target: { value: '6' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save Draft' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
     await screen.findByText('Long Queue: warning must be less than critical.');
     expect(writes).toHaveLength(0);
     fireEvent.change(screen.getByLabelText('Long Queue warning'), { target: { value: '3' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save Draft' }));
-    await screen.findByText('Draft saved to database.');
-    fireEvent.click(screen.getByRole('button', { name: 'Review configuration' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
+    await screen.findByText('Configuration saved as Draft. Review it before activating.');
+    fireEvent.click(await screen.findByRole('button', { name: 'Review & activate' }));
     await screen.findByText('CAM-01');
-    fireEvent.change(screen.getByLabelText('Detection confidence'), { target: { value: '0.8' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit configuration' }));
+    fireEvent.change(await screen.findByLabelText('Detection confidence'), { target: { value: '0.8' } });
     expect(screen.queryByRole('button', { name: 'Activate configuration' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Review configuration' })).toBeDisabled();
   });
 
   it('tests saved zone confidence in annotated preview without activating monitoring', async () => {
-    show(); await screen.findByRole('button', { name: 'Add rule' });
-    fireEvent.click(screen.getByRole('button', { name: 'Add rule' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save Draft' }));
-    await screen.findByText('Draft saved to database.');
-    fireEvent.click(screen.getByRole('button', { name: 'Review configuration' }));
+    config = savedDraft(); show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Review & activate' }));
     await screen.findByText('CAM-01');
     fireEvent.click(screen.getByRole('button', { name: 'Preview zone confidence: CAM-01' }));
     await screen.findByRole('img', { name: 'Tracked preview for camera' });
