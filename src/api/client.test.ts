@@ -53,6 +53,14 @@ describe('apiFetch', () => {
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer jwt-token');
   });
 
+  it('shows ASP.NET field validation messages to the form', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      title: 'One or more validation errors occurred.',
+      errors: { Password: ['Password must contain at least 12 characters.'] },
+    }), { status: 400 }));
+    await expect(apiFetch('/api/users')).rejects.toThrow('Password must contain at least 12 characters.');
+  });
+
   it('parses backend ProblemDetails', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       title: 'CONNECTION_NOT_READY',

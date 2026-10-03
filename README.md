@@ -34,13 +34,19 @@ npm test -- --run
 | `/admin/ai-config` | AI incident rules, zone overrides, detection and health thresholds | Admin — AI Config |
 | `/admin/incident-types` | Incident catalogue + new type form | Admin — Incident types |
 | `/admin/routing` | Confidence routing (draggable 50 % / 80 %), broadcast & escalation | Admin — Routing & alerts |
-| `/admin/users` | Users and role permissions | Admin — Users & Roles |
+| `/admin/users` | API-backed account creation, edit, enable/disable and system role list | Admin — Users & Roles |
 | `/admin/audit-logs` | Audit events, filters, details, CSV / JSON export | Admin — Audit log |
 | `/admin/system-health` | Services, performance, alerts, incident pipeline | Admin — System health |
 
-## Current integration status (2026-10-02)
+## Current integration status (2026-10-03)
 
-Login uses the backend JWT API, not the old mock credentials. Set `VITE_API_URL=http://localhost:5080` in a local `.env` (also the default). Sign in with an existing backend ADMIN account. Requests attach the bearer token; a 401 clears the session.
+Login uses the backend JWT API. Set `VITE_API_URL=http://localhost:5080` in a local `.env` (also the default). Requests attach the bearer token; a 401 clears the session. Protected routes verify the current user with `GET /api/auth/me` before rendering and again on navigation. A failed access check offers retry without displaying protected content. Session expiry and logout in another tab remove access.
+
+Only ADMIN can enter `/admin/*` and login lands at `/admin/dashboard`. OPERATOR, MANAGER and STAFF land at `/operator/dashboard`, `/manager/dashboard` and `/staff/dashboard` respectively. These three landing pages identify the signed-in role; their operational workflows are not implemented. Cross-role URLs show Access denied; unknown roles never fall back to Admin. The existing `/operator/floor-map` and `/operator/cameras/:cameraId` screens remain ADMIN previews because their store/map/camera APIs currently require ADMIN. Operator API access must be implemented before opening those screens to OPERATOR.
+
+Users & Roles uses `GET /api/users`, `GET /api/roles`, `POST /api/users`, `PATCH /api/users/{id}` and `POST /api/users/{id}/enable|disable`. Create assigns a backend role and an initial password of 12–128 characters; new accounts are ACTIVE. Edit changes full name and role; email is read-only. There is no invite, hard-delete or editable permission API. The role list is read-only. The UI protects the last active Admin, while the backend remains authoritative for concurrent changes. Changing your own role or disabling your own account signs you out immediately.
+
+Verification on 2026-10-03: `npm test -- --run` passed **93 tests in 15 files**; `npm run build` and `npm run lint` passed. Account tests exercise the HTTP contract with controlled fetch responses, including create/edit/enable/disable, duplicate email, last-Admin rejection, retry and self-access changes. Access tests cover all four login destinations, direct cross-role URLs, server-role verification, revoked/disabled sessions, expiry, network failure and sign-out. These checks do not claim an account mutation against the shared live database.
 
 | MF-01 step | Current implementation | Remaining work |
 | --- | --- | --- |
@@ -99,6 +105,6 @@ Camera creation/connection remains a separate flow. Placement saving does not te
 
 ## Notes
 
-- Authentication, Cameras, and Store Layout have API-backed slices. Other screens still use mock/component state until their backend contracts are implemented.
+- Authentication, Users & Roles, Cameras, and Store Layout have API-backed slices. Other screens still use mock/component state until their backend contracts are implemented.
 - Model confidence is an input filter, not an incident severity/routing threshold; legacy Routing mock does not represent current AGENTS.md rules.
 - Only the Light theme is wired. Dark colour tokens exist (`[data-theme='dark']`), but the Figma icons are exported in light-theme colours, so dark mode needs dark icon variants first.

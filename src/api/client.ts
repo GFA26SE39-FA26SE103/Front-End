@@ -48,7 +48,7 @@ export async function apiFetch<T = void>(path: string, init: ApiFetchInit = {}):
     });
 
     if (!response.ok) {
-      let problem: { code?: string; title?: string; detail?: string; message?: string } = {};
+      let problem: { code?: string; title?: string; detail?: string; message?: string; errors?: Record<string, string[]> } = {};
       try {
         problem = await response.json() as typeof problem;
       } catch {
@@ -61,7 +61,7 @@ export async function apiFetch<T = void>(path: string, init: ApiFetchInit = {}):
       throw new ApiError(
         response.status,
         problem.code ?? problem.title ?? (response.status === 401 ? 'UNAUTHORIZED' : 'REQUEST_FAILED'),
-        problem.detail ?? problem.message ?? 'The request could not be completed.',
+        problem.detail ?? problem.message ?? Object.values(problem.errors ?? {}).flat()[0] ?? 'The request could not be completed.',
       );
     }
 
