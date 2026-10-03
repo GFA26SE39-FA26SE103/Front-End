@@ -23,6 +23,36 @@ describe('Cameras registration', () => {
     }, true);
   });
 
+  it.each([cameraId, 'missing-camera'])('handles a dashboard camera link (%s) without selecting another camera', async requested => {
+    const secondFloorId = '20000000-0000-0000-0000-000000000002';
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      const path = new URL(String(input)).pathname;
+      if (path === '/api/supermarkets') return json([{ supermarketId: storeId }]);
+      if (path === `/api/supermarkets/${storeId}/floors`) return json([
+        { floorId, floorNumber: 1, name: 'Ground floor' },
+        { floorId: secondFloorId, floorNumber: 2, name: 'Upper floor' },
+      ]);
+      if (path === `/api/floors/${floorId}/cameras`) return json([]);
+      if (path === `/api/floors/${secondFloorId}/cameras`) return json([{ cameraId, floorId: secondFloorId, code: 'CAM-TARGET', name: 'Upper aisle camera', manufacturer: null, model: null, serialNumber: null, installedAt: '2026-01-01T00:00:00Z', warrantyExpiresAt: '2027-01-01T00:00:00Z', status: 'ACTIVE', healthStatus: 'UNKNOWN', lastSeenAt: null }]);
+      if (path.endsWith('/zones')) return json([]);
+      return json({}, 500);
+    });
+    const user = userEvent.setup();
+    render(<MemoryRouter initialEntries={['/admin/cameras?cameraId=' + requested]}><Cameras /></MemoryRouter>);
+    await screen.findByRole('row', { name: /CAM-TARGET/i });
+    if (requested === cameraId) {
+      expect(screen.getByText('Upper floor · Upper aisle camera')).toBeInTheDocument();
+      expect(screen.getByRole('combobox')).toHaveValue(secondFloorId);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    } else {
+      expect(screen.getByRole('alert')).toHaveTextContent('The requested camera was not found.');
+      expect(screen.queryByText('Upper floor · Upper aisle camera')).not.toBeInTheDocument();
+      await user.click(screen.getByRole('row', { name: /CAM-TARGET/i }));
+      expect(screen.getByText('Upper floor · Upper aisle camera')).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    }
+  });
+
   it('registers a recorded camera without a phone URL, uploads video, then tests and enables it', async () => {
     const calls: string[] = [];
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {

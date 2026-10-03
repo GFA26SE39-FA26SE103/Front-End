@@ -54,7 +54,7 @@ const camera = {
   lastSeenAt: null,
 };
 
-const renderPage = () => render(<MemoryRouter><StoreLayout /></MemoryRouter>);
+const renderPage = (path = '/admin/store-layout') => render(<MemoryRouter initialEntries={[path]}><StoreLayout /></MemoryRouter>);
 
 describe('StoreLayout', () => {
   beforeEach(() => {
@@ -92,6 +92,32 @@ describe('StoreLayout', () => {
     expect(screen.getByRole('button', { name: /place cam-01/i })).toBeInTheDocument();
     expect(listZones).toHaveBeenCalledWith('floor-1', expect.any(AbortSignal));
     expect(listCameras).toHaveBeenCalledWith('floor-1', expect.any(AbortSignal));
+  });
+
+  it('opens the requested floor and camera from a dashboard action', async () => {
+    const upperFloor = { ...floor, floorId: 'floor-2', floorNumber: 2, name: 'Upper floor' };
+    const target = { ...camera, cameraId: 'camera-2', floorId: 'floor-2', code: 'CAM-02', name: 'Upper aisle' };
+    vi.mocked(listFloors).mockResolvedValue([floor, upperFloor]);
+    vi.mocked(listCameras).mockImplementation(async id => id === 'floor-2' ? [target] : [camera]);
+    renderPage('/admin/store-layout?floorId=floor-2&cameraId=camera-2');
+
+    await screen.findByRole('heading', { name: 'Upper floor' });
+    expect(await screen.findByRole('heading', { name: 'Camera placement' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /CAM-02 Upper aisle/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(listZones).toHaveBeenCalledWith('floor-2', expect.any(AbortSignal));
+    expect(listCameras).not.toHaveBeenCalledWith('floor-1', expect.any(AbortSignal));
+    expect(getFloorMap).toHaveBeenCalledWith('floor-2', expect.any(AbortSignal));
+  });
+
+  it('rejects a requested camera outside the selected floor and allows manual selection', async () => {
+    const user = userEvent.setup();
+    renderPage('/admin/store-layout?floorId=floor-1&cameraId=other-floor-camera');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('The requested camera was not found on this floor.');
+    expect(screen.queryByRole('heading', { name: 'Camera placement' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /CAM-01 Entrance camera/i }));
+    expect(screen.getByRole('heading', { name: 'Camera placement' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('shows camera placement only after a camera is selected and hides it for zone editing', async () => {

@@ -52,14 +52,24 @@ Verification on 2026-10-03: `npm test -- --run` passed **100 tests in 16 files**
 
 | MF-01 step | Current implementation | Remaining work |
 | --- | --- | --- |
-| Store / floor / zone | Store Layout loads real stores/floors/zones; uploads floor plans and saves zone polygons, color and physical area | Store/floor creation UI and dashboard integration |
+| Floor / zone in the default store | Store Layout loads saved floors/zones; uploads floor plans and saves zone polygons, color and physical area; dashboard links select the target floor/camera | Floor creation/edit UI; store is a single seeded default, with no create/select flow |
 | Register & configure camera | Real registry, creation, live HTTP configuration and MP4 upload | Other live protocols are backend capabilities, not options in this form |
 | Test & preview | Real test/enable and annotated YOLO + ByteTrack frames in React | Preview is a controlled test, not monitoring activation |
 | Map camera to zone | Store Layout placement + camera-frame ROI drawing/editing/saving through same-floor N:M mapping API; links to configure the mapped zone | Cameras mini floor plan still uses sample geometry |
 | Configure monitoring rule | AI Config loads real zones/catalog; saves per-zone confidence, incident/rule thresholds/units/timing/enabled to SQL Draft | Incident Types admin screen is still mock; checkout counter/composite definition is pending |
-| Activate & health | AI Config reviews saved config/camera/source/ROI/rules and activates/deactivates via BE; BE camera-health worker exists | Dashboard Activate is still prototype; continuous measurements/incident runtime (MF-02) is not implemented |
+| Activate & health | AI Config reviews saved config/camera/source/ROI/rules and activates/deactivates via BE; Dashboard reads saved setup/readiness/health from the ADMIN overview API, links to the target configuration and supports an explicit health check | System Health screen is still mock; health-event Investigation/Resolve UI and continuous measurements/incident runtime (MF-02) remain separate work |
 
 Forgot/reset-password and other operational screens remain prototypes unless separately integrated. Local UI state is not evidence of saved backend configuration.
+
+### MF-01 Dashboard
+
+`/admin/dashboard` uses `GET /api/setup/overview` from the matching backend change. Summary cards show floor/zone structure, activated configurations, enabled ACTIVE cameras online and unresolved health events. Six progress cards count saved setup prerequisites; an empty denominator does not imply completion. Zone rows show the saved configuration, rule counts and backend readiness blockers, with links to its AI Config detail and floor/camera layout. Activation stays in the reviewed AI Config workflow.
+
+Camera rows separate lifecycle, health, connection enablement and last received frame. **Refresh** reads the snapshot; **Check health** explicitly probes the selected enabled ACTIVE camera through the existing ADMIN endpoint. Manage/Investigate links open that camera in Cameras for source correction, retest and preview. Opening the link does not change a health event to INVESTIGATING. System Health and full event investigation/resolution forms remain outside this increment.
+
+Filter by floor, search zone/configuration/camera or show only records with missing setup/health requirements. Snapshot polling runs every 30 seconds while the tab is visible and is cancelled on unmount. Failed refresh keeps the last snapshot with a stale-data warning and retry. Missing default store seed and empty floors/zones/cameras have explicit guidance. No persisted preview-completion status, uptime calculation, automatic reconnect or continuous MF-02 runtime is inferred from configuration activation.
+
+Verification on 2026-10-03 for this increment: **143 frontend tests across 19 files** passed, build and lint passed. Controlled HTTP tests cover snapshot auth, filters, read-only loading, empty/failure/retry states, health probing, polling cleanup and floor/camera query links. Browser verification uses synthetic API responses rather than shared-DB writes; see the backend validation log for matching backend results.
 
 ## Test AI with uploaded video (no phone required)
 
