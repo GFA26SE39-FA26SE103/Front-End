@@ -52,6 +52,11 @@ export type FloorMapView = {
   contentType: string;
   updatedAt: string;
 };
+export type FloorDetailsRequest = { floorNumber: number; name: string };
+export const createFloor = (storeId: string, body: FloorDetailsRequest, signal?: AbortSignal) =>
+  apiFetch<FloorRecord>(`/api/supermarkets/${encodeURIComponent(storeId)}/floors`, { method: 'POST', body: JSON.stringify({ ...body, mapAssetUrl: null, mapWidth: null, mapHeight: null }), signal });
+export const updateFloorDetails = (floorId: string, body: FloorDetailsRequest, signal?: AbortSignal) =>
+  apiFetch<FloorRecord>(`/api/floors/${encodeURIComponent(floorId)}/details`, { method: 'PATCH', body: JSON.stringify(body), signal });
 
 export const listSupermarkets = (signal?: AbortSignal) =>
   apiFetch<SupermarketRecord[]>('/api/supermarkets', { signal });

@@ -62,6 +62,7 @@
   flex-direction: column;
   gap: 4px;
 }
+.floorActions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .floorRow,
 .cameraRow {

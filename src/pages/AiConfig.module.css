@@ -80,3 +80,10 @@
 .addRuleMissing { border-color: var(--color-danger); background: var(--color-danger-tint); }
 .alertBox { display: flex; gap: 8px; align-items: flex-start; margin: 16px 0; padding: 12px; border-radius: 8px; background: var(--color-danger-tint); color: var(--color-danger); font-size: 13px; font-weight: 500; line-height: 1.5; }
 .alertBox::before { content: '⚠'; }
+.activation { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 18px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-primary-tint); margin: 18px 0; }
+.activation h3 { margin: 0 0 8px; font-size: 15px; }
+.activation p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--color-text-muted); }
+.activation button { flex-shrink: 0; }
+.deleteButton { color: var(--color-danger); }
+.confirmDelete { background: var(--color-danger); }
+.review { scroll-margin-top: 16px; }

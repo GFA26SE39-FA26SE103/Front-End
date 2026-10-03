@@ -18,6 +18,7 @@ import {
 import { AdminLayout } from '../components/AdminLayout';
 import { CameraCoverageEditor } from '../components/CameraCoverageEditor';
 import { FloorPlanSurface, type PlacementChange } from '../components/FloorPlanSurface';
+import { FloorEditor } from '../components/FloorEditor';
 import type { ZoneEditorSave } from '../components/ZoneEditorOverlay';
 import { Icon } from '../components/Icon';
 import { Button, Callout, Card, CardHeader, Chip, Overline } from '../components/ui';
@@ -42,6 +43,7 @@ export default function StoreLayout() {
   const requestedCameraId = params.get('cameraId') ?? '';
   const [stores, setStores] = useState<SupermarketRecord[]>([]);
   const [floors, setFloors] = useState<FloorRecord[]>([]);
+  const [floorEditor, setFloorEditor] = useState<FloorRecord | 'new' | null>(null);
   const [selectedFloorId, setSelectedFloorId] = useState<string | null>(null);
   const [zones, setZones] = useState<ZoneRecord[]>([]);
   const [cameras, setCameras] = useState<CameraRecord[]>([]);
@@ -73,7 +75,7 @@ export default function StoreLayout() {
         const loadedFloors = (await Promise.all(loadedStores.map((store) => listFloors(store.supermarketId, controller.signal)))).flat();
         if (controller.signal.aborted) return;
         setStores(loadedStores);
-        setFloors(loadedFloors);
+        setFloors(loadedFloors.sort((a, b) => a.floorNumber - b.floorNumber));
         setSelectedFloorId((current) => requestedFloorId ? loadedFloors.find(floor => floor.floorId === requestedFloorId)?.floorId ?? null : loadedFloors.some((floor) => floor.floorId === current) ? current : loadedFloors[0]?.floorId ?? null);
         if (requestedFloorId && !loadedFloors.some(f => f.floorId === requestedFloorId)) setLoadError('The requested floor was not found. Choose a floor from the list.');
       } catch (reason) {
@@ -148,6 +150,7 @@ export default function StoreLayout() {
   const selectedDraft = selectedCameraId ? drafts[selectedCameraId] : undefined;
   const dirtyCameraIds = useMemo(() => new Set(Object.keys(drafts)), [drafts]);
   const storeName = stores.find((store) => store.supermarketId === selectedFloor?.supermarketId)?.name ?? stores[0]?.name;
+  const floorChangesBlocked = uploading || saving || zoneSaving || zoneEditing || coverageEditing || dirtyCameraIds.size > 0;
 
   const selectFloor = (floorId: string) => {
     setSelectedFloorId(floorId);
@@ -278,8 +281,13 @@ export default function StoreLayout() {
     <AdminLayout title="Store layout" subtitle={subtitle}>
       <Card className={s.structure}>
         <CardHeader title="Store structure" subtitle="Configuration loaded from the backend" />
+        <div className={s.floorActions}>
+          <Button disabled={loading || !stores[0] || floorChangesBlocked} onClick={() => setFloorEditor('new')}>Create floor</Button>
+          <Button variant="secondary" disabled={loading || !selectedFloor || floorChangesBlocked} onClick={() => selectedFloor && setFloorEditor(selectedFloor)}>Edit floor</Button>
+        </div>
+        {floorChangesBlocked && <p className={s.meta}>Finish the current camera or zone edits before changing floors.</p>}
         {loading ? <p className={s.state}>Loading floors…</p> : floors.length === 0 ? (
-          <Callout tone="warning" icon="alert-warning">Create a supermarket and floor before uploading a floor plan.</Callout>
+          <Callout tone="warning" icon="alert-warning">{stores[0] ? 'No floors yet. Create the first floor, then upload its floor plan.' : 'The default store seed is missing. Ask the backend team to restore it before creating floors.'}</Callout>
         ) : (
           <div className={s.floorList} aria-label="Floors">
             {floors.map((floor) => (
@@ -345,6 +353,20 @@ export default function StoreLayout() {
           <p className={s.meta}>PNG, JPEG, or PDF · maximum 20 MB</p>
         </div>
       </Card>
+
+      {floorEditor && stores[0] && <FloorEditor
+        storeId={stores[0].supermarketId}
+        floor={floorEditor === 'new' ? undefined : floorEditor}
+        suggestedNumber={Math.max(0, ...floors.map(f => f.floorNumber)) + 1}
+        onClose={() => setFloorEditor(null)}
+        onSaved={saved => {
+          const creating = floorEditor === 'new';
+          setFloors(all => [...all.filter(f => f.floorId !== saved.floorId), saved].sort((a, b) => a.floorNumber - b.floorNumber));
+          setFloorEditor(null);
+          if (creating) selectFloor(saved.floorId);
+          setActionMessage(creating ? 'Floor created. Upload its floor plan to continue setup.' : 'Floor details updated.');
+        }}
+      />}
 
       <div className={s.workspace}>
         {pickerOpen && selectedFloor && (

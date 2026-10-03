@@ -52,12 +52,12 @@ Verification on 2026-10-03: `npm test -- --run` passed **100 tests in 16 files**
 
 | MF-01 step | Current implementation | Remaining work |
 | --- | --- | --- |
-| Floor / zone in the default store | Store Layout loads saved floors/zones; uploads floor plans and saves zone polygons, color and physical area; dashboard links select the target floor/camera | Floor creation/edit UI; store is a single seeded default, with no create/select flow |
+| Floor / zone in the default store | Store Layout creates/edits floor name and number in a dialog; loads saved floors/zones, uploads floor plans and saves zone polygons, color and physical area; dashboard links select the target floor/camera | Store is a single seeded default, with no create/select flow |
 | Register & configure camera | Real registry, creation, live HTTP configuration and MP4 upload | Other live protocols are backend capabilities, not options in this form |
 | Test & preview | Real test/enable and annotated YOLO + ByteTrack frames in React | Preview is a controlled test, not monitoring activation |
 | Map camera to zone | Store Layout placement + camera-frame ROI drawing/editing/saving through same-floor N:M mapping API; links to configure the mapped zone | Cameras mini floor plan still uses sample geometry |
 | Configure monitoring rule | AI Config loads real zones/catalog; saves per-zone confidence, incident/rule thresholds/units/timing/enabled to SQL Draft | Incident Types admin screen is still mock; checkout counter/composite definition is pending |
-| Activate & health | AI Config reviews saved config/camera/source/ROI/rules and activates/deactivates via BE; Dashboard reads saved setup/readiness/health from the ADMIN overview API, links to the target configuration and supports an explicit health check | System Health screen is still mock; health-event Investigation/Resolve UI and continuous measurements/incident runtime (MF-02) remain separate work |
+| Activate & health | AI Config has an explicit activation banner, reviews saved config/camera/source/ROI/rules and activates/deactivates via BE; DRAFT/INACTIVE deletion requires confirmation and saved version; Dashboard reads saved setup/readiness/health from the ADMIN overview API, links to the target configuration and supports an explicit health check | System Health screen is still mock; health-event Investigation/Resolve UI and continuous measurements/incident runtime (MF-02) remain separate work |
 
 Forgot/reset-password and other operational screens remain prototypes unless separately integrated. Local UI state is not evidence of saved backend configuration.
 
@@ -75,7 +75,7 @@ Verification on 2026-10-03 for this increment: **143 frontend tests across 19 fi
 
 Start native AI, ASP.NET and React; see backend/AI-service READMEs. Backend needs FFmpeg. Backend and native AI must share the recorded-video directory on the same machine.
 
-1. Ensure a store and floor exist in the backend (create through Swagger if needed). Store Layout loads these records and saves floor plans, zone edits and camera placement through the APIs.
+1. Ensure the default store is seeded, then use **Store Layout → Create floor** if no floor exists. Store Layout loads these records and saves floor plans, zone edits and camera placement through the APIs. **Edit floor** changes its name/number while retaining the current map, zones and cameras. Duplicate floor numbers show an error and retain the form; Cancel, close and Escape discard the input. Finish existing camera/zone/ROI edits before creating or editing floors.
 2. **Cameras → Add camera → Uploaded video (test source)**, fill floor/code/name/dates, then **Save camera**. No phone URL is required. Or select an existing ACTIVE camera → **Upload video**.
 3. Choose a non-empty MP4, maximum 200 MB → **Save video source**. Backend validates/decode-checks it and configures RECORDED/FILE. Old AI session is stopped; credentials/test/enabled flag are reset. Deactivate monitoring first if this camera is mapped to an ACTIVE configuration.
 4. **Test & enable → Start AI preview**. React displays person boxes and camera-local ByteTrack IDs. Only the newest annotated JPEG is polled; not every processed frame is displayed.
@@ -97,6 +97,7 @@ Requires the matching BE monitoring increment and the approved Database migratio
 4. **Review & activate** reads saved SQL data, shows camera source/test/enabled/ROI and exact rules/version. Correct blockers before **Activate configuration**; backend rechecks them. Density needs physical zone area > 0; at least one enabled supported rule and a tested/enabled live or uploaded-video camera with valid ROI are required.
    **Preview zone confidence: [camera]** tests the saved confidence with annotated YOLO + ByteTrack frames without activating. It restarts the shared camera session and resets track IDs; other viewers may be interrupted. **Stop zone preview** releases it.
 5. **Deactivate configuration** before editing an active configuration/source/mapping/ROI. Failed saves preserve input; conflict requires **Reload saved configuration**. Dirty edits cannot be reviewed/activated until saved. **All zones** and **Reload saved configuration** ask before discarding unsaved changes; **Cancel** discards local form edits immediately.
+6. **Delete configuration** is available for DRAFT/INACTIVE only. The dialog identifies configuration, zone and floor; Cancel, close and Escape dismiss it without a request and return focus. Confirm deletes only the config/rules, leaving Zone/Camera/ROI. A successful delete updates detail/overview to Not configured; a failed delete retains the dialog and saved data. The request includes configId and expectedUpdatedAt to reject stale or replaced configurations. Deactivate an ACTIVE config first.
 
 Only AI-detected catalog types are offered. Checkout Capacity can be kept as a disabled Draft with an explicit placeholder unit, but cannot be enabled until its counter/composite measurement is defined. No confidence-based incident routing. No camera secrets in review.
 
@@ -104,7 +105,9 @@ Only AI-detected catalog types are offered. Checkout Capacity can be kept as a d
 
 Verification for the overview/detail/edit increment: **131 tests in 18 files passed** (`npm test -- --run --maxWorkers=2`); production build/lint passed. Browser checks in Edge at 1920×1080 and 1280×720 used synthetic API responses to verify grouping, read-only detail, Edit/Cancel, required incident-rule alerts without a PUT, focus, and closing the form after Save. These checks did not write to the shared database or exercise a real AI/GPU source.
 
-API: `GET /api/incident-types`, `GET/PUT /api/zones/{zoneId}/monitoring`, `GET .../review`, `POST .../activate|deactivate` (ADMIN). Updates and activation send the saved `expectedUpdatedAt`; full rules array replaces the prior rule set.
+API: `GET /api/incident-types`, `GET/PUT/DELETE /api/zones/{zoneId}/monitoring`, `GET .../review`, `POST .../activate|deactivate` (ADMIN). Updates and activation send the saved `expectedUpdatedAt`; full rules array replaces the prior rule set. DELETE sends `{configId, expectedUpdatedAt}` and returns 204. Floor creation uses `POST /api/supermarkets/{id}/floors`; floor metadata editing uses the matching new backend `PATCH /api/floors/{id}/details` with only `{floorNumber, name}`.
+
+Verification for config deletion/activation visibility and floor dialogs (2026-10-03): **152 tests in 19 files passed**, production build/lint passed. Edge browser checks at 1920×1080 and 1280×720 used synthetic API responses to verify review blockers, Activate/Deactivate, active-delete restriction, delete conflict/confirmation/Escape/focus, overview updates, create/edit/cancel/duplicate floors, map preservation, empty floors/missing seed and page overflow. No shared-DB mutation or real AI/GPU test was performed. Restart the backend with the matching controller changes before using these actions.
 
 ## Structure
 

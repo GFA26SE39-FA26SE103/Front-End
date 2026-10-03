@@ -31,5 +31,6 @@ const path = (zoneId: string) => `/api/zones/${encodeURIComponent(zoneId)}/monit
 export const listIncidentTypes = (signal?: AbortSignal) => apiFetch<IncidentType[]>('/api/incident-types', { signal });
 export const getMonitoring = (zoneId: string, signal?: AbortSignal) => apiFetch<MonitoringConfiguration>(path(zoneId), { signal });
 export const saveMonitoring = (zoneId: string, body: MonitoringRequest) => apiFetch<MonitoringConfiguration>(path(zoneId), { method: 'PUT', body: JSON.stringify(body) });
+export const deleteMonitoring = (zoneId: string, config: MonitoringConfiguration) => apiFetch<void>(path(zoneId), { method: 'DELETE', body: JSON.stringify({ configId: config.configId, expectedUpdatedAt: config.updatedAt }) });
 export const reviewMonitoring = (zoneId: string) => apiFetch<MonitoringReview>(`${path(zoneId)}/review`);
 export const setMonitoringActive = (zoneId: string, active: boolean, expectedUpdatedAt: string) => apiFetch<MonitoringConfiguration>(`${path(zoneId)}/${active ? 'activate' : 'deactivate'}`, { method: 'POST', body: JSON.stringify({ expectedUpdatedAt }) });

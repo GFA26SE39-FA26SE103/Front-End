@@ -1,10 +1,13 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCameraPreview, listCameraMappings, listCameras, updateCamera } from '../api/cameras';
-import { createZone, getFloorMap, listFloors, listSupermarkets, listZones, updateZone, uploadFloorMap } from '../api/floors';
+import { createFloor, createZone, getFloorMap, listFloors, listSupermarkets, listZones, updateFloorDetails, updateZone, uploadFloorMap } from '../api/floors';
 import StoreLayout from './StoreLayout';
+import { ApiError } from '../api/client';
+import { mockNativeDialogs } from '../test/dialog';
+mockNativeDialogs();
 
 vi.mock('../api/cameras', () => ({
   getCameraPreview: vi.fn(),
@@ -16,12 +19,14 @@ vi.mock('../api/cameras', () => ({
 }));
 
 vi.mock('../api/floors', () => ({
+  createFloor: vi.fn(),
   createZone: vi.fn(),
   getFloorMap: vi.fn(),
   listFloors: vi.fn(),
   listSupermarkets: vi.fn(),
   listZones: vi.fn(),
   updateZone: vi.fn(),
+  updateFloorDetails: vi.fn(),
   uploadFloorMap: vi.fn(),
 }));
 
@@ -60,6 +65,8 @@ describe('StoreLayout', () => {
   beforeEach(() => {
     vi.mocked(listSupermarkets).mockResolvedValue([{ supermarketId: 'store-1', code: 'STORE', name: 'Central store', address: null, status: 'ACTIVE' }]);
     vi.mocked(listFloors).mockResolvedValue([floor]);
+    vi.mocked(createFloor).mockResolvedValue({ ...floor, floorId: 'floor-2', floorNumber: 2, name: 'Upper floor', mapAssetUrl: null, mapWidth: null, mapHeight: null });
+    vi.mocked(updateFloorDetails).mockResolvedValue({ ...floor, floorNumber: 0, name: 'Lobby' });
     vi.mocked(listZones).mockResolvedValue([]);
     vi.mocked(listCameras).mockResolvedValue([camera]);
     vi.mocked(listCameraMappings).mockResolvedValue([]);
@@ -92,6 +99,86 @@ describe('StoreLayout', () => {
     expect(screen.getByRole('button', { name: /place cam-01/i })).toBeInTheDocument();
     expect(listZones).toHaveBeenCalledWith('floor-1', expect.any(AbortSignal));
     expect(listCameras).toHaveBeenCalledWith('floor-1', expect.any(AbortSignal));
+  });
+
+  it('creates the first floor, selects it and offers floor-plan upload', async () => {
+    vi.mocked(listFloors).mockResolvedValue([]);
+    vi.mocked(listCameras).mockResolvedValue([]);
+    const user = userEvent.setup(); renderPage();
+    await screen.findByText('No floors yet. Create the first floor, then upload its floor plan.');
+    await user.click(screen.getByRole('button', { name: 'Create floor' }));
+    const dialog = screen.getByRole('dialog', { name: 'Create floor' });
+    expect(within(dialog).getByLabelText('Floor name')).toHaveFocus();
+    await user.type(within(dialog).getByLabelText('Floor name'), 'Upper floor');
+    fireEvent.change(within(dialog).getByLabelText('Floor number'), { target: { value: '2' } });
+    await user.click(within(dialog).getByRole('button', { name: 'Create floor' }));
+    await screen.findByText('Floor created. Upload its floor plan to continue setup.');
+    expect(createFloor).toHaveBeenCalledWith('store-1', { name: 'Upper floor', floorNumber: 2 }, expect.any(AbortSignal));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Upper floor.*Floor 2/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('Upload floor plan')).toBeEnabled();
+    expect(screen.getByRole('heading', { name: 'Upper floor' })).toBeInTheDocument();
+  });
+
+  it('edits floor details and keeps the map and loaded cameras', async () => {
+    const user = userEvent.setup(); renderPage();
+    await screen.findByRole('img', { name: /uploaded floor plan/i });
+    await user.click(screen.getByRole('button', { name: 'Edit floor' }));
+    const dialog = screen.getByRole('dialog', { name: 'Edit floor' });
+    await user.clear(within(dialog).getByLabelText('Floor name'));
+    await user.type(within(dialog).getByLabelText('Floor name'), 'Lobby');
+    fireEvent.change(within(dialog).getByLabelText('Floor number'), { target: { value: '0' } });
+    await user.click(within(dialog).getByRole('button', { name: 'Save floor' }));
+    await screen.findByText('Floor details updated.');
+    expect(updateFloorDetails).toHaveBeenCalledWith('floor-1', { name: 'Lobby', floorNumber: 0 }, expect.any(AbortSignal));
+    expect(screen.getByRole('heading', { name: 'Lobby' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /uploaded floor plan/i })).toHaveAttribute('src', 'blob:floor-map');
+    expect(screen.getByRole('button', { name: /CAM-01 Entrance camera/i })).toBeInTheDocument();
+    expect(getFloorMap).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels floor editing and retains input after duplicate-number rejection', async () => {
+    vi.mocked(updateFloorDetails).mockRejectedValueOnce(new ApiError(409, 'DUPLICATE', 'Duplicate resource.'));
+    const user = userEvent.setup(); renderPage();
+    await screen.findByRole('img', { name: /uploaded floor plan/i });
+    await user.click(screen.getByRole('button', { name: 'Edit floor' }));
+    let dialog = screen.getByRole('dialog');
+    await user.clear(within(dialog).getByLabelText('Floor name')); await user.type(within(dialog).getByLabelText('Floor name'), 'Pending');
+    await user.click(within(dialog).getByRole('button', { name: 'Save floor' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('This floor number already exists.');
+    expect(within(dialog).getByLabelText('Floor name')).toHaveValue('Pending');
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('heading', { name: 'Ground floor' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit floor' })).toHaveFocus();
+    await user.click(screen.getByRole('button', { name: 'Edit floor' })); dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByLabelText('Floor name')).toHaveValue('Ground floor');
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(updateFloorDetails).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects missing names and fractional floor numbers without sending requests', async () => {
+    const user = userEvent.setup(); renderPage();
+    await screen.findByRole('img', { name: /uploaded floor plan/i });
+    await user.click(screen.getByRole('button', { name: 'Create floor' }));
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Create floor' }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Floor name is required.');
+    await user.type(within(dialog).getByLabelText('Floor name'), 'Upper');
+    fireEvent.change(within(dialog).getByLabelText('Floor number'), { target: { value: '1.5' } });
+    await user.click(within(dialog).getByRole('button', { name: 'Create floor' }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Enter a whole floor number.');
+    expect(createFloor).not.toHaveBeenCalled();
+  });
+
+  it('blocks floor creation when the default seed is missing or placement has unsaved changes', async () => {
+    vi.mocked(listSupermarkets).mockResolvedValueOnce([]);
+    const view = renderPage();
+    await screen.findByText(/default store seed is missing/i);
+    expect(screen.getByRole('button', { name: 'Create floor' })).toBeDisabled(); view.unmount();
+    renderPage();
+    fireEvent.keyDown(await screen.findByRole('button', { name: /place cam-01/i }), { key: 'ArrowRight' });
+    expect(screen.getByRole('button', { name: 'Create floor' })).toBeDisabled();
+    expect(screen.getByText('Finish the current camera or zone edits before changing floors.')).toBeInTheDocument();
   });
 
   it('opens the requested floor and camera from a dashboard action', async () => {
