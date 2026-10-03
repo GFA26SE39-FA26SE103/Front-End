@@ -28,7 +28,20 @@ export type ZoneRecord = {
   name: string;
   zoneType: string | null;
   mapPolygon: MapPoint[];
+  colorHex: string | null;
+  areaM2: number | null;
   status: string;
+  updatedAt: string;
+};
+
+export type ZoneRequest = {
+  code: string;
+  name: string;
+  zoneType: string | null;
+  mapPolygon: MapPoint[];
+  status: string;
+  colorHex: string | null;
+  areaM2: number | null;
 };
 
 export type FloorMapView = {
@@ -48,6 +61,12 @@ export const listFloors = (supermarketId: string, signal?: AbortSignal) =>
 
 export const listZones = (floorId: string, signal?: AbortSignal) =>
   apiFetch<ZoneRecord[]>(`/api/floors/${floorId}/zones`, { signal });
+
+export const createZone = (floorId: string, body: ZoneRequest) =>
+  apiFetch<ZoneRecord>(`/api/floors/${floorId}/zones`, { method: 'POST', body: JSON.stringify(body) });
+
+export const updateZone = (zoneId: string, body: ZoneRequest) =>
+  apiFetch<ZoneRecord>(`/api/zones/${zoneId}`, { method: 'PATCH', body: JSON.stringify(body) });
 
 export const uploadFloorMap = (floorId: string, file: File) => {
   const body = new FormData();

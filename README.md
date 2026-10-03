@@ -28,7 +28,7 @@ npm run lint
 | `/reset-password` → `/reset-password/done` | Set new password, password updated | Shared — Set new password / Password reset successful |
 | `/reset-password/expired` | Reset link expired | Shared — Reset link expired |
 | `/admin/dashboard` | System setup wizard + camera & system health | Admin — Setup & Health |
-| `/admin/store-layout` | API-backed floors/maps/cameras; upload/replace map and persist camera placement | Admin — Store layout |
+| `/admin/store-layout` | API-backed floors/maps/zones/cameras; upload maps, draw zones and persist camera placement | Admin — Store layout |
 | `/admin/cameras` | Camera registry, device detail, maintenance log, stream test | Admin — Cameras |
 | `/admin/ai-config` | AI incident rules, zone overrides, detection and health thresholds | Admin — AI Config |
 | `/admin/incident-types` | Incident catalogue + new type form | Admin — Incident types |
@@ -67,6 +67,8 @@ Set `VITE_API_URL` to the backend origin (default `http://localhost:5080`). Stor
 - downloads the protected map with the bearer token and renders PDFs with `pdfjs-dist`;
 - renders each camera as a draggable/keyboard-accessible body, muzzle and field-of-view sprite;
 - keeps screen coordinates normalized and persists `mapX`, `mapY` and `mapRotationDeg` only after **Save placement**;
+- provides a draggable zone-editor toolbar with unified select/move/vertex-resize editing, centered zone labels, rectangle drag, point-by-point polygon drawing, colors, undo and save;
+- stores rectangles as four normalized `mapPolygon` points and persists zone name, controlled uppercase Zone Type code, color and optional physical area;
 - sends the complete camera PATCH DTO so metadata is not erased, and preserves unsaved edits after a failed save.
 
 Camera creation/connection remains a separate flow. Placement saving does not test, enable, or start monitoring.

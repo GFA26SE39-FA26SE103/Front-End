@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { listCameras, updateCamera } from '../api/cameras';
-import { getFloorMap, listFloors, listSupermarkets, listZones, uploadFloorMap } from '../api/floors';
+import { createZone, getFloorMap, listFloors, listSupermarkets, listZones, updateZone, uploadFloorMap } from '../api/floors';
 import StoreLayout from './StoreLayout';
 
 vi.mock('../api/cameras', () => ({
@@ -12,10 +12,12 @@ vi.mock('../api/cameras', () => ({
 }));
 
 vi.mock('../api/floors', () => ({
+  createZone: vi.fn(),
   getFloorMap: vi.fn(),
   listFloors: vi.fn(),
   listSupermarkets: vi.fn(),
   listZones: vi.fn(),
+  updateZone: vi.fn(),
   uploadFloorMap: vi.fn(),
 }));
 
@@ -66,6 +68,12 @@ describe('StoreLayout', () => {
       updatedAt: '2026-10-03T00:00:00Z',
     });
     vi.mocked(updateCamera).mockResolvedValue({ ...camera, mapX: 0.26 });
+    vi.mocked(createZone).mockResolvedValue({
+      zoneId: 'zone-1', floorId: floor.floorId, code: 'PRODUCE', name: 'Produce', zoneType: null,
+      mapPolygon: [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.1 }, { x: 0.5, y: 0.5 }, { x: 0.1, y: 0.5 }],
+      colorHex: '#22C55E', areaM2: null, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
+    });
+    vi.mocked(updateZone).mockRejectedValue(new Error('Unexpected zone update'));
     URL.createObjectURL = vi.fn(() => 'blob:floor-map');
     URL.revokeObjectURL = vi.fn();
   });
@@ -78,6 +86,26 @@ describe('StoreLayout', () => {
     expect(screen.getByRole('button', { name: /place cam-01/i })).toBeInTheDocument();
     expect(listZones).toHaveBeenCalledWith('floor-1', expect.any(AbortSignal));
     expect(listCameras).toHaveBeenCalledWith('floor-1', expect.any(AbortSignal));
+  });
+
+  it('shows camera placement only after a camera is selected and hides it for zone editing', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole('img', { name: /uploaded floor plan/i });
+
+    expect(screen.queryByRole('heading', { name: 'Camera placement' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /CAM-01 Entrance camera/i }));
+    expect(screen.getByRole('heading', { name: 'Camera placement' })).toBeInTheDocument();
+    expect(screen.getByText('Drag the camera to position it. Drag its direction handle to rotate.')).toBeInTheDocument();
+    expect(screen.queryByText('Normalized coordinates persist across screen sizes')).not.toBeInTheDocument();
+    expect(screen.queryByText('X position')).not.toBeInTheDocument();
+    expect(screen.queryByText('Y position')).not.toBeInTheDocument();
+    expect(screen.queryByText('Direction')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Arrow keys move the selected camera/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Saving placement does not test/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Edit zones' }));
+    expect(screen.queryByRole('heading', { name: 'Camera placement' })).not.toBeInTheDocument();
   });
 
   it('uploads a replacement floor plan and refreshes its blob', async () => {
@@ -128,5 +156,30 @@ describe('StoreLayout', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Network unavailable');
     expect(screen.getAllByText('Unsaved').length).toBeGreaterThan(0);
+  });
+
+  it('opens the zone overlay and saves a dragged rectangle', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole('img', { name: /uploaded floor plan/i });
+    await user.click(screen.getByRole('button', { name: 'Edit zones' }));
+    const layer = screen.getByTestId('zone-drawing-layer');
+    vi.spyOn(layer, 'getBoundingClientRect').mockReturnValue({
+      left: 100, top: 50, width: 800, height: 400, right: 900, bottom: 450, x: 100, y: 50, toJSON: () => ({}),
+    });
+    await user.click(screen.getByRole('button', { name: 'Rectangle' }));
+    fireEvent.pointerDown(layer, { pointerId: 4, clientX: 180, clientY: 90 });
+    fireEvent.pointerMove(layer, { pointerId: 4, clientX: 500, clientY: 250 });
+    fireEvent.pointerUp(layer, { pointerId: 4, clientX: 500, clientY: 250 });
+    await user.type(screen.getByLabelText('Zone name'), 'Produce');
+    await user.selectOptions(screen.getByLabelText('Zone type'), 'FRESH_FOOD');
+    await user.click(screen.getByRole('button', { name: 'Green' }));
+    await user.click(screen.getByRole('button', { name: 'Save zone' }));
+
+    await waitFor(() => expect(createZone).toHaveBeenCalledWith('floor-1', {
+      code: 'PRODUCE', name: 'Produce', zoneType: 'FRESH_FOOD', colorHex: '#22C55E', areaM2: null, status: 'ACTIVE',
+      mapPolygon: [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.1 }, { x: 0.5, y: 0.5 }, { x: 0.1, y: 0.5 }],
+    }));
+    expect(await screen.findByText('Zone saved.')).toBeInTheDocument();
   });
 });

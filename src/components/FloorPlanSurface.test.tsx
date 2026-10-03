@@ -90,4 +90,12 @@ describe('FloorPlanSurface', () => {
     renderSurface({ dirtyCameraIds: new Set(['camera-1']) });
     expect(screen.getByText('Unsaved')).toBeInTheDocument();
   });
+
+  it('disables camera placement while the zone editor is active', () => {
+    renderSurface({ zoneEditor: { zones: [], saving: false, onSave: vi.fn(), onCancel: vi.fn() } });
+
+    expect(screen.getByRole('button', { name: /place cam-01/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /rotate cam-01/i })).toBeDisabled();
+    expect(screen.getByRole('toolbar', { name: 'Zone drawing tools' })).toBeInTheDocument();
+  });
 });

@@ -32,13 +32,13 @@ describe('apiFetch', () => {
   it('handles JSON and Blob responses', async () => {
     vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response(JSON.stringify({ state: 'LIVE' }), { headers: { 'Content-Type': 'application/json' } }))
-      .mockResolvedValueOnce(new Response(new Blob(['jpeg'], { type: 'image/jpeg' }), { headers: { 'Content-Type': 'image/jpeg' } }));
+      .mockResolvedValueOnce(new Response('jpeg', { headers: { 'Content-Type': 'image/jpeg' } }));
 
     const json = await apiFetch<{ state: string }>('/api/status');
     const blob = await apiFetch<Blob>('/api/frame', { responseType: 'blob' });
 
     expect(json.state).toBe('LIVE');
-    expect(blob).toBeInstanceOf(Blob);
+    expect(blob.size).toBe(4);
     expect(blob.type).toBe('image/jpeg');
   });
 
@@ -71,7 +71,26 @@ describe('apiFetch', () => {
 
     await apiFetch('/api/example', { signal: controller.signal });
 
-    expect(fetchMock.mock.calls[0][1]?.signal).toBe(controller.signal);
+    const fetchSignal = fetchMock.mock.calls[0][1]?.signal;
+    expect(fetchSignal).toBeInstanceOf(AbortSignal);
+    expect(fetchSignal?.aborted).toBe(false);
+  });
+
+  it('turns a stalled request into a typed timeout error', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => new Promise<Response>((_, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+    }));
+
+    const request = apiFetch('/api/stuck', { timeoutMs: 100 });
+    const assertion = expect(request).rejects.toMatchObject({
+      status: 504,
+      code: 'REQUEST_TIMEOUT',
+    });
+    await vi.advanceTimersByTimeAsync(100);
+
+    await assertion;
+    vi.useRealTimers();
   });
 });
 

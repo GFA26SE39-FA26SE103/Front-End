@@ -16,13 +16,13 @@ const statusStyle: Record<CameraStatus, { color: string; dot: string }> = {
 
 // Where each later setup step is actually done.
 const stepLinks: Record<number, { to: string; text: string; label: string }> = {
-  3: { to: '/admin/store-layout', text: 'Place each camera on the floor plan and draw the area it watches in every zone it covers.', label: 'Open Store layout' },
-  4: { to: '/admin/ai-config', text: 'Check the Warning / Critical thresholds and the incident types the AI should raise.', label: 'Open AI Config' },
-  5: { to: '/admin/routing', text: 'Confirm confidence routing and escalation, then invite Operators, Managers and Staff.', label: 'Open Routing & alerts' },
+  2: { to: '/admin/store-layout', text: 'Place each camera on the floor plan and draw the area it watches in every zone it covers.', label: 'Open Store layout' },
+  3: { to: '/admin/ai-config', text: 'Check the Warning / Critical thresholds and the incident types the AI should raise.', label: 'Open AI Config' },
+  4: { to: '/admin/routing', text: 'Confirm confidence routing and escalation, then invite Operators, Managers and Staff.', label: 'Open Routing & alerts' },
 };
 
 export default function SetupHealth() {
-  const [step, setStep] = useState(2); // 0-based: steps 1–2 done, 3 in progress (as in Figma)
+  const [step, setStep] = useState(1); // 0-based: floor setup is done, camera registration is in progress
   const [cameras, setCameras] = useState<Camera[]>(initialCameras);
   const [name, setName] = useState(`CAM-${String(initialCameras.length + 1).padStart(2, '0')}`);
   const [rtsp, setRtsp] = useState('');
@@ -80,8 +80,8 @@ export default function SetupHealth() {
 
         {!active && (
           <div className={s.form}>
-            <p className={s.formTitle}>Step {step + 1} · {step === 2 ? 'Register cameras' : setupSteps[step]}</p>
-            {step === 2 ? (
+            <p className={s.formTitle}>Step {step + 1} · {step === 1 ? 'Register cameras' : setupSteps[step]}</p>
+            {step === 1 ? (
               <>
                 <Field label="Camera name"><TextInput value={name} onChange={setName} /></Field>
                 <Field label="RTSP URL"><TextInput value={rtsp} onChange={(v) => { setRtsp(v); setError(''); }} /></Field>
@@ -91,18 +91,18 @@ export default function SetupHealth() {
                 <p className={s.formText} style={{ fontSize: 10.5 }}>Add more zones for this camera later in Store layout if it covers several.</p>
                 {error && <p className={s.error} role="alert">{error}</p>}
               </>
-            ) : step < 2 ? (
-              <p className={s.formText}>This step is complete. {step === 0 ? 'The floor plan for Floor 1 was uploaded on 24/09.' : `${zones.length} zones are set up on 2 floors.`}</p>
-            ) : step === 6 ? (
+            ) : step < 1 ? (
+              <p className={s.formText}>This step is complete. The floor plan for Floor 1 was uploaded on 24/09.</p>
+            ) : step === 5 ? (
               <p className={s.formText}>Everything is configured. Activating starts AI monitoring on every online camera; incidents will reach Operators and on-shift staff.</p>
             ) : (
               <p className={s.formText}>{stepLinks[step].text} <Link to={stepLinks[step].to} style={{ color: 'var(--color-primary)', fontWeight: 600 }}>{stepLinks[step].label} →</Link></p>
             )}
             <div className={s.formActions}>
               <Button variant="secondary" disabled={step === 0} onClick={() => setStep((v) => Math.max(0, v - 1))} style={{ height: 34, padding: '0 16px', fontSize: 12 }}>Back</Button>
-              {step === 2 ? (
+              {step === 1 ? (
                 <Button icon="arrow-right-white" onClick={addCamera} style={{ height: 34, padding: '0 16px', fontSize: 12, flexDirection: 'row-reverse' }}>Add &amp; continue</Button>
-              ) : step === 6 ? (
+              ) : step === 5 ? (
                 <Button onClick={() => setActive(true)} style={{ height: 34, padding: '0 16px', fontSize: 12 }}>Activate monitoring</Button>
               ) : (
                 <Button icon="arrow-right-white" onClick={() => setStep((v) => v + 1)} style={{ height: 34, padding: '0 16px', fontSize: 12, flexDirection: 'row-reverse' }}>Continue</Button>

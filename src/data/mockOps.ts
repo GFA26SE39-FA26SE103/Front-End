@@ -114,7 +114,7 @@ export const auditEvents: AuditEvent[] = [
 ];
 
 export const setupSteps = [
-  'Store & floor plan',
+  'Floor & floor plan',
   'Floors & zones',
   'Cameras',
   'Place & calibrate',

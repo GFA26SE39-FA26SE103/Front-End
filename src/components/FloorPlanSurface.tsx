@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import type { ZoneRecord } from '../api/floors';
 import { clampNormalized, clientToNormalized, normalizeRotation, type NormalizedPosition } from './floorPlanGeometry';
+import { ZoneEditorOverlay, type ZoneEditorSave } from './ZoneEditorOverlay';
 import s from './FloorPlanSurface.module.css';
 
 export type CameraPlacement = {
@@ -21,6 +23,12 @@ export type FloorPlanSurfaceProps = {
   dirtyCameraIds?: ReadonlySet<string>;
   onSelectCamera: (cameraId: string) => void;
   onChangePlacement: (cameraId: string, placement: PlacementChange) => void;
+  zoneEditor?: {
+    zones: ZoneRecord[];
+    saving: boolean;
+    onSave: (zone: ZoneEditorSave) => Promise<void> | void;
+    onCancel: () => void;
+  };
 };
 
 const cameraPosition = (camera: CameraPlacement): NormalizedPosition => ({
@@ -38,6 +46,7 @@ export function FloorPlanSurface({
   dirtyCameraIds = new Set<string>(),
   onSelectCamera,
   onChangePlacement,
+  zoneEditor,
 }: FloorPlanSurfaceProps) {
   const surfaceRef = useRef<HTMLDivElement>(null);
   const dragPointer = useRef<number | null>(null);
@@ -112,6 +121,7 @@ export function FloorPlanSurface({
                 <button
                   type="button"
                   className={s.camera}
+                  disabled={Boolean(zoneEditor)}
                   aria-label={`Place ${camera.code} at ${Math.round(position.x * 100)}%, ${Math.round(position.y * 100)}%`}
                   aria-pressed={selected}
                   onClick={() => onSelectCamera(camera.cameraId)}
@@ -139,6 +149,7 @@ export function FloorPlanSurface({
                   <button
                     type="button"
                     className={s.rotationHandle}
+                    disabled={Boolean(zoneEditor)}
                     aria-label={`Rotate ${camera.code}`}
                     onKeyDown={(event) => onRotationKeyDown(event, camera)}
                     onPointerDown={(event) => {
@@ -164,6 +175,7 @@ export function FloorPlanSurface({
             );
           })}
         </div>
+        {zoneEditor && <ZoneEditorOverlay {...zoneEditor} />}
       </div>
     </div>
   );

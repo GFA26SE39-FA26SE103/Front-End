@@ -13,6 +13,16 @@
   gap: 16px;
 }
 
+.feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.feedback > p {
+  margin: 0;
+}
+
 .canvas {
   flex: 1;
   min-height: 500px;
@@ -20,11 +30,17 @@
 }
 
 .canvasHeader,
+.canvasTools,
 .cameraTitle,
 .actions {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.canvasTools {
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .canvasHeader > :first-child,
@@ -161,29 +177,11 @@
   gap: 2px;
 }
 
-.coordinates {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+.placementHelp {
   margin: 0;
-}
-
-.coordinates > div {
-  padding: 10px 8px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-surface-2);
-}
-
-.coordinates dt {
   color: var(--color-text-muted);
-  font-size: 8.5px;
-}
-
-.coordinates dd {
-  margin: 4px 0 0;
-  font-size: 12px;
-  font-weight: 650;
+  font-size: 10.5px;
+  line-height: 1.5;
 }
 
 .state,

@@ -2,18 +2,22 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { listCameras, updateCamera, type CameraRecord, type CreateCameraRequest } from '../api/cameras';
 import { ApiError } from '../api/client';
 import {
+  createZone,
   getFloorMap,
   listFloors,
   listSupermarkets,
   listZones,
+  updateZone,
   uploadFloorMap,
   type FloorRecord,
   type SupermarketRecord,
+  type ZoneRequest,
   type ZoneRecord,
 } from '../api/floors';
 import { AdminLayout } from '../components/AdminLayout';
 import { CameraRegistration } from '../components/CameraRegistration';
 import { FloorPlanSurface, type PlacementChange } from '../components/FloorPlanSurface';
+import type { ZoneEditorSave } from '../components/ZoneEditorOverlay';
 import { Icon } from '../components/Icon';
 import { Button, Callout, Card, CardHeader, Chip, Overline } from '../components/ui';
 import s from './StoreLayout.module.css';
@@ -45,6 +49,8 @@ export default function StoreLayout() {
   const [actionMessage, setActionMessage] = useState('');
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [zoneEditing, setZoneEditing] = useState(false);
+  const [zoneSaving, setZoneSaving] = useState(false);
   const [registrationOpen, setRegistrationOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -84,7 +90,7 @@ export default function StoreLayout() {
         setZones(loadedZones);
         setCameras(loadedCameras);
         setDrafts({});
-        setSelectedCameraId((current) => loadedCameras.some((camera) => camera.cameraId === current) ? current : loadedCameras[0]?.cameraId ?? null);
+        setSelectedCameraId((current) => loadedCameras.some((camera) => camera.cameraId === current) ? current : null);
       } catch (reason) {
         if (!controller.signal.aborted) setLoadError(messageOf(reason, 'Could not load floor details.'));
       } finally {
@@ -134,6 +140,7 @@ export default function StoreLayout() {
     setActionError('');
     setActionMessage('');
     setRegistrationOpen(false);
+    setZoneEditing(false);
   };
 
   const uploadMap = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -220,6 +227,36 @@ export default function StoreLayout() {
     setActionMessage('Camera created. Place it on the map, then save its placement.');
   };
 
+  const saveZone = async (draft: ZoneEditorSave) => {
+    if (!selectedFloorId) throw new Error('Select a floor before saving a zone.');
+    const existing = draft.zoneId ? zones.find((zone) => zone.zoneId === draft.zoneId) : undefined;
+    const request: ZoneRequest = {
+      code: existing?.code ?? createZoneCode(draft.name, zones),
+      name: draft.name,
+      zoneType: draft.zoneType,
+      mapPolygon: draft.mapPolygon,
+      colorHex: draft.colorHex,
+      areaM2: draft.areaM2,
+      status: existing?.status ?? 'ACTIVE',
+    };
+    setZoneSaving(true);
+    setActionError('');
+    setActionMessage('');
+    try {
+      const saved = existing
+        ? await updateZone(existing.zoneId, request)
+        : await createZone(selectedFloorId, request);
+      setZones((current) => [...current.filter((zone) => zone.zoneId !== saved.zoneId), saved]);
+      setActionMessage(existing ? 'Zone updated.' : 'Zone saved.');
+    } catch (reason) {
+      const message = messageOf(reason, 'Could not save the zone.');
+      setActionError(message);
+      throw reason instanceof Error ? reason : new Error(message);
+    } finally {
+      setZoneSaving(false);
+    }
+  };
+
   const subtitle = loading
     ? 'Loading store configuration…'
     : `${storeName ?? 'No supermarket'} · ${floors.length} floor${floors.length === 1 ? '' : 's'} · ${cameras.length} camera${cameras.length === 1 ? '' : 's'} on selected floor`;
@@ -255,6 +292,8 @@ export default function StoreLayout() {
               className={`${s.cameraRow} ${selectedCameraId === camera.cameraId ? s.activeRow : ''}`}
               onClick={() => setSelectedCameraId(camera.cameraId)}
               aria-pressed={selectedCameraId === camera.cameraId}
+              aria-label={`${camera.code} ${camera.name}`}
+              disabled={zoneEditing}
             >
               <Icon name="tree-camera" size={14} />
               <span><strong>{camera.code}</strong><small>{camera.name}</small></span>
@@ -263,7 +302,7 @@ export default function StoreLayout() {
           ))}
           {!detailsLoading && cameras.length === 0 && <p className={s.state}>No cameras registered on this floor.</p>}
         </div>
-        <Button variant="secondary" icon="plus-primary" block disabled={!selectedFloor} onClick={() => setRegistrationOpen((open) => !open)}>
+        <Button variant="secondary" icon="plus-primary" block disabled={!selectedFloor || zoneEditing} onClick={() => setRegistrationOpen((open) => !open)}>
           {registrationOpen ? 'Close camera form' : 'Add camera'}
         </Button>
 
@@ -299,9 +338,29 @@ export default function StoreLayout() {
           <div className={s.canvasHeader}>
             <CardHeader
               title={selectedFloor?.name ?? 'Floor plan'}
-              subtitle="Drag the camera body. Use the amber handle to align its muzzle and field of view."
+              subtitle={zoneEditing ? 'Draw rectangles by dragging, or click points to create a polygon.' : 'Drag the camera body. Use the amber handle to align its muzzle and field of view.'}
             />
-            {selectedFloor && <Chip tone="neutral">{zones.length} zones</Chip>}
+            {selectedFloor && (
+              <div className={s.canvasTools}>
+                <Chip tone="neutral">{zones.length} zones</Chip>
+                <Button
+                  variant="secondary"
+                  disabled={mapState.status !== 'ready'}
+                  onClick={() => {
+                    setZoneEditing((active) => {
+                      const next = !active;
+                      if (next) setSelectedCameraId(null);
+                      return next;
+                    });
+                    setRegistrationOpen(false);
+                    setActionError('');
+                    setActionMessage('');
+                  }}
+                >
+                  {zoneEditing ? 'Close zone editor' : 'Edit zones'}
+                </Button>
+              </div>
+            )}
           </div>
           {mapState.status === 'ready' ? (
             <FloorPlanSurface
@@ -312,6 +371,7 @@ export default function StoreLayout() {
               dirtyCameraIds={dirtyCameraIds}
               onSelectCamera={setSelectedCameraId}
               onChangePlacement={changePlacement}
+              zoneEditor={zoneEditing ? { zones, saving: zoneSaving, onSave: saveZone, onCancel: () => setZoneEditing(false) } : undefined}
             />
           ) : mapState.status === 'loading' || (mapState.status === 'idle' && Boolean(selectedFloor?.mapAssetUrl)) ? (
             <div className={s.emptyPlan}><Icon name="scan" size={20} /><p>Loading floor plan…</p></div>
@@ -325,39 +385,33 @@ export default function StoreLayout() {
             </div>
           )}
         </Card>
+        {(loadError || actionError || actionMessage) && (
+          <div className={s.feedback}>
+            {loadError && <p className={s.error} role="alert">{loadError}</p>}
+            {actionError && <p className={s.error} role="alert">{actionError}</p>}
+            {actionMessage && <p className={s.success} role="status">{actionMessage}</p>}
+          </div>
+        )}
       </div>
 
-      <Card className={s.props}>
-        <CardHeader title="Camera placement" subtitle="Normalized coordinates persist across screen sizes" />
-        {selectedCamera ? (
-          <>
-            <div className={s.cameraTitle}>
-              <Icon name="camera-row" size={17} />
-              <div><strong>{selectedCamera.code}</strong><small>{selectedCamera.name}</small></div>
-              <Chip tone={selectedCamera.healthStatus === 'ONLINE' ? 'success' : 'neutral'}>{selectedCamera.healthStatus}</Chip>
-            </div>
-            <dl className={s.coordinates}>
-              <div><dt>X position</dt><dd>{formatPosition(selectedDraft?.x ?? selectedCamera.mapX)}</dd></div>
-              <div><dt>Y position</dt><dd>{formatPosition(selectedDraft?.y ?? selectedCamera.mapY)}</dd></div>
-              <div><dt>Direction</dt><dd>{Math.round(selectedDraft?.rotationDeg ?? selectedCamera.mapRotationDeg ?? 0)}°</dd></div>
-            </dl>
-            <Callout tone="info" icon="info">Arrow keys move the selected camera by 1%. Shift + arrow moves it by 5%. The rotation handle also supports left/right arrows.</Callout>
-            {selectedDraft && <p className={s.unsaved}>Unsaved placement</p>}
-            <div className={s.actions}>
-              <Button variant="secondary" disabled={!selectedDraft || saving} onClick={() => setDrafts((current) => {
-                const next = { ...current };
-                delete next[selectedCamera.cameraId];
-                return next;
-              })}>Reset</Button>
-              <Button disabled={!selectedDraft || saving} onClick={() => void savePlacement()}>{saving ? 'Saving…' : 'Save placement'}</Button>
-            </div>
-            <p className={s.meta}>Saving placement does not test, enable, or start monitoring for this camera.</p>
-          </>
-        ) : <p className={s.state}>Select a camera, or add one to this floor.</p>}
-        {loadError && <p className={s.error} role="alert">{loadError}</p>}
-        {actionError && <p className={s.error} role="alert">{actionError}</p>}
-        {actionMessage && <p className={s.success} role="status">{actionMessage}</p>}
-      </Card>
+      {selectedCamera && !zoneEditing && <Card className={s.props}>
+        <CardHeader title="Camera placement" />
+        <div className={s.cameraTitle}>
+          <Icon name="camera-row" size={17} />
+          <div><strong>{selectedCamera.code}</strong><small>{selectedCamera.name}</small></div>
+          <Chip tone={selectedCamera.healthStatus === 'ONLINE' ? 'success' : 'neutral'}>{selectedCamera.healthStatus}</Chip>
+        </div>
+        <p className={s.placementHelp}>Drag the camera to position it. Drag its direction handle to rotate.</p>
+        {selectedDraft && <p className={s.unsaved}>Unsaved placement</p>}
+        <div className={s.actions}>
+          <Button variant="secondary" disabled={!selectedDraft || saving} onClick={() => setDrafts((current) => {
+            const next = { ...current };
+            delete next[selectedCamera.cameraId];
+            return next;
+          })}>Reset</Button>
+          <Button disabled={!selectedDraft || saving} onClick={() => void savePlacement()}>{saving ? 'Saving…' : 'Save placement'}</Button>
+        </div>
+      </Card>}
     </AdminLayout>
   );
 }
@@ -366,13 +420,21 @@ function messageOf(reason: unknown, fallback: string) {
   return reason instanceof Error && reason.message ? reason.message : fallback;
 }
 
-function formatPosition(value: number | null | undefined) {
-  return value == null ? 'Not placed' : `${(value * 100).toFixed(1)}%`;
-}
-
 function mapTypeFromUrl(url: string) {
   const path = url.split('?', 1)[0].toLowerCase();
   if (path.endsWith('.pdf')) return 'application/pdf';
   if (path.endsWith('.jpg') || path.endsWith('.jpeg')) return 'image/jpeg';
   return 'image/png';
+}
+
+function createZoneCode(name: string, zones: ZoneRecord[]) {
+  const base = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 44) || 'ZONE';
+  const used = new Set(zones.map((zone) => zone.code.toUpperCase()));
+  if (!used.has(base)) return base;
+  for (let suffix = 2; suffix <= 99999; suffix += 1) {
+    const ending = `-${suffix}`;
+    const candidate = `${base.slice(0, 50 - ending.length)}${ending}`;
+    if (!used.has(candidate)) return candidate;
+  }
+  throw new Error('Could not generate a unique zone code.');
 }
