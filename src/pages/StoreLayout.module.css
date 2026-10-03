@@ -226,3 +226,16 @@
     flex-basis: 275px;
   }
 }
+
+.picker {
+  gap: 10px;
+}
+
+.picker .placementHelp a {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.cameraRow i.notPlaced {
+  color: var(--color-text-muted);
+}
