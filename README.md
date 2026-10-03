@@ -31,7 +31,7 @@ npm test -- --run
 | `/admin/dashboard` | System setup wizard + camera & system health | Admin — Setup & Health |
 | `/admin/store-layout` | API-backed floors/maps/zones/cameras; upload maps, draw zones and persist camera placement | Admin — Store layout |
 | `/admin/cameras` | Camera registry, device detail, maintenance log, stream test | Admin — Cameras |
-| `/admin/ai-config` | AI incident rules, zone overrides, detection and health thresholds | Admin — AI Config |
+| `/admin/ai-config?zoneId=<uuid>` | API-backed per-zone Draft rules, confidence, review/activate/deactivate | Admin — AI Config |
 | `/admin/incident-types` | Incident catalogue + new type form | Admin — Incident types |
 | `/admin/routing` | Confidence routing (draggable 50 % / 80 %), broadcast & escalation | Admin — Routing & alerts |
 | `/admin/users` | API-backed account creation, edit, enable/disable and system role list | Admin — Users & Roles |
@@ -55,9 +55,9 @@ Verification on 2026-10-03: `npm test -- --run` passed **100 tests in 16 files**
 | Store / floor / zone | Store Layout loads real stores/floors/zones; uploads floor plans and saves zone polygons, color and physical area | Store/floor creation UI and dashboard integration |
 | Register & configure camera | Real registry, creation, live HTTP configuration and MP4 upload | Other live protocols are backend capabilities, not options in this form |
 | Test & preview | Real test/enable and annotated YOLO + ByteTrack frames in React | Preview is a controlled test, not monitoring activation |
-| Map camera to zone | Store Layout saves camera floor-plan placement; backend has same-floor N:M mapping and camera-frame ROI; Cameras lists saved mappings | Camera-to-zone mapping UI and camera-frame ROI drawing/saving; Cameras mini floor plan still uses sample geometry |
-| Configure monitoring rule | Basic per-zone MonitoringConfiguration in BE; AI Config/Incident Types remain mock | ERD v3 rule persistence, warning/critical, units, sustain/cooldown and readiness validation |
-| Activate & health | BE activation status and camera-health worker | Dashboard Activate changes local state only; connect readiness checks and continuous monitoring runtime |
+| Map camera to zone | Store Layout placement + camera-frame ROI drawing/editing/saving through same-floor N:M mapping API; links to configure the mapped zone | Cameras mini floor plan still uses sample geometry |
+| Configure monitoring rule | AI Config loads real zones/catalog; saves per-zone confidence, incident/rule thresholds/units/timing/enabled to SQL Draft | Incident Types admin screen is still mock; checkout counter/composite definition is pending |
+| Activate & health | AI Config reviews saved config/camera/source/ROI/rules and activates/deactivates via BE; BE camera-health worker exists | Dashboard Activate is still prototype; continuous measurements/incident runtime (MF-02) is not implemented |
 
 Forgot/reset-password and other operational screens remain prototypes unless separately integrated. Local UI state is not evidence of saved backend configuration.
 
@@ -74,6 +74,25 @@ Start native AI, ASP.NET and React; see backend/AI-service READMEs. Backend need
 Upload replaces the source, not camera identity or zone mappings. Review the ROI if the scene changes. Restore live input with **Configure connection**, then test again. Upload is a controlled fallback/demo, not incident creation or full MF-01 completion.
 
 API: `POST /api/cameras/{cameraId}/recorded-video`, multipart `file`, ADMIN JWT. Browser sets the multipart boundary; React never calls Python or the phone directly.
+
+## Configure monitoring after AI preview
+
+Verification for this increment: **118 tests in 18 files passed**, production build and lint passed (existing Vite bundle-size advisory only). Monitoring tests use controlled HTTP responses; backend separately validates SQL persistence in isolated local databases. No live browser/shared-DB mutation acceptance or real GPU comparison is claimed.
+
+Requires the matching BE monitoring increment and the approved Database migration already applied. Restart BE after building updated code.
+
+1. **Store Layout → camera → Camera coverage**: select a floor zone, draw/save its camera-frame ROI. Floor polygon and camera ROI are different coordinate spaces.
+2. Click **Configure monitoring for [zone]** in the ROI list or **Configure monitoring: [zone]** in Cameras. Alternatively open **AI Config** and select a real zone.
+3. Set configuration name/confidence (0–1); **Add rule**. Long Queue uses PEOPLE with suggested 3/5, Excessive Waiting Time MINUTES 4/8, Overcrowding PEOPLE_PER_M2 2/3. Set sustain/cooldown seconds (defaults 30/300), enabled; **Save Draft**.
+4. **Review configuration** reads saved SQL data, shows camera source/test/enabled/ROI and exact rules/version. Correct blockers before **Activate configuration**; backend rechecks them. Density needs physical zone area > 0; at least one enabled supported rule and a tested/enabled live or uploaded-video camera with valid ROI are required.
+   **Preview zone confidence: [camera]** tests the saved confidence with annotated YOLO + ByteTrack frames without activating. It restarts the shared camera session and resets track IDs; other viewers may be interrupted. **Stop zone preview** releases it.
+5. **Deactivate configuration** before editing an active configuration/source/mapping/ROI. Failed saves preserve input; conflict requires **Reload saved configuration**. Dirty edits cannot be reviewed/activated until saved. Switching zones asks before discarding unsaved changes.
+
+Only AI-detected catalog types are offered. Checkout Capacity can be kept as a disabled Draft with an explicit placeholder unit, but cannot be enabled until its counter/composite measurement is defined. No confidence-based incident routing. No camera secrets in review.
+
+**Scope:** Activate marks the MF-01 configuration ACTIVE; it does not start MF-02 measurements, incidents or dispatch. AI Config's zone preview uses saved zone confidence; ordinary Cameras preview uses BE `AiPreview:Confidence` (or a shared existing session). Preview boxes cover the frame; it does not compute ROI measurements. Multi-camera measurement selection remains open; counts are not combined. Use the real Activate action in AI Config, not the prototype Dashboard wizard.
+
+API: `GET /api/incident-types`, `GET/PUT /api/zones/{zoneId}/monitoring`, `GET .../review`, `POST .../activate|deactivate` (ADMIN). Updates and activation send the saved `expectedUpdatedAt`; full rules array replaces the prior rule set.
 
 ## Structure
 
@@ -107,6 +126,6 @@ Camera creation/connection remains a separate flow. Placement saving does not te
 
 ## Notes
 
-- Authentication, Users & Roles, Cameras, and Store Layout have API-backed slices. Other screens still use mock/component state until their backend contracts are implemented.
+- Authentication, Users & Roles, Cameras, Store Layout and AI Config have API-backed slices. Other screens still use mock/component state until their backend contracts are implemented.
 - Model confidence is an input filter, not an incident severity/routing threshold; legacy Routing mock does not represent current AGENTS.md rules.
 - Only the Light theme is wired. Dark colour tokens exist (`[data-theme='dark']`), but the Figma icons are exported in light-theme colours, so dark mode needs dark icon variants first.

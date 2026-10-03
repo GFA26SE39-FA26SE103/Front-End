@@ -225,6 +225,13 @@
   font-weight: 650;
 }
 
+.mappingList a {
+  grid-column: span 2;
+  padding: 8px;
+  color: var(--color-primary);
+  font-size: 10px;
+}
+
 .mappingList button:hover:not(:disabled) {
   background: var(--color-primary-tint);
 }

@@ -217,3 +217,20 @@
   font-weight: 500;
   color: var(--color-success);
 }
+
+.help { color: var(--color-text-muted); font-size: 12px; margin: 10px 0; line-height: 1.6; }
+.error { color: var(--color-danger); margin: 10px 0; }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: 12px; flex: 1; }
+.field input, .field select { width: 100%; min-width: 0; box-sizing: border-box; background: var(--color-surface); color: var(--color-text); border: 1px solid var(--color-border); border-radius: 6px; padding: 9px; font: inherit; }
+.field input:focus, .field select:focus { outline: 2px solid var(--color-primary); }
+.fields { border: 0; margin: 12px 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+.fields:disabled { opacity: .65; }
+.check { display: flex; gap: 8px; align-items: center; font-size: 12px; }
+.rule { border: 1px solid var(--color-border); border-radius: 8px; padding: 14px; margin: 14px 0; }
+.rule h3 { font-size: 14px; }
+.actions { flex-wrap: wrap; margin-top: 12px; }
+.panel ul { padding-left: 20px; line-height: 1.8; margin: 12px 0; }
+.roi { width: 120px; height: 120px; background: var(--color-surface-2); border: 1px solid var(--color-border); }
+.roi polygon { fill: var(--color-primary-tint); stroke: var(--color-primary); stroke-width: 1; }
+.zonePreview { width: min(100%, 640px); aspect-ratio: 16 / 9; margin-top: 12px; }
+@media (max-width: 700px) { .head { flex-wrap: wrap; gap: 10px; } .panel { padding: 16px; } }

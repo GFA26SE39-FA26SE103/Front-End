@@ -134,8 +134,8 @@ export const testCameraConnection = (cameraId: string, signal?: AbortSignal) =>
 export const enableCameraConnection = (cameraId: string, signal?: AbortSignal) =>
   apiFetch<CameraConnection>(`/api/cameras/${cameraId}/connection/enable`, { method: 'POST', signal });
 
-export const startAiPreview = (cameraId: string, signal?: AbortSignal) =>
-  apiFetch<AiPreviewStatus>(`/api/cameras/${cameraId}/ai-preview/start`, { method: 'POST', signal });
+export const startAiPreview = (cameraId: string, signal?: AbortSignal, zoneId?: string) =>
+  apiFetch<AiPreviewStatus>(`/api/cameras/${cameraId}/ai-preview/start${zoneId ? '?zoneId=' + encodeURIComponent(zoneId) : ''}`, { method: 'POST', signal });
 
 export const getAiPreviewStatus = (cameraId: string, signal?: AbortSignal) =>
   apiFetch<AiPreviewStatus>(`/api/cameras/${cameraId}/ai-preview/status`, { signal });

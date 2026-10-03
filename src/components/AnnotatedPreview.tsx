@@ -15,9 +15,10 @@ export type AnnotatedPreviewProps = {
   cameraId: string;
   enabled: boolean;
   pollInterval?: number;
+  zoneId?: string;
 };
 
-export function AnnotatedPreview({ cameraId, enabled, pollInterval = 250 }: AnnotatedPreviewProps) {
+export function AnnotatedPreview({ cameraId, enabled, pollInterval = 250, zoneId }: AnnotatedPreviewProps) {
   const [viewState, setViewState] = useState<ViewState>('idle');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const imageUrlRef = useRef<string | null>(null);
@@ -34,7 +35,8 @@ export function AnnotatedPreview({ cameraId, enabled, pollInterval = 250 }: Anno
     const startPromise = (async () => {
       await precedingStop;
       if (!active) return;
-      await startAiPreview(cameraId);
+      if (zoneId) await startAiPreview(cameraId, undefined, zoneId);
+      else await startAiPreview(cameraId);
     })();
 
     const replaceImage = (blob: Blob) => {
@@ -127,7 +129,7 @@ export function AnnotatedPreview({ cameraId, enabled, pollInterval = 250 }: Anno
           }
         });
     };
-  }, [cameraId, enabled, pollInterval]);
+  }, [cameraId, enabled, pollInterval, zoneId]);
 
   const visibleState = enabled ? viewState : 'idle';
   return (

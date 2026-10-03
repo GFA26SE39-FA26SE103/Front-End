@@ -32,7 +32,7 @@ type CameraView = {
   floorId: string;
   floor: string;
   floorLabel: string;
-  zones: { code: string; name: string }[];
+  zones: { zoneId: string; code: string; name: string }[];
   status: CameraStatus;
   lifecycleStatus: string;
   installed: string;
@@ -250,6 +250,7 @@ export default function Cameras() {
             <Button size="lg" disabled={uploadOpen || test?.state === 'running'} onClick={() => setPreviewEnabled((value) => !value)}>{previewEnabled ? 'Stop AI preview' : 'Start AI preview'}</Button>
           </div>
           <p className={s.previewNote}>Bounding boxes and track IDs are drawn by YOLO + ByteTrack before this JPEG reaches React.</p>
+          {camera.zones.length ? <div className={s.actions}>{camera.zones.map(zone => <a key={zone.zoneId} href={`/admin/ai-config?zoneId=${encodeURIComponent(zone.zoneId)}`}>Configure monitoring: {zone.name}</a>)}</div> : <p className={s.previewNote}>Map this camera and draw its zone ROI in <a href="/admin/store-layout">Store layout</a> before configuring monitoring.</p>}
         </Card>
       )}
     </AdminLayout>
@@ -275,7 +276,7 @@ function toView(camera: CameraRecord, floor: FloorRecord, floorOptions: FloorOpt
     floorId: camera.floorId,
     floor: floorOption.key,
     floorLabel: floorOption.label,
-    zones: zones.map((zone) => ({ code: zone.code, name: zone.name })),
+    zones: zones.map((zone) => ({ zoneId: zone.zoneId, code: zone.code, name: zone.name })),
     status: healthStatus(camera.healthStatus),
     lifecycleStatus: camera.status,
     installed: formatDate(camera.installedAt),

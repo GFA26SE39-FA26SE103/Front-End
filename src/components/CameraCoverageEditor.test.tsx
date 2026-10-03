@@ -72,6 +72,7 @@ describe('CameraCoverageEditor', () => {
       status: 'ACTIVE',
     }));
     expect(await screen.findByText('Frozen aisle mapped.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Configure monitoring for Frozen aisle' })).toHaveAttribute('href', '/admin/ai-config?zoneId=zone-frozen');
   });
 
   it('loads an existing ROI for editing and removes only that camera-zone mapping', async () => {

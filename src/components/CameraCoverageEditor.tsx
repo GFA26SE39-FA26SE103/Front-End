@@ -340,6 +340,7 @@ export function CameraCoverageEditor({ camera, zones, onClose }: CameraCoverageE
                   <li key={mapping.cameraZoneId}>
                     <span className={s.zoneDot} style={{ backgroundColor: zone?.colorHex ?? DEFAULT_COLOR }} aria-hidden="true" />
                     <span><strong>{name}</strong><small>{mapping.roiPolygon.length} points</small></span>
+                    {mapping.status === 'ACTIVE' && <a href={`/admin/ai-config?zoneId=${encodeURIComponent(mapping.zoneId)}`}>Configure monitoring for {name}</a>}
                     <button type="button" onClick={() => editMapping(mapping)} disabled={!previewUrl || saving}>Edit ROI for {name}</button>
                     <button type="button" className={s.remove} onClick={() => void remove(mapping)} disabled={removingZoneId === mapping.zoneId || saving}>Remove ROI for {name}</button>
                   </li>
