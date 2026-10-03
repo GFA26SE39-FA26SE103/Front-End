@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { listCameras, updateCamera, type CameraRecord, type CreateCameraRequest } from '../api/cameras';
 import { ApiError } from '../api/client';
 import {
@@ -18,6 +18,7 @@ import {
 import { AdminLayout } from '../components/AdminLayout';
 import { CameraCoverageEditor } from '../components/CameraCoverageEditor';
 import { FloorPlanSurface, type PlacementChange } from '../components/FloorPlanSurface';
+import { FloorEditor } from '../components/FloorEditor';
 import type { ZoneEditorSave } from '../components/ZoneEditorOverlay';
 import { Icon } from '../components/Icon';
 import { Button, Callout, Card, CardHeader, Chip, Overline } from '../components/ui';
@@ -37,8 +38,12 @@ const initialMapState: MapState = { status: 'idle', url: null, contentType: null
 const isPlaced = (camera: Pick<CameraRecord, 'mapX' | 'mapY'>) => camera.mapX !== null && camera.mapY !== null;
 
 export default function StoreLayout() {
+  const [params] = useSearchParams();
+  const requestedFloorId = params.get('floorId') ?? '';
+  const requestedCameraId = params.get('cameraId') ?? '';
   const [stores, setStores] = useState<SupermarketRecord[]>([]);
   const [floors, setFloors] = useState<FloorRecord[]>([]);
+  const [floorEditor, setFloorEditor] = useState<FloorRecord | 'new' | null>(null);
   const [selectedFloorId, setSelectedFloorId] = useState<string | null>(null);
   const [zones, setZones] = useState<ZoneRecord[]>([]);
   const [cameras, setCameras] = useState<CameraRecord[]>([]);
@@ -49,6 +54,7 @@ export default function StoreLayout() {
   const [loading, setLoading] = useState(true);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [cameraSelectionError, setCameraSelectionError] = useState('');
   const [actionError, setActionError] = useState('');
   const [actionMessage, setActionMessage] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -69,8 +75,9 @@ export default function StoreLayout() {
         const loadedFloors = (await Promise.all(loadedStores.map((store) => listFloors(store.supermarketId, controller.signal)))).flat();
         if (controller.signal.aborted) return;
         setStores(loadedStores);
-        setFloors(loadedFloors);
-        setSelectedFloorId((current) => loadedFloors.some((floor) => floor.floorId === current) ? current : loadedFloors[0]?.floorId ?? null);
+        setFloors(loadedFloors.sort((a, b) => a.floorNumber - b.floorNumber));
+        setSelectedFloorId((current) => requestedFloorId ? loadedFloors.find(floor => floor.floorId === requestedFloorId)?.floorId ?? null : loadedFloors.some((floor) => floor.floorId === current) ? current : loadedFloors[0]?.floorId ?? null);
+        if (requestedFloorId && !loadedFloors.some(f => f.floorId === requestedFloorId)) setLoadError('The requested floor was not found. Choose a floor from the list.');
       } catch (reason) {
         if (!controller.signal.aborted) setLoadError(messageOf(reason, 'Could not load the store layout.'));
       } finally {
@@ -78,7 +85,7 @@ export default function StoreLayout() {
       }
     })();
     return () => controller.abort();
-  }, []);
+  }, [requestedFloorId]);
 
   useEffect(() => {
     if (!selectedFloorId) return;
@@ -86,6 +93,7 @@ export default function StoreLayout() {
     void (async () => {
       setDetailsLoading(true);
       setLoadError('');
+      setCameraSelectionError('');
       try {
         const [loadedZones, loadedCameras] = await Promise.all([
           listZones(selectedFloorId, controller.signal),
@@ -95,7 +103,9 @@ export default function StoreLayout() {
         setZones(loadedZones);
         setCameras(loadedCameras);
         setDrafts({});
-        setSelectedCameraId((current) => loadedCameras.some((camera) => camera.cameraId === current) ? current : null);
+        const targetCamera = selectedFloorId === requestedFloorId ? requestedCameraId : '';
+        setSelectedCameraId((current) => targetCamera ? loadedCameras.find(camera => camera.cameraId === targetCamera)?.cameraId ?? null : loadedCameras.some((camera) => camera.cameraId === current) ? current : null);
+        if (targetCamera && !loadedCameras.some(c => c.cameraId === targetCamera)) setCameraSelectionError('The requested camera was not found on this floor. Choose a camera from the list.');
       } catch (reason) {
         if (!controller.signal.aborted) setLoadError(messageOf(reason, 'Could not load floor details.'));
       } finally {
@@ -103,7 +113,7 @@ export default function StoreLayout() {
       }
     })();
     return () => controller.abort();
-  }, [selectedFloorId]);
+  }, [selectedFloorId, requestedFloorId, requestedCameraId]);
 
   const selectedFloor = floors.find((floor) => floor.floorId === selectedFloorId) ?? null;
 
@@ -140,6 +150,7 @@ export default function StoreLayout() {
   const selectedDraft = selectedCameraId ? drafts[selectedCameraId] : undefined;
   const dirtyCameraIds = useMemo(() => new Set(Object.keys(drafts)), [drafts]);
   const storeName = stores.find((store) => store.supermarketId === selectedFloor?.supermarketId)?.name ?? stores[0]?.name;
+  const floorChangesBlocked = uploading || saving || zoneSaving || zoneEditing || coverageEditing || dirtyCameraIds.size > 0;
 
   const selectFloor = (floorId: string) => {
     setSelectedFloorId(floorId);
@@ -270,8 +281,13 @@ export default function StoreLayout() {
     <AdminLayout title="Store layout" subtitle={subtitle}>
       <Card className={s.structure}>
         <CardHeader title="Store structure" subtitle="Configuration loaded from the backend" />
+        <div className={s.floorActions}>
+          <Button disabled={loading || !stores[0] || floorChangesBlocked} onClick={() => setFloorEditor('new')}>Create floor</Button>
+          <Button variant="secondary" disabled={loading || !selectedFloor || floorChangesBlocked} onClick={() => selectedFloor && setFloorEditor(selectedFloor)}>Edit floor</Button>
+        </div>
+        {floorChangesBlocked && <p className={s.meta}>Finish the current camera or zone edits before changing floors.</p>}
         {loading ? <p className={s.state}>Loading floors…</p> : floors.length === 0 ? (
-          <Callout tone="warning" icon="alert-warning">Create a supermarket and floor before uploading a floor plan.</Callout>
+          <Callout tone="warning" icon="alert-warning">{stores[0] ? 'No floors yet. Create the first floor, then upload its floor plan.' : 'The default store seed is missing. Ask the backend team to restore it before creating floors.'}</Callout>
         ) : (
           <div className={s.floorList} aria-label="Floors">
             {floors.map((floor) => (
@@ -297,6 +313,7 @@ export default function StoreLayout() {
               className={`${s.cameraRow} ${selectedCameraId === camera.cameraId ? s.activeRow : ''}`}
               onClick={() => {
                 setSelectedCameraId(camera.cameraId);
+                setCameraSelectionError('');
                 setCoverageEditing(false);
               }}
               aria-pressed={selectedCameraId === camera.cameraId}
@@ -336,6 +353,20 @@ export default function StoreLayout() {
           <p className={s.meta}>PNG, JPEG, or PDF · maximum 20 MB</p>
         </div>
       </Card>
+
+      {floorEditor && stores[0] && <FloorEditor
+        storeId={stores[0].supermarketId}
+        floor={floorEditor === 'new' ? undefined : floorEditor}
+        suggestedNumber={Math.max(0, ...floors.map(f => f.floorNumber)) + 1}
+        onClose={() => setFloorEditor(null)}
+        onSaved={saved => {
+          const creating = floorEditor === 'new';
+          setFloors(all => [...all.filter(f => f.floorId !== saved.floorId), saved].sort((a, b) => a.floorNumber - b.floorNumber));
+          setFloorEditor(null);
+          if (creating) selectFloor(saved.floorId);
+          setActionMessage(creating ? 'Floor created. Upload its floor plan to continue setup.' : 'Floor details updated.');
+        }}
+      />}
 
       <div className={s.workspace}>
         {pickerOpen && selectedFloor && (
@@ -398,7 +429,7 @@ export default function StoreLayout() {
               cameras={mapCameras}
               selectedCameraId={selectedCameraId}
               dirtyCameraIds={dirtyCameraIds}
-              onSelectCamera={setSelectedCameraId}
+              onSelectCamera={id => { setSelectedCameraId(id); setCameraSelectionError(''); }}
               onChangePlacement={changePlacement}
               zones={zones}
               zoneEditor={zoneEditing ? { zones, saving: zoneSaving, onSave: saveZone, onCancel: () => setZoneEditing(false) } : undefined}
@@ -416,9 +447,10 @@ export default function StoreLayout() {
           )}
           </>}
         </Card>
-        {(loadError || actionError || actionMessage) && (
+        {(loadError || cameraSelectionError || actionError || actionMessage) && (
           <div className={s.feedback}>
             {loadError && <p className={s.error} role="alert">{loadError}</p>}
+            {cameraSelectionError && <p className={s.error} role="alert">{cameraSelectionError}</p>}
             {actionError && <p className={s.error} role="alert">{actionError}</p>}
             {actionMessage && <p className={s.success} role="status">{actionMessage}</p>}
           </div>

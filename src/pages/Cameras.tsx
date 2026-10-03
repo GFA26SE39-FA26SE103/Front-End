@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { icon as iconUrl } from '../assets/icons';
 import {
   enableCameraConnection,
@@ -46,6 +47,8 @@ type TestState = { cameraId: string; state: 'running' | 'ok' | 'fail'; message?:
 const mini = (x: number, y: number) => ({ x: 7 + ((x - 14) * 96) / 508, y: 7 + ((y - 14) * 96) / 636 });
 
 export default function Cameras() {
+  const [params] = useSearchParams();
+  const requestedCameraId = params.get('cameraId') ?? '';
   const [cameras, setCameras] = useState<CameraView[]>([]);
   const [floors, setFloors] = useState<FloorOption[]>([]);
   const [query, setQuery] = useState('');
@@ -55,6 +58,7 @@ export default function Cameras() {
   const [previewEnabled, setPreviewEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [selectionError, setSelectionError] = useState('');
   const [streamLabels, setStreamLabels] = useState<Record<string, string>>({});
   const [registrationOpen, setRegistrationOpen] = useState(false);
   const [connectionEditorOpen, setConnectionEditorOpen] = useState(false);
@@ -66,6 +70,7 @@ export default function Cameras() {
     const load = async () => {
       setLoading(true);
       setLoadError('');
+      setSelectionError('');
       try {
         const stores = await listSupermarkets(controller.signal);
         const floorRecords = (await Promise.all(stores.map((store) => listFloors(store.supermarketId, controller.signal)))).flat();
@@ -75,7 +80,10 @@ export default function Cameras() {
         const loaded = groups.flat();
         setFloors(floorOptions);
         setCameras(loaded);
-        setSelected((current) => loaded.some((camera) => camera.id === current) ? current : loaded[0]?.id ?? null);
+        const requested = loaded.find(camera => camera.id === requestedCameraId);
+        setSelected((current) => requestedCameraId ? requested?.id ?? null : loaded.some((camera) => camera.id === current) ? current : loaded[0]?.id ?? null);
+        if (requested) setFloorFilter(requested.floorId);
+        if (requestedCameraId && !requested) setSelectionError('The requested camera was not found. Choose a camera from the list.');
       } catch (error) {
         if (!controller.signal.aborted) setLoadError(error instanceof Error ? error.message : 'Could not load cameras.');
       } finally {
@@ -84,7 +92,7 @@ export default function Cameras() {
     };
     void load();
     return () => controller.abort();
-  }, []);
+  }, [requestedCameraId]);
 
   const visible = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -102,6 +110,7 @@ export default function Cameras() {
 
   const selectCamera = (cameraId: string) => {
     if (uploadBusy) return;
+    setSelectionError('');
     setUploadOpen(false);
     setPreviewEnabled(false);
     setConnectionEditorOpen(false);
@@ -170,6 +179,7 @@ export default function Cameras() {
 
         {loading && <p className={s.empty}>Loading camera registry…</p>}
         {loadError && <p className={s.errorBanner} role="alert">{loadError}</p>}
+        {selectionError && <p className={s.errorBanner} role="alert">{selectionError}</p>}
         {!loading && !loadError && (
           <div className={s.table} role="table">
             <div className={`${s.row} ${s.head}`} role="row">

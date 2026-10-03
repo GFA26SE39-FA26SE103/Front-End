@@ -2,10 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AdminLayout } from '../components/AdminLayout';
 import { AnnotatedPreview } from '../components/AnnotatedPreview';
+import { Dialog } from '../components/Dialog';
 import { Button, Chip, type Tone } from '../components/ui';
 import { ApiError } from '../api/client';
 import { listFloors, listSupermarkets, listZones, type ZoneRecord } from '../api/floors';
-import { getMonitoring, listIncidentTypes, reviewMonitoring, saveMonitoring, setMonitoringActive, type IncidentType, type MonitoringConfiguration, type MonitoringReview, type MonitoringRule } from '../api/monitoring';
+import { deleteMonitoring, getMonitoring, listIncidentTypes, reviewMonitoring, saveMonitoring, setMonitoringActive, type IncidentType, type MonitoringConfiguration, type MonitoringReview, type MonitoringRule } from '../api/monitoring';
 import s from './AiConfig.module.css';
 import { convertToPeopleCount, measurementMode, modeLabel } from './monitoringRuleMode';
 
@@ -146,6 +147,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   const [rulesMissing, setRulesMissing] = useState(false);
   const [notice, setNotice] = useState('');
   const [loadFailed, setLoadFailed] = useState(false);
+  const [deleting, setDeleting] = useState<MonitoringConfiguration | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const mounted = useRef(true);
   const typeSelect = useRef<HTMLSelectElement>(null);
@@ -224,6 +226,18 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       if (mounted.current) { apply(saved); setReview(null); setNotice(value ? 'Configuration activated. Monitoring worker requested; check live monitoring status to confirm it is running.' : 'Monitoring deactivated. Edit and save a new Draft before reactivation.'); }
     });
   }
+  async function removeConfiguration() {
+    if (!deleting || active || busy) return;
+    const selected = deleting;
+    await operation(async () => {
+      await deleteMonitoring(zoneId, selected);
+      if (mounted.current) {
+        setConfig(null); fillForm(null); setReview(null); setPreviewCameraId(null);
+        setDeleting(null); onChanged(null); closeEditor();
+        setNotice('Configuration deleted. This zone is now not configured.');
+      }
+    });
+  }
   function addRule() {
     if (!selectedType) return;
     setRules(all => [...all, inputRule({ incidentTypeId: selectedType.incidentTypeId, incidentCode: selectedType.code, warningThreshold: selectedType.defaultWarningThreshold ?? 0, criticalThreshold: selectedType.defaultCriticalThreshold ?? 1, thresholdUnit: selectedType.thresholdUnit ?? '', sustainSec: 30, cooldownSec: 300, enabled: selectedType.supported, parametersJson: null })]);
@@ -241,7 +255,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
         {!loading && !loadFailed && <Chip tone={statusTone(config?.status)}>{config?.status ?? 'NOT CONFIGURED'}</Chip>}
       </div>
       {loading && <p className={s.help} role="status">Loading configuration…</p>}
-      {error && <p className={s.alertBox} role="alert">{error}</p>}
+      {error && !deleting && <p className={s.alertBox} role="alert">{error}</p>}
       {notice && <p className={s.saved} role="status">{notice}</p>}
       {loadFailed && <Button variant="secondary" onClick={reloadSaved}>Reload saved configuration</Button>}
 
@@ -254,6 +268,11 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
             <div><dt>Status</dt><dd>{config.status}</dd></div>
             <div><dt>Last saved</dt><dd>{formatTime(config.updatedAt)}</dd></div>
           </dl>
+          <div className={s.activation}>
+            <div><h3>{active ? 'Configuration activated' : 'Configuration activation'}</h3><p>{active ? 'Deactivate before editing or deleting this configuration.' : 'Saving creates a Draft. Review the saved camera, ROI and rules, then activate this configuration.'}</p></div>
+            {!active && <Button disabled={busy} onClick={() => { setReview(null); void operation(async () => { const result = await reviewMonitoring(zoneId); if (mounted.current) { apply(result.configuration); setReview(result); requestAnimationFrame(() => document.getElementById('configuration-review')?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })); } }); }}>Review &amp; activate</Button>}
+            {active && <Button variant="secondary" disabled={busy} onClick={() => void changeActive(false)}>Deactivate configuration</Button>}
+          </div>
           <h3 className={s.section}>Incident rules</h3>
           {config.rules.length ? <div className={s.ruleTable} role="table" aria-label="Incident rules">
             <div role="row" className={s.ruleHeadRow}><span role="columnheader">Incident type</span><span role="columnheader">Warning ≥</span><span role="columnheader">Critical ≥</span><span role="columnheader">Sustain</span><span role="columnheader">Cooldown</span><span role="columnheader">State</span></div>
@@ -268,9 +287,8 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
           </div> : <p className={s.missingBox}>This configuration has no incident rules. Edit it and add at least one rule.</p>}
           <div className={s.actions}>
             <Button disabled={busy || active} onClick={() => { fillForm(config); setReview(null); setPreviewCameraId(null); setError(''); setNotice(''); onOpen(true); }}>Edit configuration</Button>
-            {!active && <Button variant="secondary" disabled={busy} onClick={() => { setReview(null); void operation(async () => { const result = await reviewMonitoring(zoneId); if (mounted.current) { apply(result.configuration); setReview(result); } }); }}>Review &amp; activate</Button>}
-            {active && <Button variant="secondary" disabled={busy} onClick={() => void changeActive(false)}>Deactivate configuration</Button>}
             <Button variant="secondary" disabled={busy} onClick={reloadSaved}>Reload saved configuration</Button>
+            <Button variant="secondary" className={s.deleteButton} disabled={busy || active} onClick={() => { setError(''); setNotice(''); setDeleting(config); }}>Delete configuration</Button>
           </div>
           {active && <p className={s.help}>This configuration is active. Deactivate it before changing confidence or rules.</p>}
         </> : <div className={s.empty}>
@@ -332,7 +350,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       </form>}
     </section>
 
-    {review && !showForm && <section className={s.panel}>
+    {review && !showForm && <section className={`${s.panel} ${s.review}`} id="configuration-review">
       <h2 className={s.title}>Review & activate</h2>
       <p>Zone: {review.zone.name} · Configuration: {review.configuration.name} · {review.configuration.status}</p>
       <p className={s.help}>Saved version: {review.configuration.updatedAt} · Confidence: {review.configuration.confidenceThreshold}</p>
@@ -354,6 +372,12 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       <Button disabled={busy || dirty || active || !review.canActivate} onClick={() => void changeActive(true)}>Activate configuration</Button>
       <p className={s.help}>The backend rechecks source, mapping, ROI and rules at activation. The worker then measures active rules continuously, even with no viewer. Incidents created here remain DETECTED; dispatch is not implemented in this increment.</p>
     </section>}
+    {deleting && <Dialog title="Delete AI configuration?" busy={busy} onClose={() => { setDeleting(null); setError(''); }}>
+      <p className={s.help}>Delete <strong>{deleting.name}</strong> for <strong>{zone.name}</strong> on {floorName}?</p>
+      <p className={s.help}>This permanently removes the configuration and its incident rules. The zone, cameras and ROI mappings are kept.</p>
+      {error && <p className={s.alertBox} role="alert">{error}</p>}
+      <div className={s.actions}><Button variant="secondary" data-autofocus disabled={busy} onClick={() => { setDeleting(null); setError(''); }}>Cancel</Button><Button className={s.confirmDelete} disabled={busy} onClick={() => void removeConfiguration()}>{busy ? 'Deleting…' : 'Delete configuration'}</Button></div>
+    </Dialog>}
   </>;
 }
 

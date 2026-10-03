@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { saveSession } from '../auth/session';
-import { createZone, getFloorMap, uploadFloorMap } from './floors';
+import { createFloor, createZone, getFloorMap, updateFloorDetails, uploadFloorMap } from './floors';
 
 const user = {
   userId: '00000000-0000-0000-0000-000000000001',
@@ -38,6 +38,19 @@ describe('floor API', () => {
     expect(body.get('file')).toBe(file);
     expect(new Headers(init?.headers).get('Content-Type')).toBeNull();
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer jwt-token');
+  });
+
+  it('creates floors without a map and edits metadata without submitting a stale map URL', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ floorId: 'floor-1' }), { headers: { 'Content-Type': 'application/json' } }));
+    await createFloor('store-1', { floorNumber: 1, name: 'Ground floor' });
+    await updateFloorDetails('floor-1', { floorNumber: 0, name: 'Lobby' });
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:5080/api/supermarkets/store-1/floors');
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('POST');
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ floorNumber: 1, name: 'Ground floor', mapAssetUrl: null, mapWidth: null, mapHeight: null });
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:5080/api/floors/floor-1/details');
+    expect(fetchMock.mock.calls[1][1]?.method).toBe('PATCH');
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({ floorNumber: 0, name: 'Lobby' });
+    expect(new Headers(fetchMock.mock.calls[1][1]?.headers).get('Authorization')).toBe('Bearer jwt-token');
   });
 
   it('downloads the authenticated map as a Blob', async () => {

@@ -1,162 +1,145 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { icon as iconUrl } from '../assets/icons';
 import { AdminLayout } from '../components/AdminLayout';
-import { Icon } from '../components/Icon';
-import { Button, Card, Chip, Field, Select, TextInput } from '../components/ui';
-import { cameras as initialCameras, zones, zoneLabel, type Camera, type CameraStatus } from '../data/mock';
-import { setupSteps } from '../data/mockOps';
+import { Button, Chip, type Tone } from '../components/ui';
+import { checkCameraHealth, getSetupOverview, type SetupCamera, type SetupZone, type SetupOverview } from '../api/setup';
 import s from './SetupHealth.module.css';
 
-const statusStyle: Record<CameraStatus, { color: string; dot: string }> = {
-  Online: { color: 'var(--color-success)', dot: 'dot-success-lg' },
-  Degraded: { color: 'var(--color-warning)', dot: 'dot-warning-lg' },
-  Offline: { color: 'var(--color-danger)', dot: 'dot-danger-lg' },
-};
-
-// Where each later setup step is actually done.
-const stepLinks: Record<number, { to: string; text: string; label: string }> = {
-  2: { to: '/admin/store-layout', text: 'Place each camera on the floor plan and draw the area it watches in every zone it covers.', label: 'Open Store layout' },
-  3: { to: '/admin/ai-config', text: 'Check the Warning / Critical thresholds and the incident types the AI should raise.', label: 'Open AI Config' },
-  4: { to: '/admin/routing', text: 'Confirm confidence routing and escalation, then invite Operators, Managers and Staff.', label: 'Open Routing & alerts' },
-};
+const time = (value: string | null) => value ? new Date(value).toLocaleString() : 'No frame received yet';
+const cameraLink = (cameraId: string) => '/admin/cameras?cameraId=' + encodeURIComponent(cameraId);
+const layoutLink = (floorId: string, cameraId?: string) => '/admin/store-layout?floorId=' + encodeURIComponent(floorId) + (cameraId ? '&cameraId=' + encodeURIComponent(cameraId) : '');
+const aiLink = (zoneId: string) => '/admin/ai-config?zoneId=' + encodeURIComponent(zoneId);
+const tone = (status: string): Tone => status === 'ACTIVE' || status === 'ONLINE' ? 'success' : status === 'DRAFT' || status === 'DEGRADED' ? 'warning' : status === 'OFFLINE' ? 'danger' : 'neutral';
+const stepLinks: Record<string, string> = { 'floor-zones': '/admin/store-layout', 'camera-source': '/admin/cameras', 'test-enable': '/admin/cameras', 'mapping-roi': '/admin/store-layout', rules: '/admin/ai-config', activation: '/admin/ai-config' };
 
 export default function SetupHealth() {
-  const [step, setStep] = useState(1); // 0-based: floor setup is done, camera registration is in progress
-  const [cameras, setCameras] = useState<Camera[]>(initialCameras);
-  const [name, setName] = useState(`CAM-${String(initialCameras.length + 1).padStart(2, '0')}`);
-  const [rtsp, setRtsp] = useState('');
-  const [zone, setZone] = useState('C');
+  const [data, setData] = useState<SetupOverview | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(true);
   const [error, setError] = useState('');
-  const [reconnecting, setReconnecting] = useState<string | null>(null);
-  const [active, setActive] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [checking, setChecking] = useState<string | null>(null);
+  const [floorId, setFloorId] = useState('');
+  const [query, setQuery] = useState('');
+  const [attentionOnly, setAttentionOnly] = useState(false);
+  const actionController = useRef<AbortController | null>(null);
 
-  function addCamera() {
-    if (!name.trim()) return setError('Give the camera a name.');
-    if (!/^rtsp:\/\/.+/.test(rtsp)) return setError('Enter a stream address that starts with rtsp://');
-    if (cameras.some((c) => c.code === name.trim())) return setError('A camera with this name already exists.');
-    const z = zones.find((x) => x.id === zone)!;
-    setCameras((all) => [...all, { ...all[0], code: name.trim(), floor: z.floor, zones: [z.id], status: 'Online', stream: rtsp, note: 'New camera', view: 'new camera' }]);
-    setError('');
-    setRtsp('');
-    setName(`CAM-${String(cameras.length + 2).padStart(2, '0')}`);
-    setStep(3);
+  useEffect(() => {
+    let controller: AbortController | null = null;
+    let disposed = false;
+    const refresh = async () => {
+      controller?.abort();
+      controller = new AbortController();
+      const signal = controller.signal;
+      setRefreshing(true);
+      try {
+        const saved = await getSetupOverview(signal);
+        if (disposed || signal.aborted) return;
+        setData(saved); setError('');
+        setFloorId(current => saved.floors.some(f => f.floorId === current) ? current : '');
+      } catch (e) {
+        if (!disposed && !signal.aborted) setError(e instanceof Error ? e.message : 'Could not load setup status.');
+      } finally { if (!disposed && !signal.aborted) setRefreshing(false); }
+    };
+    void refresh();
+    const timer = window.setInterval(() => { if (!document.hidden) void refresh(); }, 30000);
+    return () => { disposed = true; controller?.abort(); window.clearInterval(timer); };
+  }, [refreshKey]);
+  useEffect(() => () => actionController.current?.abort(), []);
+
+  async function check(camera: SetupCamera) {
+    const controller = new AbortController(); actionController.current = controller;
+    setChecking(camera.cameraId); setActionError(''); setNotice('');
+    try {
+      await checkCameraHealth(camera.cameraId, controller.signal);
+      if (controller.signal.aborted) return;
+      setNotice('Health check completed for ' + camera.code + '.'); setRefreshKey(k => k + 1);
+    } catch (e) {
+      if (!controller.signal.aborted) setActionError(e instanceof Error ? e.message : 'Health check failed.');
+    } finally { if (!controller.signal.aborted) setChecking(null); }
   }
 
-  function reconnect(code: string) {
-    setReconnecting(code);
-    // TODO: POST /cameras/{id}/reconnect
-    window.setTimeout(() => {
-      setCameras((all) => all.map((c) => (c.code === code ? { ...c, status: 'Online' } : c)));
-      setReconnecting(null);
-    }, 1000);
-  }
+  const normalized = query.trim().toLowerCase();
+  const match = (value: string) => value.toLowerCase().includes(normalized);
+  const floors = data?.floors.filter(f => !floorId || f.floorId === floorId) ?? [];
+  const zones = floors.flatMap(f => f.zones.filter(z => (!attentionOnly || !z.setupReady) && (!normalized || match(z.code + ' ' + z.name + ' ' + (z.configuration?.name ?? '') + ' ' + f.name))).map(zone => ({ floor: f, zone })));
+  const cameras = data?.cameras.filter(c => (!floorId || c.floorId === floorId) && (!attentionOnly || c.issues.length > 0) && (!normalized || match(c.code + ' ' + c.name + ' ' + c.floorName))).sort((a, b) => Number(b.issues.length > 0) - Number(a.issues.length > 0) || a.code.localeCompare(b.code)) ?? [];
+  const events = data?.healthEvents.filter(e => cameras.some(c => c.cameraId === e.cameraId)) ?? [];
 
-  const online = cameras.filter((c) => c.status === 'Online').length;
-  const shown = cameras.filter((c) => c.status !== 'Online').concat(cameras.filter((c) => c.status === 'Online').slice(0, 2));
-  const floorZones = zones.filter((z) => z.floor === 'F1').slice(0, 3);
-
-  return (
-    <AdminLayout title="System setup" subtitle="Initial configuration · camera & system health">
-      <Card className={s.col}>
-        <div className={s.head}>
-          System setup
-          <Chip tone="primary" pill>{active ? 'MONITORING ACTIVE' : `STEP ${step + 1} / ${setupSteps.length}`}</Chip>
+  return <AdminLayout title="MF-01 setup overview" subtitle="Configuration progress · camera connectivity"
+    actions={<><span className={s.updated}>{data ? 'Fetched ' + time(data.generatedAt) : 'Loading setup status'}</span><Button variant="secondary" disabled={refreshing || checking !== null} onClick={() => setRefreshKey(k => k + 1)}>{refreshing ? 'Refreshing…' : 'Refresh'}</Button></>}>
+    <div className={s.page}>
+      {error && <div className={s.alert} role="alert">{error}{data && <p>Showing the last successful snapshot. Status may have changed.</p>}<Button variant="secondary" disabled={refreshing} onClick={() => setRefreshKey(k => k + 1)}>Retry loading setup</Button></div>}
+      {!data && refreshing && <p role="status">Loading floors, zones, configurations and camera health…</p>}
+      {data && <>
+        {!data.hasDefaultStore && <div className={s.alert} role="alert">The default store seed is missing. Ask the backend team to restore the default store before setting up floors.</div>}
+        <div className={s.stats}>
+          <Stat label="Floor & zone structure" value={data.totals.floorCount + ' floors · ' + data.totals.zoneCount + ' zones'} note="Saved layout in the default store" />
+          <Stat label="Configuration activation" value={data.totals.activeConfigurationCount + ' / ' + data.totals.zoneCount} note={data.totals.readyToActivateCount + ' ready for review · ' + data.totals.configuredZoneCount + ' configured'} />
+          <Stat label="Camera connectivity" value={data.totals.onlineCameraCount + ' / ' + data.totals.enabledCameraCount + ' online'} note={data.totals.cameraCount + ' registered · active cameras with enabled connections'} />
+          <Stat label="Connection alerts" value={String(data.totals.unresolvedHealthEventCount)} note="Open or investigating camera health events" />
         </div>
-        <div className={s.steps}>
-          {setupSteps.map((label, i) => {
-            const done = i < step || active;
-            const current = i === step && !active;
-            return (
-              <button key={label} className={`${s.step} ${done ? s.stepDone : ''} ${current ? s.stepCurrent : ''}`} disabled={!done} onClick={() => setStep(i)}>
-                {done ? <span className={s.doneDot}><Icon name="step-check" size={12} /></span> : <Icon name={current ? 'step-current' : 'step-todo'} size={22} />}
-                <span>{label}</span>
-                {done && <span className={s.stepState} style={{ color: 'var(--color-success)' }}>Done</span>}
-                {current && <span className={s.stepState} style={{ color: 'var(--color-primary)', fontWeight: 600 }}>In progress</span>}
-              </button>
-            );
-          })}
+        <section className={s.panel}>
+          <div className={s.head}><div><h2>Setup progress</h2><p>Counts reflect saved data. Configure each zone independently.</p></div><Link className={s.linkButton} to="/admin/users">Manage accounts</Link></div>
+          <div className={s.steps}>{data.steps.map(step => {
+            const complete = step.total > 0 && step.completed === step.total;
+            return <Link key={step.code} to={stepLinks[step.code] ?? '/admin/ai-config'} className={s.step}>
+              <div className={s.head}><strong>{step.name}</strong><Chip tone={complete ? 'success' : step.completed ? 'warning' : 'neutral'}>{step.completed} / {step.total}</Chip></div>
+              <p>{step.description}</p><span className={s.open}>Open setup →</span>
+            </Link>;
+          })}</div>
+          <p className={s.scope}>ACTIVE means the MF-01 configuration is activated. Continuous AI rule evaluation and incident dispatch belong to MF-02.</p>
+        </section>
+        <div className={s.filters}>
+          <label>Floor<select aria-label="Filter dashboard by floor" value={floorId} onChange={e => setFloorId(e.target.value)}><option value="">All floors</option>{data.floors.map(f => <option key={f.floorId} value={f.floorId}>Floor {f.floorNumber} · {f.name}</option>)}</select></label>
+          <label className={s.search}>Search<input aria-label="Search zones and cameras" value={query} onChange={e => setQuery(e.target.value)} placeholder="Zone, configuration or camera" /></label>
+          <label className={s.check}><input type="checkbox" checked={attentionOnly} onChange={e => setAttentionOnly(e.target.checked)} />Needs attention only</label>
         </div>
+        <section className={s.panel}>
+          <div className={s.head}><div><h2>Zone configurations</h2><p>View saved rules, missing requirements and configuration status.</p></div><Link className={s.linkButton} to="/admin/ai-config">Open AI Config</Link></div>
+          {!data.floors.length ? <p className={s.empty}>No floors yet. <Link to="/admin/store-layout">Open Store layout</Link> to begin floor and zone setup.</p> : !zones.length ? <p className={s.empty}>No zones match these filters.{!data.totals.zoneCount && <> <Link to="/admin/store-layout">Add zones in Store layout</Link>.</>}</p> :
+            <div className={s.tableWrap}><table aria-label="Zone configurations"><thead><tr><th>Floor / Zone</th><th>Configuration</th><th>Activation</th><th>Readiness</th><th>Actions</th></tr></thead><tbody>
+              {zones.map(({ floor, zone }) => <tr key={zone.zoneId}>
+                <td><span className={s.muted}>Floor {floor.floorNumber} · {floor.name}</span><strong>{zone.name}</strong><span className={s.muted}>{zone.code} · Zone {zone.status}</span></td>
+                <td><strong>{zone.configuration?.name ?? 'Not configured'}</strong><span className={s.muted}>{zone.configuration ? zone.configuration.ruleCount + ' rules · ' + zone.configuration.enabledRuleCount + ' enabled' : 'No saved incident rules'}</span></td>
+                <td><Chip tone={tone(zone.configuration?.status ?? '')}>{zone.configuration?.status ?? 'NOT CONFIGURED'}</Chip></td>
+                <td><strong className={zone.setupReady ? s.ready : s.needs}>{zone.setupReady ? (zone.canActivate ? 'Ready for review' : 'Setup valid') : 'Needs setup'}</strong><Requirements zone={zone} /></td>
+                <td><div className={s.rowActions}><Link className={s.linkButton} to={aiLink(zone.zoneId)}>{zone.canActivate ? 'Review configuration' : zone.configuration ? 'View configuration' : 'Configure zone'}</Link><Link to={layoutLink(floor.floorId, zone.cameras[0]?.cameraId)}>Layout & ROI</Link></div></td>
+              </tr>)}
+            </tbody></table></div>}
+          {floors.filter(f => !f.hasMap || !f.zones.length).map(f => <p className={s.layoutIssue} key={f.floorId}>Floor {f.floorNumber} · {f.name}: {!f.hasMap ? 'floor map missing' : 'map saved'}{!f.zones.length ? ' · no zones' : ''}. <Link to={layoutLink(f.floorId)}>Complete layout</Link></p>)}
+        </section>
+        <section className={s.panel}>
+          <div className={s.head}><div><h2>Camera connectivity</h2><p>Saved health and last received frame. Refresh reads status; Check health probes an enabled connection.</p></div><Link className={s.linkButton} to="/admin/cameras">Manage cameras</Link></div>
+          {actionError && <p className={s.alert} role="alert">{actionError}</p>}
+          {notice && <p className={s.ready} role="status">{notice}</p>}
+          {!cameras.length ? <p className={s.empty}>{data.totals.cameraCount ? 'No cameras match these filters.' : 'No cameras registered yet.'}</p> :
+            <div className={s.tableWrap}><table aria-label="Camera connectivity"><thead><tr><th>Camera</th><th>Source / connection</th><th>Health</th><th>Last frame received</th><th>Needs attention</th><th>Actions</th></tr></thead><tbody>
+              {cameras.map(c => <tr key={c.cameraId}>
+                <td><strong>{c.code}</strong><span>{c.name}</span><span className={s.muted}>{c.floorName} · {c.status}</span></td>
+                <td><span>{c.sourceType ? c.sourceType + ' / ' + c.protocol : 'Not configured'}</span><Chip tone={c.isEnabled ? 'primary' : 'neutral'}>{c.isEnabled ? 'Enabled' : 'Disabled'}</Chip><span className={s.muted}>Test: {c.lastTestResult ?? 'Not tested'}</span></td>
+                <td><Chip tone={c.isEnabled && c.status === 'ACTIVE' ? tone(c.healthStatus) : 'neutral'}>{c.healthStatus}</Chip>{(!c.isEnabled || c.status !== 'ACTIVE') && <span className={s.muted}>Health checks paused</span>}</td>
+                <td>{time(c.lastSeenAt)}</td>
+                <td>{c.issues.length ? <ul className={s.issues}>{c.issues.map(i => <li key={i.code}>{i.message}</li>)}</ul> : <span className={s.muted}>No saved setup issues</span>}</td>
+                <td><div className={s.rowActions}><Link className={s.linkButton} to={cameraLink(c.cameraId)}>Manage {c.code}</Link><Button variant="secondary" disabled={!c.isEnabled || c.status !== 'ACTIVE' || checking !== null} onClick={() => void check(c)}>{checking === c.cameraId ? 'Checking…' : 'Check health'}</Button></div></td>
+              </tr>)}
+            </tbody></table></div>}
+          {!!events.length && <div className={s.events}><h3>Unresolved connection alerts</h3>{events.map(e => <div key={e.healthEventId}><strong>{e.cameraCode}</strong><Chip tone={e.status === 'OPEN' ? 'danger' : 'warning'}>{e.status}</Chip><span>{e.eventType.replaceAll('_', ' ')} · {time(e.detectedAt)}</span><Link to={cameraLink(e.cameraId)}>Investigate camera →</Link></div>)}</div>}
+          <p className={s.scope}>Camera health events track connectivity. Recorded-file health reports frame readability; it does not report AI playback or GPU status.</p>
+        </section>
+      </>}
+    </div>
+  </AdminLayout>;
+}
 
-        {!active && (
-          <div className={s.form}>
-            <p className={s.formTitle}>Step {step + 1} · {step === 1 ? 'Register cameras' : setupSteps[step]}</p>
-            {step === 1 ? (
-              <>
-                <Field label="Camera name"><TextInput value={name} onChange={setName} /></Field>
-                <Field label="RTSP URL"><TextInput value={rtsp} onChange={(v) => { setRtsp(v); setError(''); }} /></Field>
-                <Field label="Assign to zone">
-                  <Select value={zone} onChange={setZone} chevron="chevron-down-muted" options={zones.map((z) => ({ value: z.id, label: zoneLabel(z) }))} />
-                </Field>
-                <p className={s.formText} style={{ fontSize: 10.5 }}>Add more zones for this camera later in Store layout if it covers several.</p>
-                {error && <p className={s.error} role="alert">{error}</p>}
-              </>
-            ) : step < 1 ? (
-              <p className={s.formText}>This step is complete. The floor plan for Floor 1 was uploaded on 24/09.</p>
-            ) : step === 5 ? (
-              <p className={s.formText}>Everything is configured. Activating starts AI monitoring on every online camera; incidents will reach Operators and on-shift staff.</p>
-            ) : (
-              <p className={s.formText}>{stepLinks[step].text} <Link to={stepLinks[step].to} style={{ color: 'var(--color-primary)', fontWeight: 600 }}>{stepLinks[step].label} →</Link></p>
-            )}
-            <div className={s.formActions}>
-              <Button variant="secondary" disabled={step === 0} onClick={() => setStep((v) => Math.max(0, v - 1))} style={{ height: 34, padding: '0 16px', fontSize: 12 }}>Back</Button>
-              {step === 1 ? (
-                <Button icon="arrow-right-white" onClick={addCamera} style={{ height: 34, padding: '0 16px', fontSize: 12, flexDirection: 'row-reverse' }}>Add &amp; continue</Button>
-              ) : step === 5 ? (
-                <Button onClick={() => setActive(true)} style={{ height: 34, padding: '0 16px', fontSize: 12 }}>Activate monitoring</Button>
-              ) : (
-                <Button icon="arrow-right-white" onClick={() => setStep((v) => v + 1)} style={{ height: 34, padding: '0 16px', fontSize: 12, flexDirection: 'row-reverse' }}>Continue</Button>
-              )}
-            </div>
-          </div>
-        )}
-        {active && <p className={s.formText} role="status" style={{ color: 'var(--color-success)', fontWeight: 500 }}>Monitoring is active on {online} cameras.</p>}
-      </Card>
-
-      <Card className={s.col}>
-        <div className={s.head}>
-          Camera &amp; system health
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-success)' }}>
-            <Icon name="dot-success-lg" size={8} />{online} / {cameras.length} online
-          </span>
-        </div>
-
-        <div className={s.mini} aria-label="Floor 1 overview">
-          {[
-            { z: floorZones[0], box: { left: 16, top: 16, width: 223, height: 100 } },
-            { z: floorZones[1], box: { left: 265.5, top: 16, width: 244, height: 84 } },
-            { z: floorZones[2], box: { left: 16, top: 128, width: 372, height: 76 } },
-          ].map(({ z, box }) => {
-            const bad = cameras.some((c) => c.zones.includes(z.id) && c.status === 'Offline');
-            const warn = cameras.some((c) => c.zones.includes(z.id) && c.status === 'Degraded');
-            const tone = bad ? 'danger' : warn ? 'warning' : 'success';
-            return <div key={z.id} className={s.miniZone} style={{ ...box, background: `var(--color-${tone}-tint)`, borderColor: `var(--color-${tone})` }}>Zone {z.id}</div>;
-          })}
-          <img className={s.miniCam} src={iconUrl('mini-camera-success')} width={18} height={18} alt="" style={{ left: 132.75, top: 62 }} />
-          <img className={s.miniCam} src={iconUrl(cameras.find((c) => c.code === 'CAM-05')?.status === 'Online' ? 'mini-camera-success' : 'mini-camera-warning')} width={18} height={18} alt="" style={{ left: 329.22, top: 48 }} />
-          <img className={s.miniCam} src={iconUrl('mini-camera-success')} width={18} height={18} alt="" style={{ left: 451.35, top: 60 }} />
-          <img className={s.miniCam} src={iconUrl(cameras.find((c) => c.code === 'CAM-07')?.status === 'Online' ? 'mini-camera-success' : 'mini-camera-danger')} width={18} height={18} alt="" style={{ left: 212.4, top: 160 }} />
-          <img className={s.miniCam} src={iconUrl('mini-camera-success')} width={18} height={18} alt="" style={{ left: 79.65, top: 160 }} />
-        </div>
-
-        <div role="table">
-          <div className={`${s.row} ${s.th}`} role="row"><span>CAMERA</span><span>ZONE</span><span>STATUS</span><span>UPTIME</span><span /></div>
-          {shown.map((c) => (
-            <div key={c.code} className={s.row} role="row">
-              <span className={s.cam}><Icon name="camera-row-muted" size={14} />{c.code}</span>
-              <span style={{ color: 'var(--color-text-muted)' }}>{c.zones.map((z) => `Zone ${z}`).join(', ')}</span>
-              <span className={s.status} style={{ color: statusStyle[c.status].color }}><Icon name={statusStyle[c.status].dot} size={8} />{c.status}</span>
-              <span style={{ fontWeight: 500 }}>{c.status === 'Offline' ? '—' : c.status === 'Degraded' ? '91.2%' : '99.8%'}</span>
-              {c.status !== 'Online' ? (
-                <button className={s.reconnect} onClick={() => reconnect(c.code)} disabled={reconnecting === c.code}>
-                  <Icon name="refresh-primary" size={14} />{reconnecting === c.code ? 'Reconnecting…' : 'Reconnect'}
-                </button>
-              ) : <span />}
-            </div>
-          ))}
-        </div>
-      </Card>
-    </AdminLayout>
-  );
+function Stat({ label, value, note }: { label: string; value: string; note: string }) {
+  return <section className={s.stat} aria-label={label}><p>{label}</p><strong>{value}</strong><span>{note}</span></section>;
+}
+function Requirements({ zone }: { zone: SetupZone }) {
+  const cameraIssues = zone.setupReady ? [] : zone.cameras.flatMap(c => c.issues.map(i => ({ code: c.cameraId + i.code, message: c.code + ': ' + i.message })));
+  const issues = [...zone.issues, ...cameraIssues];
+  return <>{issues.length > 0 && <details className={s.requirements}><summary>{issues.length} missing {issues.length === 1 ? 'requirement' : 'requirements'}</summary><ul>{issues.map((i, n) => <li key={i.code + n}>{i.message}</li>)}</ul></details>}
+    {!!zone.warnings.length && <details className={s.requirements}><summary>Setup notes</summary><ul>{zone.warnings.map(w => <li key={w}>{w}</li>)}</ul></details>}</>;
 }
 

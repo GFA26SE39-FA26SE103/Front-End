@@ -3,6 +3,8 @@ import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AiConfig from './AiConfig';
 import { saveSession } from '../auth/session';
+import { mockNativeDialogs } from '../test/dialog';
+mockNativeDialogs();
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const zone = { zoneId: 'zone-1', floorId: 'floor-1', code: 'QUEUE', name: 'Actual queue zone', zoneType: 'QUEUE', mapPolygon: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }], colorHex: '#123456', areaM2: 10, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z' };
@@ -11,6 +13,7 @@ const savedConfig = (status = 'DRAFT') => ({ configId: 'config-1', zoneId: 'zone
 let config: Record<string, unknown> | null;
 let writes: { path: string; method: string; body: Record<string, unknown>; bearer: string | null }[];
 let failSave: boolean;
+let failDelete: boolean;
 let ready: boolean;
 let failLoad: boolean;
 let multipleFloors: boolean;
@@ -24,6 +27,7 @@ async function saveRule() { fireEvent.click(screen.getByRole('button', { name: '
 
 describe('API-backed monitoring configuration', () => {
   beforeEach(() => {
+    failDelete = false;
     config = null; writes = []; requests = []; failSave = false; ready = true; failLoad = false; multipleFloors = false; crowdCatalog = false;
     URL.createObjectURL = vi.fn(() => 'blob:zone-confidence'); URL.revokeObjectURL = vi.fn();
     saveSession({ accessToken: 'admin-token', expiresAt: '2099-01-01T00:00:00Z', user: { userId: 'admin', email: 'admin@example.test', fullName: 'Admin', roleId: 'role', role: 'ADMIN', status: 'ACTIVE' } }, true);
@@ -45,6 +49,10 @@ describe('API-backed monitoring configuration', () => {
       if (path.endsWith('/activate')) { config = { ...config, status: 'ACTIVE' }; return json(config); }
       if (path.endsWith('/deactivate')) { config = { ...config, status: 'INACTIVE' }; return json(config); }
       if (path.endsWith('/monitoring')) {
+        if (method === 'DELETE') {
+          if (failDelete) return json({ code: 'CONFIGURATION_CHANGED', detail: 'Configuration changed; reload before deleting.' }, 409);
+          config = null; return new Response(null, { status: 204 });
+        }
         if (method === 'GET' && failLoad) return json({ code: 'DATABASE_UNAVAILABLE', detail: 'Configuration could not be loaded.' }, 503);
         if (method === 'PUT') {
           if (failSave) return json({ code: 'DATABASE_CONFLICT', detail: 'Save failed; retry.' }, 409);
@@ -103,6 +111,46 @@ describe('API-backed monitoring configuration', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('parameters');
     expect(writes).toHaveLength(0);
     expect(screen.getByLabelText('Overcrowding / Congestion unit')).toHaveValue('people/m²');
+  });
+
+  it('cancels deletion without writing, then deletes the displayed saved version and updates the overview', async () => {
+    config = savedConfig(); show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete configuration' }));
+    let dialog = screen.getByRole('dialog', { name: 'Delete AI configuration?' });
+    expect(dialog).toHaveTextContent('Queue monitoring'); expect(dialog).toHaveTextContent('Actual queue zone');
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(writes).toHaveLength(0); expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete configuration' }));
+    dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete configuration' }));
+    await screen.findByText('Configuration deleted. This zone is now not configured.');
+    expect(screen.getByRole('button', { name: 'Create configuration' })).toBeInTheDocument();
+    expect(writes).toEqual([{ path: '/api/zones/zone-1/monitoring', method: 'DELETE', body: { configId: 'config-1', expectedUpdatedAt: '2026-10-03T01:00:00Z' }, bearer: 'Bearer admin-token' }]);
+    fireEvent.click(screen.getByRole('button', { name: '‹ All zones' }));
+    expect(await screen.findByText('Not configured')).toBeInTheDocument();
+  });
+
+  it('keeps the saved configuration when deletion fails and allows reload after cancellation', async () => {
+    config = savedConfig(); failDelete = true; show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete configuration' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete configuration' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Configuration changed; reload before deleting.');
+    expect(screen.queryByText('Configuration deleted. This zone is now not configured.')).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByText('Queue monitoring')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('requires deactivation before deleting and exposes activation as an explicit next step', async () => {
+    config = savedConfig('ACTIVE'); show();
+    expect(await screen.findByRole('button', { name: 'Delete configuration' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Deactivate configuration' }));
+    await screen.findByRole('heading', { name: 'Configuration activation' });
+    expect(screen.getByRole('button', { name: 'Review & activate' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Delete configuration' })).toBeEnabled();
+    expect(writes.filter(r => r.method === 'DELETE')).toHaveLength(0);
   });
 
   it('opens read-only detail, then Edit and Cancel discard input without an API write', async () => {
