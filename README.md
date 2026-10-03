@@ -132,6 +132,7 @@ Set `VITE_API_URL` to the backend origin (default `http://localhost:5080`). Stor
 - loads supermarkets, floors, zones and cameras from the ADMIN APIs;
 - uploads/replaces PNG, JPEG or PDF floor plans up to 20 MB;
 - downloads the protected map with the bearer token and renders PDFs with `pdfjs-dist`;
+- supports the backend's Local/Cloudinary storage choice through the same map API; floor-plan requests allow longer cloud operations (upload 300s, download 150s), and navigating away still cancels a pending download;
 - renders each camera as a draggable/keyboard-accessible body, muzzle and field-of-view sprite;
 - keeps screen coordinates normalized and persists `mapX`, `mapY` and `mapRotationDeg` only after **Save placement**;
 - provides a draggable zone-editor toolbar with unified select/move/vertex-resize editing, centered zone labels, rectangle drag, point-by-point polygon drawing, colors, undo and save;
@@ -139,6 +140,8 @@ Set `VITE_API_URL` to the backend origin (default `http://localhost:5080`). Stor
 - sends the complete camera PATCH DTO so metadata is not erased, and preserves unsaved edits after a failed save.
 
 Camera creation/connection remains a separate flow. Placement saving does not test, enable, or start monitoring.
+
+Cloudinary timeout compatibility verification (2026-10-03): **29 focused tests in 3 files passed**, build/lint passed. A controlled fake-clock request verifies a slow floor-plan upload and explicit cancellation of a map download. Cloudinary credentials and provider configuration belong to the backend; the frontend continues to use authenticated map APIs and receives no secret or signed cloud URL. Actual cloud-account acceptance awaits backend credential setup.
 
 ## Notes
 
