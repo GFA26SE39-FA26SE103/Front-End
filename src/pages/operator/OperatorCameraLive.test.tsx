@@ -7,8 +7,11 @@ import { getFloorMap, listFloors, listSupermarkets, listZones } from '../../api/
 import OperatorCameraLive from './OperatorCameraLive';
 
 vi.mock('../../components/AnnotatedPreview', () => ({
-  AnnotatedPreview: ({ cameraId, enabled }: { cameraId: string; enabled: boolean }) => (
-    <div data-testid="annotated-preview">{cameraId}:{enabled ? 'on' : 'off'}</div>
+  AnnotatedPreview: ({ cameraId, enabled, regions = [] }: { cameraId: string; enabled: boolean; regions?: { label: string; color: string }[] }) => (
+    <div data-testid="annotated-preview">
+      {cameraId}:{enabled ? 'on' : 'off'}
+      {regions.map((region) => <span key={region.label} data-testid="roi-region">{region.label} {region.color}</span>)}
+    </div>
   ),
 }));
 
@@ -93,6 +96,19 @@ describe('OperatorCameraLive', () => {
     const zoneRows = screen.getAllByText(/Checkout|Aisles/);
     expect(zoneRows.length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText('Fresh food')).not.toBeInTheDocument();
+  });
+
+  it('passes the camera ROIs to the live preview', async () => {
+    const roi = [{ x: 0.1, y: 0.1 }, { x: 0.6, y: 0.1 }, { x: 0.6, y: 0.7 }];
+    vi.mocked(listZones).mockResolvedValue([{ ...zone('zone-b', 'Checkout'), colorHex: '#F97316' }, zone('zone-c', 'Aisles')]);
+    vi.mocked(listCameraMappings).mockResolvedValue([
+      { cameraZoneId: 'm1', cameraId: 'cam-3', zoneId: 'zone-b', roiPolygon: roi, status: 'ACTIVE' },
+      { cameraZoneId: 'm2', cameraId: 'cam-3', zoneId: 'zone-c', roiPolygon: roi, status: 'ACTIVE' },
+    ]);
+    renderPage();
+
+    const regions = await screen.findAllByTestId('roi-region');
+    expect(regions.map((region) => region.textContent)).toEqual(['Checkout #F97316', 'Aisles #3B82F6']);
   });
 
   it('lists every camera on the floor and switches to another one', async () => {

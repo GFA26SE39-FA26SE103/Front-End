@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import type { ZoneRecord } from '../api/floors';
 import { clampNormalized, clientToNormalized, normalizeRotation, type NormalizedPosition } from './floorPlanGeometry';
-import { ZoneEditorOverlay, type ZoneEditorSave } from './ZoneEditorOverlay';
+import { ZoneEditorOverlay, ZoneLayer, type ZoneEditorSave } from './ZoneEditorOverlay';
 import s from './FloorPlanSurface.module.css';
 
 export type CameraPlacement = {
@@ -23,6 +23,8 @@ export type FloorPlanSurfaceProps = {
   dirtyCameraIds?: ReadonlySet<string>;
   onSelectCamera: (cameraId: string) => void;
   onChangePlacement: (cameraId: string, placement: PlacementChange) => void;
+  /** Zones shown read-only under the cameras whenever the zone editor is closed. */
+  zones?: ZoneRecord[];
   zoneEditor?: {
     zones: ZoneRecord[];
     saving: boolean;
@@ -46,6 +48,7 @@ export function FloorPlanSurface({
   dirtyCameraIds = new Set<string>(),
   onSelectCamera,
   onChangePlacement,
+  zones = [],
   zoneEditor,
 }: FloorPlanSurfaceProps) {
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -105,6 +108,7 @@ export function FloorPlanSurface({
         {mapContentType === 'application/pdf'
           ? <PdfPage url={mapUrl} />
           : <img className={s.map} src={mapUrl} alt="Uploaded floor plan" draggable={false} />}
+        {!zoneEditor && zones.length > 0 && <ZoneLayer zones={zones} />}
         <div className={s.overlay}>
           {cameras.map((camera) => {
             const position = cameraPosition(camera);

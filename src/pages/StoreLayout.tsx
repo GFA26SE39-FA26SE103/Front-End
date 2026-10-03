@@ -385,6 +385,7 @@ export default function StoreLayout() {
               dirtyCameraIds={dirtyCameraIds}
               onSelectCamera={setSelectedCameraId}
               onChangePlacement={changePlacement}
+              zones={zones}
               zoneEditor={zoneEditing ? { zones, saving: zoneSaving, onSave: saveZone, onCancel: () => setZoneEditing(false) } : undefined}
             />
           ) : mapState.status === 'loading' || (mapState.status === 'idle' && Boolean(selectedFloor?.mapAssetUrl)) ? (
