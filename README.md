@@ -17,6 +17,7 @@ npm install
 npm run dev      # http://localhost:5173
 npm run build    # type-check + production build
 npm run lint
+npm test -- --run
 ```
 
 ## Screens (Main flow 1 — Admin setup)
@@ -37,11 +38,34 @@ npm run lint
 | `/admin/audit-logs` | Audit events, filters, details, CSV / JSON export | Admin — Audit log |
 | `/admin/system-health` | Services, performance, alerts, incident pipeline | Admin — System health |
 
-### Demo sign-in rules (mock, `src/data/mockAuth.ts`)
+## Current integration status (2026-10-02)
 
-- Any email with `@` and any password signs in and opens the admin dashboard.
-- Password `wrong` → "Email or password is incorrect"; 5 wrong attempts lock sign-in for 15 minutes.
-- Email containing `suspended` → account suspended; email containing `error` → unable to sign in.
+Login uses the backend JWT API, not the old mock credentials. Set `VITE_API_URL=http://localhost:5080` in a local `.env` (also the default). Sign in with an existing backend ADMIN account. Requests attach the bearer token; a 401 clears the session.
+
+| MF-01 step | Current implementation | Remaining work |
+| --- | --- | --- |
+| Store / floor / zone | Backend CRUD exists; Store Layout/dashboard use sample data | Wire real CRUD and floor-plan assets to React |
+| Register & configure camera | Real registry, creation, live HTTP configuration and MP4 upload | Other live protocols are backend capabilities, not options in this form |
+| Test & preview | Real test/enable and annotated YOLO + ByteTrack frames in React | Preview is a controlled test, not monitoring activation |
+| Map camera to zone | Backend same-floor N:M mapping and normalized camera-frame ROI; Cameras lists saved mappings | Real zone selection and ROI drawing/saving; mini floor plan still uses sample geometry |
+| Configure monitoring rule | Basic per-zone MonitoringConfiguration in BE; AI Config/Incident Types remain mock | ERD v3 rule persistence, warning/critical, units, sustain/cooldown and readiness validation |
+| Activate & health | BE activation status and camera-health worker | Dashboard Activate changes local state only; connect readiness checks and continuous monitoring runtime |
+
+Forgot/reset-password and other operational screens remain prototypes unless separately integrated. Local UI state is not evidence of saved backend configuration.
+
+## Test AI with uploaded video (no phone required)
+
+Start native AI, ASP.NET and React; see backend/AI-service READMEs. Backend needs FFmpeg. Backend and native AI must share the recorded-video directory on the same machine.
+
+1. Ensure a store and floor exist in the backend (create through Swagger if needed; mock Store Layout does not save them).
+2. **Cameras → Add camera → Uploaded video (test source)**, fill floor/code/name/dates, then **Save camera**. No phone URL is required. Or select an existing ACTIVE camera → **Upload video**.
+3. Choose a non-empty MP4, maximum 200 MB → **Save video source**. Backend validates/decode-checks it and configures RECORDED/FILE. Old AI session is stopped; credentials/test/enabled flag are reset. Deactivate monitoring first if this camera is mapped to an ACTIVE configuration.
+4. **Test & enable → Start AI preview**. React displays person boxes and camera-local ByteTrack IDs. Only the newest annotated JPEG is polled; not every processed frame is displayed.
+5. At EOF, **Video completed** appears and the final frame remains. **Stop AI preview → Start AI preview** replays with a fresh tracker. Switching cameras/leaving stops the old preview.
+
+Upload replaces the source, not camera identity or zone mappings. Review the ROI if the scene changes. Restore live input with **Configure connection**, then test again. Upload is a controlled fallback/demo, not incident creation or full MF-01 completion.
+
+API: `POST /api/cameras/{cameraId}/recorded-video`, multipart `file`, ADMIN JWT. Browser sets the multipart boundary; React never calls Python or the phone directly.
 
 ## Structure
 
@@ -60,5 +84,5 @@ src/
 
 ## Notes
 
-- All data is mock data kept in component state; nothing is saved yet. Places that need an API call are marked `TODO`.
+- Camera/auth integration is real; other screens still contain sample data/local-only actions as detailed above. Model confidence is an input filter, not an incident severity/routing threshold; legacy Routing mock does not represent current AGENTS.md rules.
 - Only the Light theme is wired. Dark colour tokens exist (`[data-theme='dark']`), but the Figma icons are exported in light-theme colours, so dark mode needs dark icon variants first.

@@ -80,7 +80,13 @@ export type CameraConnection = {
   lastTestMessage: string | null;
 };
 
-export type AiPreviewState = 'STOPPED' | 'STARTING' | 'LIVE' | 'RECONNECTING' | 'ERROR';
+export type AiPreviewState = 'STOPPED' | 'STARTING' | 'LIVE' | 'RECONNECTING' | 'ERROR' | 'COMPLETED';
+
+export const uploadRecordedVideo = (cameraId: string, file: File) => {
+  const body = new FormData();
+  body.append('file', file);
+  return apiFetch<{ cameraId: string; sourceType: 'RECORDED'; protocol: 'FILE' }>(`/api/cameras/${cameraId}/recorded-video`, { method: 'POST', body });
+};
 
 export type AiPreviewStatus = {
   cameraId: string;
