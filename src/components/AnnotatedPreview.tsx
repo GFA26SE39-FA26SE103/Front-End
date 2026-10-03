@@ -6,6 +6,7 @@ import {
   startAiPreview,
   stopAiPreview,
   type AiPreviewState,
+  type AiPreviewStatus,
   type MapPoint,
 } from '../api/cameras';
 import s from './AnnotatedPreview.module.css';
@@ -28,11 +29,12 @@ export type AnnotatedPreviewProps = {
   regions?: PreviewRegion[];
 };
 
-export function AnnotatedPreview({ cameraId, enabled, pollInterval = 250, zoneId, regions = [] }: AnnotatedPreviewProps) {
+export function AnnotatedPreview({ cameraId, enabled, pollInterval = 0, zoneId, regions = [] }: AnnotatedPreviewProps) {
   const [viewState, setViewState] = useState<ViewState>('idle');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [frameSize, setFrameSize] = useState<{ width: number; height: number } | null>(null);
   const imageUrlRef = useRef<string | null>(null);
+  const staleUrlsRef = useRef<string[]>([]);
   const stopChainRef = useRef<Promise<void>>(Promise.resolve());
   const [purpose, setPurpose] = useState('PREVIEW');
   const [annotationContext, setAnnotationContext] = useState<string | null>(null);
@@ -43,6 +45,11 @@ export function AnnotatedPreview({ cameraId, enabled, pollInterval = 250, zoneId
     let active = true;
     let timer: number | undefined;
     let failures = 0;
+    let lastSequence = 0;
+    let lastSessionId: string | null = null;
+    let currentStatus: AiPreviewStatus | null = null;
+    let lastStatusAt = 0;
+    const pendingRevoke = staleUrlsRef.current;
     const controller = new AbortController();
     const precedingStop = stopChainRef.current;
     let monitoringAttached = false;
@@ -58,50 +65,82 @@ export function AnnotatedPreview({ cameraId, enabled, pollInterval = 250, zoneId
 
     const replaceImage = (blob: Blob) => {
       const next = URL.createObjectURL(blob);
-      if (imageUrlRef.current) URL.revokeObjectURL(imageUrlRef.current);
+      if (imageUrlRef.current) pendingRevoke.push(imageUrlRef.current);
+      while (pendingRevoke.length > 8) URL.revokeObjectURL(pendingRevoke.shift()!);
       imageUrlRef.current = next;
       setImageUrl(next);
       setViewState('live');
     };
 
-    const schedule = () => {
-      if (active) timer = window.setTimeout(poll, pollInterval);
+    const schedule = (delay = pollInterval) => {
+      if (active) timer = window.setTimeout(poll, Math.max(0, delay));
     };
 
     const poll = async () => {
       try {
-        const current = await getAiPreviewStatus(cameraId, controller.signal);
+        if (!currentStatus || Date.now() - lastStatusAt >= 1000) {
+          currentStatus = await getAiPreviewStatus(cameraId, controller.signal);
+          lastStatusAt = Date.now();
+        }
+        const current = currentStatus;
         if (!active) return;
+        if (current.sessionId && current.sessionId !== lastSessionId) {
+          lastSessionId = current.sessionId;
+          lastSequence = 0;
+        }
         if (current.purpose === 'MONITORING') { monitoringAttached = true; setPurpose('MONITORING'); }
         if (current.annotationContext) setAnnotationContext(current.annotationContext);
         if (current.state === 'STOPPED' && monitoringAttached) {
-          setViewState('starting'); schedule(); return;
+          setViewState('starting'); lastStatusAt = 0; schedule(100); return;
         }
         setViewState(statusView(current.state));
         if (current.state === 'ERROR' || current.state === 'STOPPED') {
           if (imageUrlRef.current) URL.revokeObjectURL(imageUrlRef.current);
+          pendingRevoke.splice(0).forEach((url) => URL.revokeObjectURL(url));
           imageUrlRef.current = null;
           setImageUrl(null);
           return;
         }
         if (current.state === 'LIVE' || current.state === 'COMPLETED') {
           try {
-            const blob = await getAiPreviewFrame(cameraId, controller.signal);
+            const frame = await getAiPreviewFrame(cameraId, controller.signal, lastSequence, lastSessionId);
             if (!active || controller.signal.aborted) return;
-            replaceImage(blob);
+            const freshFrame = frame && (frame.sessionId !== lastSessionId || frame.frameSequence > lastSequence);
+            if (freshFrame) {
+              lastSequence = frame.frameSequence;
+              lastSessionId = frame.sessionId;
+              replaceImage(frame.blob);
+            }
             if (current.state === 'COMPLETED') {
               setViewState('completed');
               return;
             }
             failures = 0;
+            if (!freshFrame) {
+              lastStatusAt = 0;
+              schedule(100);
+              return;
+            }
           } catch (error) {
             if (!active || controller.signal.aborted) return;
             if (error instanceof ApiError && error.code === 'AI_FRAME_NOT_READY') {
               setViewState('waiting');
+              lastStatusAt = 0;
+              schedule(100);
+              return;
+            } else if (error instanceof ApiError && error.code === 'AI_PREVIEW_NOT_RUNNING') {
+              setViewState('starting');
+              currentStatus = null;
+              schedule(100);
+              return;
             } else {
               throw error;
             }
           }
+        } else {
+          lastStatusAt = 0;
+          schedule(100);
+          return;
         }
         schedule();
       } catch (error) {
@@ -141,6 +180,7 @@ export function AnnotatedPreview({ cameraId, enabled, pollInterval = 250, zoneId
         URL.revokeObjectURL(imageUrlRef.current);
         imageUrlRef.current = null;
       }
+      pendingRevoke.splice(0).forEach((url) => URL.revokeObjectURL(url));
       stopChainRef.current = startPromise
         .catch(() => undefined)
         .then(async () => {
@@ -162,6 +202,7 @@ export function AnnotatedPreview({ cameraId, enabled, pollInterval = 250, zoneId
           src={imageUrl}
           alt="Tracked preview for camera"
           onLoad={(event) => {
+            staleUrlsRef.current.splice(0).forEach((url) => URL.revokeObjectURL(url));
             const { naturalWidth: width, naturalHeight: height } = event.currentTarget;
             if (width > 0 && height > 0) setFrameSize((current) => (current?.width === width && current.height === height ? current : { width, height }));
           }}

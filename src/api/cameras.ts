@@ -144,8 +144,13 @@ export const startAiPreview = (cameraId: string, signal?: AbortSignal, zoneId?: 
 export const getAiPreviewStatus = (cameraId: string, signal?: AbortSignal) =>
   apiFetch<AiPreviewStatus>(`/api/cameras/${cameraId}/ai-preview/status`, { signal });
 
-export const getAiPreviewFrame = (cameraId: string, signal?: AbortSignal) =>
-  apiFetch<Blob>(`/api/cameras/${cameraId}/ai-preview/frame`, { signal, responseType: 'blob' });
+export type SequencedAiFrame = { blob: Blob; frameSequence: number; sessionId: string };
+
+export const getAiPreviewFrame = async (cameraId: string, signal?: AbortSignal, afterSequence = 0, afterSessionId: string | null = null): Promise<SequencedAiFrame | null> => {
+  const query = new URLSearchParams({ afterSequence: String(afterSequence) });
+  if (afterSessionId) query.set('afterSessionId', afterSessionId);
+  return (await apiFetch<SequencedAiFrame | undefined>(`/api/cameras/${cameraId}/ai-preview/frame/next?${query}`, { signal, responseType: 'sequenced-frame' })) ?? null;
+};
 
 export const stopAiPreview = (cameraId: string) =>
   apiFetch<AiPreviewStatus>(`/api/cameras/${cameraId}/ai-preview/stop`, { method: 'POST' });

@@ -1,6 +1,6 @@
 import { clearSession, loadSession } from '../auth/session';
 
-type ResponseType = 'json' | 'blob' | 'text';
+type ResponseType = 'json' | 'blob' | 'text' | 'sequenced-frame';
 const DEFAULT_TIMEOUT_MS = 15000;
 export type ApiFetchInit = RequestInit & { responseType?: ResponseType; timeoutMs?: number };
 
@@ -66,6 +66,14 @@ export async function apiFetch<T = void>(path: string, init: ApiFetchInit = {}):
     }
 
     if (response.status === 204) return undefined as T;
+    if (responseType === 'sequenced-frame') {
+      const frameSequence = Number(response.headers.get('X-Frame-Sequence'));
+      const sessionId = response.headers.get('X-Session-Id');
+      if (!Number.isSafeInteger(frameSequence) || frameSequence < 1 || !sessionId) {
+        throw new ApiError(503, 'AI_FRAME_INVALID', 'AI preview returned invalid frame metadata.');
+      }
+      return { blob: await response.blob(), frameSequence, sessionId } as T;
+    }
     if (responseType === 'blob') return await response.blob() as T;
     if (responseType === 'text') return await response.text() as T;
     return await response.json() as T;

@@ -44,7 +44,7 @@ describe('API-backed monitoring configuration', () => {
       if (path === '/api/incident-types') return json(crowdCatalog ? [crowdType] : [type]);
       if (path.endsWith('/ai-preview/start') || path.endsWith('/ai-preview/status')) return json({ cameraId: 'camera-1', state: 'LIVE', frameSequence: 1 });
       if (path.endsWith('/ai-preview/stop')) return json({ cameraId: 'camera-1', state: 'STOPPED', frameSequence: 0 });
-      if (path.endsWith('/ai-preview/frame')) return new Response('jpeg', { headers: { 'Content-Type': 'image/jpeg' } });
+      if (path.endsWith('/ai-preview/frame/next')) return new Response('jpeg', { headers: { 'Content-Type': 'image/jpeg', 'X-Frame-Sequence': '1', 'X-Session-Id': '00000000-0000-0000-0000-000000000001' } });
       if (path.endsWith('/review')) return json({ configuration: config, zone, cameras: [{ cameraId: 'camera-1', code: 'CAM-01', name: 'Phone', status: 'ACTIVE', mappingStatus: 'ACTIVE', roiPolygon: zone.mapPolygon, sourceType: 'RECORDED', protocol: 'FILE', isEnabled: true, lastTestResult: 'SUCCESS', lastTestedAt: '2026-10-03T00:00:00Z', ready: true, issues: [] }], issues: ready ? [] : [{ code: 'ROI_INVALID', message: 'Fix camera ROI before activation.' }], warnings: [], canActivate: ready });
       if (path.endsWith('/activate')) { config = { ...config, status: 'ACTIVE' }; return json(config); }
       if (path.endsWith('/deactivate')) { config = { ...config, status: 'INACTIVE' }; return json(config); }

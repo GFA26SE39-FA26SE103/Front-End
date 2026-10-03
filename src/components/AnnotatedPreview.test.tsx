@@ -20,6 +20,8 @@ const start = vi.mocked(startAiPreview);
 const status = vi.mocked(getAiPreviewStatus);
 const frame = vi.mocked(getAiPreviewFrame);
 const stop = vi.mocked(stopAiPreview);
+const sessionA = '00000000-0000-0000-0000-000000000001';
+const sessionB = '00000000-0000-0000-0000-000000000002';
 
 const live = (cameraId = 'camera-a') => ({
   cameraId,
@@ -37,7 +39,12 @@ describe('AnnotatedPreview', () => {
     urlIndex = 0;
     start.mockResolvedValue(live());
     status.mockResolvedValue(live());
-    frame.mockResolvedValue(new Blob(['jpeg'], { type: 'image/jpeg' }));
+    let delivered = false;
+    frame.mockImplementation(async () => {
+      if (delivered) return null;
+      delivered = true;
+      return { blob: new Blob(['jpeg'], { type: 'image/jpeg' }), frameSequence: 1, sessionId: sessionA };
+    });
     stop.mockResolvedValue({ ...live(), state: 'STOPPED' });
     URL.createObjectURL = vi.fn(() => `blob:frame-${++urlIndex}`);
     URL.revokeObjectURL = vi.fn();
@@ -55,12 +62,25 @@ describe('AnnotatedPreview', () => {
     expect(screen.getByRole('img', { name: /tracked preview/i })).toBeInTheDocument();
   });
 
-  it('revokes the previous blob URL after replacement', async () => {
+  it('keeps the previous decoded frame until the replacement image loads', async () => {
+    let sequence = 0;
+    frame.mockImplementation(async () => sequence < 2
+      ? { blob: new Blob(['jpeg'], { type: 'image/jpeg' }), frameSequence: ++sequence, sessionId: sessionA }
+      : null);
     render(<AnnotatedPreview cameraId="camera-a" enabled pollInterval={5} />);
 
     await waitFor(() => expect(vi.mocked(URL.createObjectURL).mock.calls.length).toBeGreaterThanOrEqual(2));
-
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith('blob:frame-1');
+    fireEvent.load(screen.getByRole('img', { name: /tracked preview/i }));
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:frame-1');
+  });
+
+  it('requests the next sequence without redrawing a duplicate frame', async () => {
+    render(<AnnotatedPreview cameraId="camera-a" enabled pollInterval={5} />);
+    await waitFor(() => expect(frame.mock.calls.length).toBeGreaterThanOrEqual(2));
+    expect(frame.mock.calls[1][2]).toBe(1);
+    expect(frame.mock.calls[1][3]).toBe(sessionA);
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
   });
 
   it('draws zone ROIs while using the selected zone confidence', async () => {
@@ -109,11 +129,19 @@ describe('AnnotatedPreview', () => {
     expect(status.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('refreshes session status when a frame request races a restart', async () => {
+    frame.mockRejectedValueOnce(new ApiError(409, 'AI_PREVIEW_NOT_RUNNING', 'Not running'))
+      .mockResolvedValueOnce({ blob: new Blob(['jpeg'], { type: 'image/jpeg' }), frameSequence: 1, sessionId: sessionB });
+    render(<AnnotatedPreview cameraId="camera-a" enabled pollInterval={5} />);
+    expect(await screen.findByRole('img', { name: /tracked preview/i })).toBeInTheDocument();
+    expect(status.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
   it('aborts requests and revokes the final URL on unmount', async () => {
     let observedSignal: AbortSignal | undefined;
     frame.mockImplementation(async (_cameraId, signal) => {
       observedSignal = signal;
-      return new Blob(['jpeg'], { type: 'image/jpeg' });
+      return { blob: new Blob(['jpeg'], { type: 'image/jpeg' }), frameSequence: 1, sessionId: sessionA };
     });
     const view = render(<AnnotatedPreview cameraId="camera-a" enabled pollInterval={50} />);
     await waitFor(() => expect(screen.getByRole('img')).toBeInTheDocument());
@@ -148,13 +176,13 @@ describe('AnnotatedPreview', () => {
   });
 
   it('discards a frame that resolves after preview cleanup', async () => {
-    let finishFrame!: (blob: Blob) => void;
+    let finishFrame!: (value: { blob: Blob; frameSequence: number; sessionId: string }) => void;
     frame.mockImplementation(() => new Promise((resolve) => { finishFrame = resolve; }));
     const view = render(<AnnotatedPreview cameraId="camera-a" enabled pollInterval={20} />);
     await waitFor(() => expect(frame).toHaveBeenCalled());
 
     view.rerender(<AnnotatedPreview cameraId="camera-a" enabled={false} pollInterval={20} />);
-    finishFrame(new Blob(['late-jpeg'], { type: 'image/jpeg' }));
+    finishFrame({ blob: new Blob(['late-jpeg'], { type: 'image/jpeg' }), frameSequence: 1, sessionId: sessionA });
 
     await waitFor(() => expect(stop).toHaveBeenCalledWith('camera-a'));
     expect(URL.createObjectURL).not.toHaveBeenCalled();

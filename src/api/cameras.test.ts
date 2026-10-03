@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { saveSession } from '../auth/session';
 import {
+  getAiPreviewFrame,
   getCameraPreview,
   removeCameraMapping,
   saveCameraMapping,
@@ -60,6 +61,23 @@ describe('camera API', () => {
 
     expect(frame).toMatchObject({ size: 5, type: 'image/jpeg' });
     expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:5080/api/cameras/camera-1/preview');
+  });
+
+  it('loads only a new tracked frame and handles no-content replies', async () => {
+    const sessionId = '00000000-0000-0000-0000-000000000001';
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('jpeg', { headers: { 'Content-Type': 'image/jpeg', 'X-Frame-Sequence': '12', 'X-Session-Id': sessionId } }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    const first = await getAiPreviewFrame('camera-1', undefined, 11, sessionId);
+    const unchanged = await getAiPreviewFrame('camera-1', undefined, 12, sessionId);
+
+    expect(first?.frameSequence).toBe(12);
+    expect(first?.sessionId).toBe(sessionId);
+    expect(first?.blob.size).toBe(4);
+    expect(unchanged).toBeNull();
+    expect(fetchMock.mock.calls[0][0]).toBe(`http://localhost:5080/api/cameras/camera-1/ai-preview/frame/next?afterSequence=11&afterSessionId=${sessionId}`);
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get('Authorization')).toBe('Bearer jwt-token');
   });
 
   it('saves and removes a camera-zone ROI mapping', async () => {
