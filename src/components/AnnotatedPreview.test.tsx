@@ -63,6 +63,18 @@ describe('AnnotatedPreview', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:frame-1');
   });
 
+  it('keeps the final annotated frame and stops polling at recorded-video completion', async () => {
+    status.mockResolvedValue({ ...live(), state: 'COMPLETED' });
+    const view = render(<AnnotatedPreview cameraId="camera-a" enabled pollInterval={5} />);
+    expect(await screen.findByText(/Video completed/)).toBeInTheDocument();
+    expect(screen.getByRole('img')).toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(status).toHaveBeenCalledTimes(1);
+    expect(frame).toHaveBeenCalledTimes(1);
+    view.unmount();
+    await waitFor(() => expect(stop).toHaveBeenCalled());
+  });
+
   it('aborts requests and revokes the final URL on unmount', async () => {
     let observedSignal: AbortSignal | undefined;
     frame.mockImplementation(async (_cameraId, signal) => {

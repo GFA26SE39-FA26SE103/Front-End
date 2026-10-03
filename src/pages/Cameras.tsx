@@ -16,6 +16,7 @@ import { AdminLayout } from '../components/AdminLayout';
 import { AnnotatedPreview } from '../components/AnnotatedPreview';
 import { CameraRegistration, type CameraFloorOption } from '../components/CameraRegistration';
 import { CameraConnectionConfiguration } from '../components/CameraConnectionConfiguration';
+import { RecordedVideoUpload } from '../components/RecordedVideoUpload';
 import { Icon } from '../components/Icon';
 import { Button, Card, CardHeader, Chip, SearchBox, Select } from '../components/ui';
 import { cameraPlacements, zoneRects } from '../data/floorPlan';
@@ -57,6 +58,8 @@ export default function Cameras() {
   const [streamLabels, setStreamLabels] = useState<Record<string, string>>({});
   const [registrationOpen, setRegistrationOpen] = useState(false);
   const [connectionEditorOpen, setConnectionEditorOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -98,13 +101,15 @@ export default function Cameras() {
   };
 
   const selectCamera = (cameraId: string) => {
+    if (uploadBusy) return;
+    setUploadOpen(false);
     setPreviewEnabled(false);
     setConnectionEditorOpen(false);
     setSelected(cameraId);
     setTest(null);
   };
 
-  const registered = (record: CameraRecord) => {
+  const registered = (record: CameraRecord, recorded = false) => {
     const floor = floors.find((item) => item.id === record.floorId)!;
     const view: CameraView = {
       id: record.cameraId,
@@ -128,7 +133,8 @@ export default function Cameras() {
     setTest(null);
     setSelected(view.id);
     setFloorFilter(view.floorId);
-    setStreamLabels((all) => ({ ...all, [view.id]: 'HTTP · configured in backend' }));
+    setStreamLabels((all) => ({ ...all, [view.id]: recorded ? 'No source · upload video next' : 'HTTP · configured in backend' }));
+    setUploadOpen(recorded);
     setRegistrationOpen(false);
   };
 
@@ -157,7 +163,7 @@ export default function Cameras() {
           <div style={{ width: 130 }}>
             <Select value={floorFilter} onChange={setFloorFilter} chevron="chevron-down-small" chevronSize={13} height={32} options={[{ value: 'all', label: 'All floors' }, ...floors.map((floor) => ({ value: floor.id, label: floor.label }))]} />
           </div>
-          <Button onClick={() => { setConnectionEditorOpen(false); setRegistrationOpen(true); }} disabled={loading}>Add camera</Button>
+          <Button onClick={() => { setUploadOpen(false); setConnectionEditorOpen(false); setRegistrationOpen(true); }} disabled={loading || uploadBusy}>Add camera</Button>
         </CardHeader>
 
         {registrationOpen && <CameraRegistration floors={floors} onCancel={() => setRegistrationOpen(false)} onRegistered={registered} />}
@@ -172,7 +178,7 @@ export default function Cameras() {
             {visible.map((item) => {
               const active = item.id === selected;
               return (
-                <button key={item.id} role="row" className={`${s.row} ${active ? s.selected : ''}`} onClick={() => selectCamera(item.id)}>
+                <button key={item.id} role="row" disabled={uploadBusy} className={`${s.row} ${active ? s.selected : ''}`} onClick={() => selectCamera(item.id)}>
                   <span className={s.code}><Icon name={active ? 'camera-row-active' : 'camera-row'} size={14} />{item.code}</span>
                   <span>{item.floor} · {item.zones.length ? item.zones.map((zone) => `${zone.code} ${zone.name}`).join(', ') : 'Unmapped'}</span>
                   <span>{statusChip(item.status)}</span>
@@ -194,7 +200,7 @@ export default function Cameras() {
               <div className={s.detailTitle}>{camera.code}{statusChip(camera.status)}</div>
               <p className={s.detailSub}>{camera.floorLabel} · {camera.name}</p>
             </div>
-            <Chip tone={previewEnabled ? 'success' : 'neutral'}>{previewEnabled ? 'AI LIVE' : 'AI STOPPED'}</Chip>
+            <Chip tone={previewEnabled ? 'success' : 'neutral'}>{previewEnabled ? 'AI PREVIEW' : 'AI STOPPED'}</Chip>
           </div>
 
           <div className={s.media}>
@@ -229,10 +235,19 @@ export default function Cameras() {
             />
           )}
 
+          {uploadOpen && <RecordedVideoUpload key={camera.id} cameraId={camera.id} onBusy={setUploadBusy} onCancel={() => setUploadOpen(false)} onSaved={() => {
+            setPreviewEnabled(false);
+            setTest(null);
+            setCameras((all) => all.map((item) => item.id === camera.id ? { ...item, status: 'Degraded' } : item));
+            setStreamLabels((all) => ({ ...all, [camera.id]: 'RECORDED · MP4 · test & enable next' }));
+            setUploadOpen(false);
+          }} />}
+
           <div className={s.actions}>
-            <Button variant="secondary" size="lg" onClick={() => { setPreviewEnabled(false); setConnectionEditorOpen(true); }}>Configure connection</Button>
-            <Button variant="secondary" size="lg" icon="refresh" onClick={() => void runTest(camera)} disabled={test?.cameraId === camera.id && test.state === 'running'}>Test &amp; enable</Button>
-            <Button size="lg" onClick={() => setPreviewEnabled((value) => !value)}>{previewEnabled ? 'Stop AI preview' : 'Start AI preview'}</Button>
+            <Button variant="secondary" size="lg" disabled={uploadBusy} onClick={() => { setUploadOpen(false); setPreviewEnabled(false); setConnectionEditorOpen(true); }}>Configure connection</Button>
+            <Button variant="secondary" size="lg" disabled={uploadBusy || test?.state === 'running'} onClick={() => { setPreviewEnabled(false); setConnectionEditorOpen(false); setUploadOpen(true); }}>Upload video</Button>
+            <Button variant="secondary" size="lg" icon="refresh" onClick={() => void runTest(camera)} disabled={uploadOpen || test?.state === 'running'}>Test &amp; enable</Button>
+            <Button size="lg" disabled={uploadOpen || test?.state === 'running'} onClick={() => setPreviewEnabled((value) => !value)}>{previewEnabled ? 'Stop AI preview' : 'Start AI preview'}</Button>
           </div>
           <p className={s.previewNote}>Bounding boxes and track IDs are drawn by YOLO + ByteTrack before this JPEG reaches React.</p>
         </Card>
