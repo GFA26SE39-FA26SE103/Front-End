@@ -76,8 +76,9 @@ export const updateZone = (zoneId: string, body: ZoneRequest) =>
 export const uploadFloorMap = (floorId: string, file: File) => {
   const body = new FormData();
   body.append('file', file);
-  return apiFetch<FloorMapView>(`/api/floors/${floorId}/map`, { method: 'POST', body });
+  // Cloud upload and post-commit cleanup can each use the configured backend timeout (up to 120s).
+  return apiFetch<FloorMapView>(`/api/floors/${floorId}/map`, { method: 'POST', body, timeoutMs: 300000 });
 };
 
 export const getFloorMap = (floorId: string, signal?: AbortSignal) =>
-  apiFetch<Blob>(`/api/floors/${floorId}/map`, { signal, responseType: 'blob' });
+  apiFetch<Blob>(`/api/floors/${floorId}/map`, { signal, responseType: 'blob', timeoutMs: 150000 });

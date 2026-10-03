@@ -53,6 +53,26 @@ describe('floor API', () => {
     expect(new Headers(fetchMock.mock.calls[1][1]?.headers).get('Authorization')).toBe('Bearer jwt-token');
   });
 
+  it('allows a slow cloud upload while map downloads still respect explicit cancellation', async () => {
+    vi.useFakeTimers();
+    try {
+      let finishUpload: (response: Response) => void = () => {};
+      vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => new Promise((resolve, reject) => {
+        finishUpload = resolve;
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+      }));
+      const uploaded = uploadFloorMap('floor-1', new File(['png'], 'floor.png', { type: 'image/png' })).catch(error => error);
+      await vi.advanceTimersByTimeAsync(31000);
+      finishUpload(new Response(JSON.stringify({ floorId: 'floor-1' }), { headers: { 'Content-Type': 'application/json' } }));
+      expect(await uploaded).toMatchObject({ floorId: 'floor-1' });
+      const controller = new AbortController();
+      const cancelled = getFloorMap('floor-1', controller.signal).catch(error => error);
+      controller.abort();
+      expect(await cancelled).toMatchObject({ name: 'AbortError' });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+
   it('downloads the authenticated map as a Blob', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('map', { headers: { 'Content-Type': 'application/pdf' } }),
