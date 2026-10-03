@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { listCameras, updateCamera, type CameraRecord, type CreateCameraRequest } from '../api/cameras';
 import { ApiError } from '../api/client';
 import {
@@ -16,7 +17,6 @@ import {
 } from '../api/floors';
 import { AdminLayout } from '../components/AdminLayout';
 import { CameraCoverageEditor } from '../components/CameraCoverageEditor';
-import { CameraRegistration } from '../components/CameraRegistration';
 import { FloorPlanSurface, type PlacementChange } from '../components/FloorPlanSurface';
 import type { ZoneEditorSave } from '../components/ZoneEditorOverlay';
 import { Icon } from '../components/Icon';
@@ -32,6 +32,9 @@ type MapState =
   | { status: 'error'; url: null; contentType: null; message: string };
 
 const initialMapState: MapState = { status: 'idle', url: null, contentType: null };
+
+// New cameras are registered on the Cameras page without a map position; Store layout only places them.
+const isPlaced = (camera: Pick<CameraRecord, 'mapX' | 'mapY'>) => camera.mapX !== null && camera.mapY !== null;
 
 export default function StoreLayout() {
   const [stores, setStores] = useState<SupermarketRecord[]>([]);
@@ -53,7 +56,7 @@ export default function StoreLayout() {
   const [zoneEditing, setZoneEditing] = useState(false);
   const [zoneSaving, setZoneSaving] = useState(false);
   const [coverageEditing, setCoverageEditing] = useState(false);
-  const [registrationOpen, setRegistrationOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -131,6 +134,8 @@ export default function StoreLayout() {
     const draft = drafts[camera.cameraId];
     return draft ? { ...camera, mapX: draft.x, mapY: draft.y, mapRotationDeg: draft.rotationDeg } : camera;
   }), [cameras, drafts]);
+  const mapCameras = useMemo(() => displayedCameras.filter(isPlaced), [displayedCameras]);
+  const unplacedCameras = useMemo(() => cameras.filter((camera) => !isPlaced(camera) && !drafts[camera.cameraId]), [cameras, drafts]);
   const selectedCamera = cameras.find((camera) => camera.cameraId === selectedCameraId) ?? null;
   const selectedDraft = selectedCameraId ? drafts[selectedCameraId] : undefined;
   const dirtyCameraIds = useMemo(() => new Set(Object.keys(drafts)), [drafts]);
@@ -141,7 +146,7 @@ export default function StoreLayout() {
     setMapState(initialMapState);
     setActionError('');
     setActionMessage('');
-    setRegistrationOpen(false);
+    setPickerOpen(false);
     setZoneEditing(false);
     setCoverageEditing(false);
   };
@@ -218,17 +223,13 @@ export default function StoreLayout() {
     }
   };
 
-  const cameraRegistered = (camera: CameraRecord) => {
-    if (camera.floorId !== selectedFloorId) {
-      selectFloor(camera.floorId);
-      return;
-    }
-    setCameras((all) => [...all.filter((item) => item.cameraId !== camera.cameraId), camera]);
+  const placeCamera = (camera: CameraRecord) => {
     setSelectedCameraId(camera.cameraId);
-    setDrafts((current) => ({ ...current, [camera.cameraId]: { x: 0.5, y: 0.5, rotationDeg: 0 } }));
-    setRegistrationOpen(false);
+    setDrafts((current) => ({ ...current, [camera.cameraId]: { x: 0.5, y: 0.5, rotationDeg: camera.mapRotationDeg ?? 0 } }));
+    setPickerOpen(false);
     setCoverageEditing(false);
-    setActionMessage('Camera created. Place it on the map, then save its placement.');
+    setActionError('');
+    setActionMessage(`${camera.code} is in the centre of the map. Drag it into position, then save its placement.`);
   };
 
   const saveZone = async (draft: ZoneEditorSave) => {
@@ -304,16 +305,16 @@ export default function StoreLayout() {
             >
               <Icon name="tree-camera" size={14} />
               <span><strong>{camera.code}</strong><small>{camera.name}</small></span>
-              {drafts[camera.cameraId] && <i>Unsaved</i>}
+              {drafts[camera.cameraId] ? <i>Unsaved</i> : !isPlaced(camera) && <i className={s.notPlaced}>Not on map</i>}
             </button>
           ))}
           {!detailsLoading && cameras.length === 0 && <p className={s.state}>No cameras registered on this floor.</p>}
         </div>
-        <Button variant="secondary" icon="plus-primary" block disabled={!selectedFloor || zoneEditing} onClick={() => {
+        <Button variant="secondary" icon="plus-primary" block disabled={!selectedFloor || zoneEditing || mapState.status !== 'ready'} onClick={() => {
           setCoverageEditing(false);
-          setRegistrationOpen((open) => !open);
+          setPickerOpen((open) => !open);
         }}>
-          {registrationOpen ? 'Close camera form' : 'Add camera'}
+          {pickerOpen ? 'Close camera list' : 'Add camera'}
         </Button>
 
         <div className={s.source}>
@@ -337,12 +338,26 @@ export default function StoreLayout() {
       </Card>
 
       <div className={s.workspace}>
-        {registrationOpen && selectedFloor && (
-          <CameraRegistration
-            floors={[{ id: selectedFloor.floorId, key: `F${selectedFloor.floorNumber}`, label: selectedFloor.name }]}
-            onCancel={() => setRegistrationOpen(false)}
-            onRegistered={cameraRegistered}
-          />
+        {pickerOpen && selectedFloor && (
+          <Card className={s.picker}>
+            <CardHeader title="Add camera to map" subtitle="Cameras registered on this floor that are not on the map yet." />
+            {unplacedCameras.length > 0 ? (
+              <div className={s.cameraList} aria-label="Cameras not on the map">
+                {unplacedCameras.map((camera) => (
+                  <button key={camera.cameraId} className={s.cameraRow} aria-label={`Place ${camera.code} ${camera.name} on the map`} onClick={() => placeCamera(camera)}>
+                    <Icon name="tree-camera" size={14} />
+                    <span><strong>{camera.code}</strong><small>{camera.name}</small></span>
+                    <i className={s.notPlaced}>Place</i>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className={s.state}>Every camera registered on this floor is already on the map.</p>
+            )}
+            <p className={s.placementHelp}>
+              Need another camera? <Link to="/admin/cameras">Register it on the Cameras page</Link> and choose {selectedFloor.name || `Floor ${selectedFloor.floorNumber}`}.
+            </p>
+          </Card>
         )}
         <Card className={s.canvas}>
           {coverageEditing && selectedCamera ? (
@@ -366,7 +381,7 @@ export default function StoreLayout() {
                       return next;
                     });
                     setCoverageEditing(false);
-                    setRegistrationOpen(false);
+                    setPickerOpen(false);
                     setActionError('');
                     setActionMessage('');
                   }}
@@ -380,7 +395,7 @@ export default function StoreLayout() {
             <FloorPlanSurface
               mapUrl={mapState.url}
               mapContentType={mapState.contentType}
-              cameras={displayedCameras}
+              cameras={mapCameras}
               selectedCameraId={selectedCameraId}
               dirtyCameraIds={dirtyCameraIds}
               onSelectCamera={setSelectedCameraId}
@@ -417,14 +432,19 @@ export default function StoreLayout() {
           <div><strong>{selectedCamera.code}</strong><small>{selectedCamera.name}</small></div>
           <Chip tone={selectedCamera.healthStatus === 'ONLINE' ? 'success' : 'neutral'}>{selectedCamera.healthStatus}</Chip>
         </div>
-        <p className={s.placementHelp}>Drag the camera to position it. Drag its direction handle to rotate.</p>
+        {!isPlaced(selectedCamera) && !selectedDraft ? (
+          <>
+            <p className={s.placementHelp}>This camera is not on the map yet.</p>
+            <Button block disabled={mapState.status !== 'ready'} onClick={() => placeCamera(selectedCamera)}>Place on map</Button>
+          </>
+        ) : <p className={s.placementHelp}>Drag the camera to position it. Drag its direction handle to rotate.</p>}
         <Button
           variant="secondary"
           block
           disabled={zones.length === 0}
           onClick={() => {
             setCoverageEditing(true);
-            setRegistrationOpen(false);
+            setPickerOpen(false);
             setActionError('');
             setActionMessage('');
           }}

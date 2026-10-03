@@ -132,6 +132,40 @@ describe('StoreLayout', () => {
     expect(screen.queryByRole('heading', { name: 'Camera placement' })).not.toBeInTheDocument();
   });
 
+  it('adds an already registered camera to the map instead of registering a new one', async () => {
+    const spare = { ...camera, cameraId: 'camera-2', code: 'CAM-02', name: 'Spare camera', mapX: null, mapY: null, mapRotationDeg: null };
+    vi.mocked(listCameras).mockResolvedValue([camera, spare]);
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole('img', { name: /uploaded floor plan/i });
+
+    expect(screen.queryByRole('button', { name: /place cam-02 at/i })).not.toBeInTheDocument();
+    expect(screen.getByText('Not on map')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Add camera' }));
+    expect(screen.getByRole('heading', { name: 'Add camera to map' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /place cam-01 entrance camera on the map/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Register it on the Cameras page' })).toHaveAttribute('href', '/admin/cameras');
+    expect(screen.queryByLabelText(/camera code/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /place cam-02 spare camera on the map/i }));
+
+    expect(screen.queryByRole('heading', { name: 'Add camera to map' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Place CAM-02 at 50%, 50%' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Camera placement' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save placement' })).toBeEnabled();
+  });
+
+  it('says so when every camera on the floor is already on the map', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole('img', { name: /uploaded floor plan/i });
+
+    await user.click(screen.getByRole('button', { name: 'Add camera' }));
+
+    expect(screen.getByText('Every camera registered on this floor is already on the map.')).toBeInTheDocument();
+  });
+
   it('uploads a replacement floor plan and refreshes its blob', async () => {
     const user = userEvent.setup();
     renderPage();
