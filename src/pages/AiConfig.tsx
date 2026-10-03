@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AdminLayout } from '../components/AdminLayout';
 import { AnnotatedPreview } from '../components/AnnotatedPreview';
@@ -11,7 +11,7 @@ import s from './AiConfig.module.css';
 type RuleInput = Omit<MonitoringRule, 'warningThreshold' | 'criticalThreshold' | 'sustainSec' | 'cooldownSec'> & {
   warningThreshold: string; criticalThreshold: string; sustainSec: string; cooldownSec: string;
 };
-type FloorGroup = { floorId: string; name: string; zones: ZoneRecord[] };
+type FloorGroup = { floorId: string; floorNumber: number; name: string; zones: ZoneRecord[] };
 // undefined = still loading, null = no configuration saved for the zone, 'error' = could not be loaded.
 type ConfigSummary = MonitoringConfiguration | null | 'error' | undefined;
 
@@ -35,101 +35,93 @@ const statusTone = (status: string | undefined): Tone => status === 'ACTIVE' ? '
 const ruleName = (rule: MonitoringRule, types: IncidentType[]) => rule.incidentName ?? types.find(t => t.incidentTypeId === rule.incidentTypeId)?.name ?? 'Unknown incident type';
 const formatTime = (value: string) => { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString(); };
 
+const units: Record<string, string> = { PEOPLE: 'people', MINUTES: 'minutes', PEOPLE_PER_M2: 'people/m²' };
+const unitName = (unit: string) => units[unit] ?? unit;
+
 export default function AiConfig() {
   const [params, setParams] = useSearchParams();
   const zoneId = params.get('zoneId') ?? '';
-  const editing = params.get('mode') === 'edit';
+  const [editZoneId, setEditZoneId] = useState<string | null>(null);
+  const [floorId, setFloorId] = useState('');
   const [floors, setFloors] = useState<FloorGroup[]>([]);
   const [types, setTypes] = useState<IncidentType[]>([]);
   const [summaries, setSummaries] = useState<Record<string, ConfigSummary>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
+  const [overviewKey, setOverviewKey] = useState(0);
+  const onConfigChanged = useCallback((config: MonitoringConfiguration | null) => {
+    setSummaries(all => ({ ...all, [zoneId]: config }));
+  }, [zoneId]);
   useEffect(() => {
     const controller = new AbortController();
     async function load() {
+      setLoading(true); setError('');
       try {
         const [stores, catalog] = await Promise.all([listSupermarkets(controller.signal), listIncidentTypes(controller.signal)]);
-        // The system runs with a single default store, so the overview is grouped by floor only.
-        const floorRecords = (await Promise.all(stores.map(store => listFloors(store.supermarketId, controller.signal)))).flat()
-          .sort((a, b) => a.floorNumber - b.floorNumber);
-        const groups = await Promise.all(floorRecords.map(async f => ({ floorId: f.floorId, name: f.name || `Floor ${f.floorNumber}`, zones: await listZones(f.floorId, controller.signal) })));
-        if (controller.signal.aborted) return;
-        setTypes(catalog); setFloors(groups); setLoading(false);
-        const zones = groups.flatMap(g => g.zones);
-        await Promise.all(zones.map(async z => {
-          let summary: ConfigSummary;
-          try { summary = await loadConfig(z.zoneId, controller.signal); } catch { summary = 'error'; }
-          if (!controller.signal.aborted) setSummaries(all => ({ ...all, [z.zoneId]: summary }));
+        const floorRecords = stores[0] ? (await listFloors(stores[0].supermarketId, controller.signal)).sort((a, b) => a.floorNumber - b.floorNumber) : [];
+        const groups = await Promise.all(floorRecords.map(async f => ({ floorId: f.floorId, floorNumber: f.floorNumber, name: f.name || 'Floor ' + f.floorNumber, zones: await listZones(f.floorId, controller.signal) })));
+        const entries = await Promise.all(groups.flatMap(g => g.zones).map(async z => {
+          try { return [z.zoneId, await loadConfig(z.zoneId, controller.signal)] as const; }
+          catch { return [z.zoneId, 'error'] as const; }
         }));
-      } catch (e) { if (!controller.signal.aborted) { setError(message(e)); setLoading(false); } }
+        if (controller.signal.aborted) return;
+        setTypes(catalog); setFloors(groups); setSummaries(Object.fromEntries(entries));
+        setFloorId(id => groups.some(g => g.floorId === id) ? id : '');
+      } catch (e) { if (!controller.signal.aborted) setError(message(e)); }
+      finally { if (!controller.signal.aborted) setLoading(false); }
     }
     void load();
     return () => controller.abort();
-  }, []);
-
+  }, [overviewKey]);
   const floor = floors.find(f => f.zones.some(z => z.zoneId === zoneId));
   const zone = floor?.zones.find(z => z.zoneId === zoneId);
-  const open = (id: string, edit = false) => setParams(edit ? { zoneId: id, mode: 'edit' } : { zoneId: id });
-
-  return (
-    <AdminLayout title="AI Configuration" subtitle="MF-01 · zone monitoring rules · review & activate">
-      <div className={s.column}>
-        {loading && <p className={s.help} role="status">Loading zones and AI configurations…</p>}
-        {error && <p className={s.error} role="alert">{error}</p>}
-        {!loading && !error && zone && floor
-          ? <ZoneConfig
-              key={zone.zoneId}
-              zone={zone}
-              floorName={floor.name}
-              types={types}
-              editing={editing}
-              onOpen={edit => open(zone.zoneId, edit)}
-              onBack={() => setParams({})}
-              onChanged={config => setSummaries(all => ({ ...all, [zone.zoneId]: config }))}
-            />
-          : !loading && !error && <Overview floors={floors} summaries={summaries} types={types} missingZone={Boolean(zoneId)} onOpen={id => open(id)} />}
-      </div>
-    </AdminLayout>
-  );
+  const open = (id: string, edit = false) => {
+    setEditZoneId(edit ? id : null);
+    if (id !== zoneId) setParams({ zoneId: id });
+  };
+  return <AdminLayout title="AI Configuration" subtitle={zone && floor ? floor.name + ' · ' + zone.name : 'Browse configurations by floor and zone'}>
+    <div className={s.column}>
+      {loading && <p className={s.help} role="status">Loading floors, zones and configurations…</p>}
+      {error && <section className={s.panel}><p className={s.alertBox} role="alert">{error}</p><Button variant="secondary" onClick={() => setOverviewKey(k => k + 1)}>Retry loading zones</Button></section>}
+      {!loading && !error && (zone && floor ? <ZoneConfig
+        key={zone.zoneId} zone={zone} floorName={floor.name} types={types} editing={editZoneId === zoneId}
+        onOpen={edit => open(zone.zoneId, edit)} onBack={() => { setEditZoneId(null); setParams({}); }}
+        onChanged={onConfigChanged}
+      /> : <Overview floors={floors} summaries={summaries} types={types} missingZone={Boolean(zoneId)}
+        floorId={floorId} onFloorChange={setFloorId} onRefresh={() => setOverviewKey(k => k + 1)} onOpen={id => open(id)} />)}
+    </div>
+  </AdminLayout>;
 }
 
-function Overview({ floors, summaries, types, missingZone, onOpen }: {
-  floors: FloorGroup[]; summaries: Record<string, ConfigSummary>; types: IncidentType[]; missingZone: boolean; onOpen: (zoneId: string) => void;
+function Overview({ floors, summaries, types, missingZone, floorId, onFloorChange, onRefresh, onOpen }: {
+  floors: FloorGroup[]; summaries: Record<string, ConfigSummary>; types: IncidentType[]; missingZone: boolean;
+  floorId: string; onFloorChange: (id: string) => void; onRefresh: () => void; onOpen: (zoneId: string) => void;
 }) {
   const zoneCount = floors.reduce((n, f) => n + f.zones.length, 0);
+  const configured = Object.values(summaries).filter(c => c && c !== 'error').length;
+  const activeCount = Object.values(summaries).filter(c => c && c !== 'error' && c.status === 'ACTIVE').length;
   return <>
     <section className={s.panel}>
-      <h2 className={s.title}>AI configuration by zone</h2>
-      <p className={s.help}>Each zone has one monitoring configuration: a detection confidence and the incident rules the AI checks. Open a zone to see its configuration, then edit, review and activate it.</p>
-      {missingZone && <p className={s.error} role="alert">The requested zone was not found. Choose a zone below.</p>}
-      {!zoneCount && <p>No zones yet. Create a floor and draw zones in <a href="/admin/store-layout">Store layout</a> first.</p>}
+      <div className={s.head}><div><h2 className={s.title}>Configurations by floor & zone</h2><p className={s.help}>Choose a zone to view its saved configuration. Create or edit rules from its detail page.</p></div><Button variant="secondary" onClick={onRefresh}>Refresh configurations</Button></div>
+      {missingZone && <p className={s.alertBox} role="alert">The requested zone was not found. Choose a zone below.</p>}
+      <div className={s.stats}><div><strong>{zoneCount}</strong><span>Zones</span></div><div><strong>{configured}</strong><span>Configured</span></div><div><strong>{activeCount}</strong><span>Active configurations</span></div></div>
+      <label className={s.floorFilter}>Floor<select aria-label="Filter by floor" value={floorId} onChange={e => onFloorChange(e.target.value)}><option value="">All floors</option>{floors.map(f => <option key={f.floorId} value={f.floorId}>Floor {f.floorNumber} · {f.name}</option>)}</select></label>
+      {!floors.length && <p className={s.help}>Create a floor and zone in <a href="/admin/store-layout">Store layout</a> first.</p>}
     </section>
-    {floors.filter(f => f.zones.length).map(f => {
-      const configured = f.zones.filter(z => { const c = summaries[z.zoneId]; return c && c !== 'error'; }).length;
-      return <section key={f.floorId} className={s.panel} aria-label={f.name}>
-        <div className={s.head}>
-          <h2 className={s.title}>{f.name}</h2>
-          <span className={s.help}>{f.zones.length} zone{f.zones.length === 1 ? '' : 's'} · {configured} configured</span>
-        </div>
-        <div className={s.zoneTable}>
-          <div className={`${s.zoneRow} ${s.zoneHeadRow}`} aria-hidden="true">
-            <span>ZONE</span><span>STATUS</span><span>CONFIDENCE</span><span>INCIDENT RULES</span><span />
-          </div>
-          {f.zones.map(z => {
-            const c = summaries[z.zoneId];
-            const rules = c && c !== 'error' ? c.rules : [];
-            return <button key={z.zoneId} type="button" className={s.zoneRow} onClick={() => onOpen(z.zoneId)} aria-label={`Open AI configuration for ${z.name}`}>
-              <span className={s.zoneName}><i style={{ background: z.colorHex ?? 'var(--color-primary)' }} /><span><strong>{z.name}</strong><small>{z.code}</small></span></span>
-              <span>{c === undefined ? <span className={s.help}>Loading…</span> : c === 'error' ? <Chip tone="danger">Load failed</Chip> : c ? <Chip tone={statusTone(c.status)}>{c.status}</Chip> : <Chip tone="neutral">Not configured</Chip>}</span>
-              <span>{c && c !== 'error' ? c.confidenceThreshold : '—'}</span>
-              <span className={s.ruleNames}>{rules.length ? rules.map(r => ruleName(r, types)).join(', ') : c && c !== 'error' ? <em className={s.missingText}>No incident rules</em> : '—'}</span>
-              <span className={s.open}>{c ? 'View' : 'Set up'} ›</span>
-            </button>;
-          })}
-        </div>
-      </section>;
-    })}
+    {floors.filter(f => !floorId || f.floorId === floorId).map(f => <section key={f.floorId} className={s.panel} aria-label={'Floor ' + f.floorNumber + ': ' + f.name}>
+      <div className={s.head}><div><p className={s.eyebrow}>Floor {f.floorNumber}</p><h2 className={s.title}>{f.name}</h2></div><span className={s.help}>{f.zones.length} zone{f.zones.length === 1 ? '' : 's'}</span></div>
+      {!f.zones.length && <p className={s.help}>No zones on this floor. Add a zone in <a href="/admin/store-layout">Store layout</a>.</p>}
+      <div className={s.zoneGrid}>{f.zones.map(z => {
+        const summary = summaries[z.zoneId];
+        const saved = summary && summary !== 'error' ? summary : null;
+        return <button key={z.zoneId} type="button" className={s.zoneCard} aria-label={'Open AI configuration for ' + z.name} onClick={() => onOpen(z.zoneId)}>
+          <div className={s.head}><span className={s.zoneCode}><i style={{ background: z.colorHex ?? 'var(--color-primary)' }} />{z.code}</span><Chip tone={summary === 'error' ? 'danger' : statusTone(saved?.status)}>{summary === 'error' ? 'Load failed' : saved?.status ?? 'Not configured'}</Chip></div>
+          <h3>{z.name}</h3><p className={s.configName}>{saved?.name ?? (summary === 'error' ? 'Configuration unavailable' : 'No AI configuration yet')}</p>
+          {summary === 'error' ? <p className={s.error}>Could not load this configuration. Open its detail to retry.</p> : saved ? <><p className={s.help}>Confidence: {saved.confidenceThreshold} · {saved.rules.length} incident {saved.rules.length === 1 ? 'rule' : 'rules'}</p><div className={s.ruleTags}>{saved.rules.map(r => <span key={r.incidentTypeId}>{ruleName(r, types)}{!r.enabled ? ' · Disabled' : ''}</span>)}</div>{!saved.rules.length && <p className={s.help}>No incident rules saved. Edit to add one.</p>}</> : <p className={s.help}>Add incident rules to configure monitoring for this zone.</p>}
+          <span className={s.cardLink}>View details →</span>
+        </button>;
+      })}</div>
+    </section>)}
   </>;
 }
 
@@ -155,6 +147,10 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   const [reloadKey, setReloadKey] = useState(0);
   const mounted = useRef(true);
   const typeSelect = useRef<HTMLSelectElement>(null);
+  const nameInput = useRef<HTMLInputElement>(null);
+  const detailHeading = useRef<HTMLHeadingElement>(null);
+  const closeEditor = () => { onOpen(false); requestAnimationFrame(() => detailHeading.current?.focus()); };
+  useEffect(() => { if (editing && !loading) nameInput.current?.focus(); }, [editing, loading]);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const fillForm = (saved: MonitoringConfiguration | null) => {
@@ -167,13 +163,13 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       try {
         const saved = await loadConfig(zoneId, controller.signal);
         if (controller.signal.aborted) return;
-        setConfig(saved); fillForm(saved);
+        setConfig(saved); fillForm(saved); onChanged(saved);
       } catch (e) { if (!controller.signal.aborted) { setLoadFailed(true); setError(message(e)); } }
       finally { if (!controller.signal.aborted) setLoading(false); }
     }
     void load();
     return () => controller.abort();
-  }, [zoneId, reloadKey]);
+  }, [zoneId, reloadKey, onChanged]);
 
   const active = config?.status === 'ACTIVE';
   const showForm = editing && !active && !loadFailed;
@@ -184,6 +180,11 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   const changeRule = (id: string, patch: Partial<RuleInput>) => { setRules(all => all.map(r => r.incidentTypeId === id ? { ...r, ...patch } : r)); touch(); };
   const apply = (saved: MonitoringConfiguration) => { setConfig(saved); fillForm(saved); setPreviewCameraId(null); onChanged(saved); };
   const confirmDiscard = (text: string) => !dirty || window.confirm(text);
+  const reloadSaved = () => {
+    if (!confirmDiscard('Discard unsaved changes and reload the saved configuration?')) return;
+    setLoading(true); setLoadFailed(false); setError(''); setNotice(''); setReview(null); setPreviewCameraId(null);
+    onOpen(false); setReloadKey(k => k + 1);
+  };
 
   async function operation(work: () => Promise<void>) {
     setBusy(true); setError(''); setNotice('');
@@ -210,7 +211,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
         return { incidentTypeId: r.incidentTypeId, warningThreshold: warning, criticalThreshold: critical, thresholdUnit: r.thresholdUnit, sustainSec: seconds(r.sustainSec, label + ' sustain time'), cooldownSec: seconds(r.cooldownSec, label + ' cooldown'), enabled: r.enabled, parametersJson: r.parametersJson };
       });
       const saved = await saveMonitoring(zoneId, { name: name.trim(), confidenceThreshold: conf, rules: parsed, ...(config ? { expectedUpdatedAt: config.updatedAt } : {}) });
-      if (mounted.current) { apply(saved); setReview(null); setNotice('Configuration saved as Draft. Review it before activating.'); onOpen(false); }
+      if (mounted.current) { apply(saved); setReview(null); setNotice('Configuration saved as Draft. Review it before activating.'); closeEditor(); }
     });
   }
   async function changeActive(value: boolean) {
@@ -228,11 +229,11 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   }
 
   return <>
-    <button type="button" className={s.back} onClick={() => { if (confirmDiscard('Discard unsaved changes and go back to all zones?')) onBack(); }}>‹ All zones</button>
+    <button type="button" className={s.back} disabled={busy} onClick={() => { if (confirmDiscard('Discard unsaved changes and go back to all zones?')) onBack(); }}>‹ All zones</button>
     <section className={s.panel}>
       <div className={s.head}>
         <div>
-          <h2 className={s.title}>{showForm ? (config ? 'Edit configuration' : 'Create configuration') + ' · ' + zone.name : zone.name}</h2>
+          <h2 ref={detailHeading} tabIndex={-1} className={s.title}>{showForm ? (config ? 'Edit configuration' : 'Create configuration') + ' · ' + zone.name : zone.name}</h2>
           <p className={s.sub}>{floorName} · {zone.code} · Area: {zone.areaM2 ?? 'not configured'} m² · Zone {zone.status}</p>
         </div>
         {!loading && !loadFailed && <Chip tone={statusTone(config?.status)}>{config?.status ?? 'NOT CONFIGURED'}</Chip>}
@@ -240,7 +241,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       {loading && <p className={s.help} role="status">Loading configuration…</p>}
       {error && <p className={s.alertBox} role="alert">{error}</p>}
       {notice && <p className={s.saved} role="status">{notice}</p>}
-      {loadFailed && <Button variant="secondary" onClick={() => { setLoading(true); setLoadFailed(false); setError(''); setReloadKey(k => k + 1); }}>Retry</Button>}
+      {loadFailed && <Button variant="secondary" onClick={reloadSaved}>Reload saved configuration</Button>}
 
       {!loading && !loadFailed && !showForm && <>
         {editing && active && <p className={s.help}>An active configuration cannot be edited. Deactivate it first.</p>}
@@ -256,17 +257,18 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
             <div role="row" className={s.ruleHeadRow}><span role="columnheader">Incident type</span><span role="columnheader">Warning ≥</span><span role="columnheader">Critical ≥</span><span role="columnheader">Sustain</span><span role="columnheader">Cooldown</span><span role="columnheader">State</span></div>
             {config.rules.map(r => <div role="row" key={r.incidentTypeId}>
               <span role="cell"><strong>{ruleName(r, types)}</strong></span>
-              <span role="cell">{r.warningThreshold} {r.thresholdUnit}</span>
-              <span role="cell">{r.criticalThreshold} {r.thresholdUnit}</span>
+              <span role="cell">{r.warningThreshold} {unitName(r.thresholdUnit)}</span>
+              <span role="cell">{r.criticalThreshold} {unitName(r.thresholdUnit)}</span>
               <span role="cell">{r.sustainSec}s</span>
               <span role="cell">{r.cooldownSec}s</span>
               <span role="cell"><Chip tone={r.enabled ? 'success' : 'neutral'}>{r.enabled ? 'Enabled' : 'Disabled'}</Chip></span>
             </div>)}
           </div> : <p className={s.missingBox}>This configuration has no incident rules. Edit it and add at least one rule.</p>}
           <div className={s.actions}>
-            <Button disabled={busy || active} onClick={() => { fillForm(config); setError(''); setNotice(''); onOpen(true); }}>Edit configuration</Button>
+            <Button disabled={busy || active} onClick={() => { fillForm(config); setReview(null); setPreviewCameraId(null); setError(''); setNotice(''); onOpen(true); }}>Edit configuration</Button>
             {!active && <Button variant="secondary" disabled={busy} onClick={() => { setReview(null); void operation(async () => { const result = await reviewMonitoring(zoneId); if (mounted.current) { apply(result.configuration); setReview(result); } }); }}>Review &amp; activate</Button>}
             {active && <Button variant="secondary" disabled={busy} onClick={() => void changeActive(false)}>Deactivate configuration</Button>}
+            <Button variant="secondary" disabled={busy} onClick={reloadSaved}>Reload saved configuration</Button>
           </div>
           {active && <p className={s.help}>This configuration is active. Deactivate it before changing confidence or rules.</p>}
         </> : <div className={s.empty}>
@@ -275,9 +277,9 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
         </div>}
       </>}
 
-      {!loading && showForm && <>
+      {!loading && showForm && <form noValidate onSubmit={e => { e.preventDefault(); void save(); }}>
         <fieldset disabled={locked} className={s.fields}>
-          <label className={s.field}>Configuration name<input aria-label="Configuration name" maxLength={100} value={name} onChange={e => { setName(e.target.value); touch(); }} /></label>
+          <label className={s.field}>Configuration name<input ref={nameInput} aria-label="Configuration name" maxLength={100} value={name} onChange={e => { setName(e.target.value); touch(); }} /></label>
           <label className={s.field}>Detection confidence<input aria-label="Detection confidence" type="number" min="0" max="1" step=".0001" value={confidence} onChange={e => { setConfidence(e.target.value); touch(); }} /></label>
         </fieldset>
         <p className={s.help}>Confidence filters detection scores, not incident severity.</p>
@@ -300,7 +302,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
             <fieldset disabled={locked} className={s.fields}>
               <label className={s.field}>Warning threshold ≥<input aria-label={label + ' warning'} type="number" min="0" step={r.thresholdUnit === 'PEOPLE' ? '1' : '.0001'} value={r.warningThreshold} onChange={e => changeRule(r.incidentTypeId, { warningThreshold: e.target.value })} /></label>
               <label className={s.field}>Critical threshold ≥<input aria-label={label + ' critical'} type="number" min="0" step={r.thresholdUnit === 'PEOPLE' ? '1' : '.0001'} value={r.criticalThreshold} onChange={e => changeRule(r.incidentTypeId, { criticalThreshold: e.target.value })} /></label>
-              <label className={s.field}>Threshold unit<input aria-label={label + ' unit'} value={r.thresholdUnit} maxLength={30} readOnly={!!t?.thresholdUnit} onChange={e => changeRule(r.incidentTypeId, { thresholdUnit: e.target.value })} /></label>
+              <label className={s.field}>Threshold unit<input aria-label={label + ' unit'} value={t?.thresholdUnit ? unitName(r.thresholdUnit) : r.thresholdUnit} maxLength={30} readOnly={!!t?.thresholdUnit} onChange={e => changeRule(r.incidentTypeId, { thresholdUnit: e.target.value })} /></label>
               <label className={s.field}>Sustain time (seconds)<input aria-label={label + ' sustain time'} type="number" min="0" step="1" value={r.sustainSec} onChange={e => changeRule(r.incidentTypeId, { sustainSec: e.target.value })} /></label>
               <label className={s.field}>Cooldown (seconds)<input aria-label={label + ' cooldown'} type="number" min="0" step="1" value={r.cooldownSec} onChange={e => changeRule(r.incidentTypeId, { cooldownSec: e.target.value })} /></label>
               <label className={s.check}><input type="checkbox" aria-label={label + ' enabled'} checked={r.enabled} disabled={!t?.supported || t.status !== 'ACTIVE'} onChange={e => changeRule(r.incidentTypeId, { enabled: e.target.checked })} />Enabled</label>
@@ -309,21 +311,21 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
         })}
         <p className={s.help}>Warning &lt; critical. Sustain is the continuous time above threshold. Cooldown starts after incident closure (MF-02). Crowd density needs a positive zone area.</p>
         <div className={s.actions}>
-          <Button disabled={locked} onClick={() => void save()}>Save configuration</Button>
+          <Button type="submit" disabled={locked}>{busy ? 'Saving…' : 'Save configuration'}</Button>
           <Button variant="secondary" disabled={busy} onClick={() => {
-            if (!confirmDiscard('Discard unsaved changes?')) return;
-            fillForm(config); setError(''); onOpen(false);
+            fillForm(config); setError(''); setNotice(''); closeEditor();
           }}>Cancel</Button>
           {dirty && <span className={s.help}>Unsaved changes</span>}
         </div>
-      </>}
+        <div className={s.actions}><Button variant="secondary" disabled={busy} onClick={reloadSaved}>Reload saved configuration</Button></div>
+      </form>}
     </section>
 
     {review && !showForm && <section className={s.panel}>
       <h2 className={s.title}>Review & activate</h2>
       <p>Zone: {review.zone.name} · Configuration: {review.configuration.name} · {review.configuration.status}</p>
       <p className={s.help}>Saved version: {review.configuration.updatedAt} · Confidence: {review.configuration.confidenceThreshold}</p>
-      <ul>{review.configuration.rules.map(r => <li key={r.incidentTypeId}>{ruleName(r, types)}: {r.enabled ? 'Enabled' : 'Disabled'} · warning ≥ {r.warningThreshold}, critical ≥ {r.criticalThreshold} {r.thresholdUnit} · sustain {r.sustainSec}s · cooldown {r.cooldownSec}s</li>)}</ul>
+      <ul>{review.configuration.rules.map(r => <li key={r.incidentTypeId}>{ruleName(r, types)}: {r.enabled ? 'Enabled' : 'Disabled'} · warning ≥ {r.warningThreshold}, critical ≥ {r.criticalThreshold} {unitName(r.thresholdUnit)} · sustain {r.sustainSec}s · cooldown {r.cooldownSec}s</li>)}</ul>
       <h3>Mapped cameras & camera ROI</h3>
       <p className={s.help}><a href="/admin/store-layout">Review or edit camera ROI in Store layout</a> (deactivate an active configuration before editing).</p>
       {!review.cameras.length && <p>No active camera mapping.</p>}
