@@ -91,13 +91,6 @@
   margin-top: 2px;
 }
 
-.avatar {
-  display: flex;
-  padding: 6px;
-  border-radius: 99px;
-  background: var(--color-surface-2);
-}
-
 .content {
   flex: 1;
   min-height: 0;

@@ -162,7 +162,8 @@ describe('role routing and authenticated access', () => {
     rendered.unmount();
     show('/admin/dashboard');
     await screen.findByRole('heading', { name: 'Dashboard' });
-    await user.click(screen.getByRole('button', { name: 'Sign out' }));
+    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Logout' }));
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/login'));
     expect(loadSession()).toBeNull();
   });
