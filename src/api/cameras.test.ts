@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { saveSession } from '../auth/session';
-import { updateCamera, uploadRecordedVideo, type CreateCameraRequest } from './cameras';
+import {
+  getCameraPreview,
+  removeCameraMapping,
+  saveCameraMapping,
+  updateCamera,
+  uploadRecordedVideo,
+  type CreateCameraRequest,
+} from './cameras';
 
 const user = {
   userId: '00000000-0000-0000-0000-000000000001',
@@ -32,7 +39,7 @@ describe('camera API', () => {
       mapX: 0.25,
       mapY: 0.75,
       mapRotationDeg: 315,
-      status: 'ACTIVE',
+      status: 'ACTIVE' as const,
     };
 
     await updateCamera('camera-1', request);
@@ -42,6 +49,36 @@ describe('camera API', () => {
     expect(init?.method).toBe('PATCH');
     expect(JSON.parse(String(init?.body))).toEqual(request);
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer jwt-token');
+  });
+
+  it('loads a camera preview frame as a blob', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('frame', { headers: { 'Content-Type': 'image/jpeg' } }),
+    );
+
+    const frame = await getCameraPreview('camera-1');
+
+    expect(frame).toMatchObject({ size: 5, type: 'image/jpeg' });
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:5080/api/cameras/camera-1/preview');
+  });
+
+  it('saves and removes a camera-zone ROI mapping', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ cameraZoneId: 'mapping-1' }), { headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const request = {
+      roiPolygon: [{ x: 0.1, y: 0.2 }, { x: 0.8, y: 0.2 }, { x: 0.7, y: 0.9 }],
+      status: 'ACTIVE' as const,
+    };
+
+    await saveCameraMapping('camera-1', 'zone-1', request);
+    await removeCameraMapping('camera-1', 'zone-1');
+
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:5080/api/cameras/camera-1/zones/zone-1');
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('PUT');
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual(request);
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:5080/api/cameras/camera-1/zones/zone-1');
+    expect(fetchMock.mock.calls[1][1]?.method).toBe('DELETE');
   });
 
   it('lets a recorded video upload finish beyond the normal API timeout', async () => {

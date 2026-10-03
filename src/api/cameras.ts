@@ -1,12 +1,19 @@
 import { apiFetch } from './client';
+import type { MapPoint } from './floors';
 export { listFloors, listSupermarkets, listZones } from './floors';
-export type { FloorRecord, SupermarketRecord, ZoneRecord } from './floors';
+export type { FloorRecord, MapPoint, SupermarketRecord, ZoneRecord } from './floors';
 
 export type CameraZoneMapping = {
   cameraZoneId: string;
   cameraId: string;
   zoneId: string;
+  roiPolygon: MapPoint[];
   status: string;
+};
+
+export type CameraMappingRequest = {
+  roiPolygon: MapPoint[];
+  status: 'ACTIVE' | 'INACTIVE';
 };
 
 export type CameraRecord = {
@@ -108,6 +115,15 @@ export const getCameraPreview = (cameraId: string, signal?: AbortSignal) =>
 
 export const listCameraMappings = (cameraId: string, signal?: AbortSignal) =>
   apiFetch<CameraZoneMapping[]>(`/api/cameras/${cameraId}/zones`, { signal });
+
+export const saveCameraMapping = (cameraId: string, zoneId: string, body: CameraMappingRequest) =>
+  apiFetch<CameraZoneMapping>(`/api/cameras/${cameraId}/zones/${zoneId}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+
+export const removeCameraMapping = (cameraId: string, zoneId: string) =>
+  apiFetch<void>(`/api/cameras/${cameraId}/zones/${zoneId}`, { method: 'DELETE' });
 
 export const getCameraConnection = (cameraId: string, signal?: AbortSignal) =>
   apiFetch<CameraConnection>(`/api/cameras/${cameraId}/connection`, { signal });

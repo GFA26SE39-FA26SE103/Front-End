@@ -75,8 +75,8 @@ describe('OperatorCameraLive', () => {
     vi.mocked(listZones).mockResolvedValue([zone('zone-b', 'Checkout'), zone('zone-c', 'Aisles'), zone('zone-d', 'Fresh food')]);
     vi.mocked(listCameras).mockResolvedValue([camera]);
     vi.mocked(listCameraMappings).mockResolvedValue([
-      { cameraZoneId: 'm1', cameraId: 'cam-3', zoneId: 'zone-b', status: 'ACTIVE' },
-      { cameraZoneId: 'm2', cameraId: 'cam-3', zoneId: 'zone-c', status: 'ACTIVE' },
+      { cameraZoneId: 'm1', cameraId: 'cam-3', zoneId: 'zone-b', roiPolygon: [], status: 'ACTIVE' },
+      { cameraZoneId: 'm2', cameraId: 'cam-3', zoneId: 'zone-c', roiPolygon: [], status: 'ACTIVE' },
     ]);
     vi.mocked(getFloorMap).mockResolvedValue(new Blob(['map'], { type: 'image/png' }));
     URL.createObjectURL = vi.fn(() => 'blob:test');

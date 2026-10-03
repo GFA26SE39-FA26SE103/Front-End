@@ -15,6 +15,7 @@ import {
   type ZoneRecord,
 } from '../api/floors';
 import { AdminLayout } from '../components/AdminLayout';
+import { CameraCoverageEditor } from '../components/CameraCoverageEditor';
 import { CameraRegistration } from '../components/CameraRegistration';
 import { FloorPlanSurface, type PlacementChange } from '../components/FloorPlanSurface';
 import type { ZoneEditorSave } from '../components/ZoneEditorOverlay';
@@ -51,6 +52,7 @@ export default function StoreLayout() {
   const [saving, setSaving] = useState(false);
   const [zoneEditing, setZoneEditing] = useState(false);
   const [zoneSaving, setZoneSaving] = useState(false);
+  const [coverageEditing, setCoverageEditing] = useState(false);
   const [registrationOpen, setRegistrationOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -141,6 +143,7 @@ export default function StoreLayout() {
     setActionMessage('');
     setRegistrationOpen(false);
     setZoneEditing(false);
+    setCoverageEditing(false);
   };
 
   const uploadMap = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -224,6 +227,7 @@ export default function StoreLayout() {
     setSelectedCameraId(camera.cameraId);
     setDrafts((current) => ({ ...current, [camera.cameraId]: { x: 0.5, y: 0.5, rotationDeg: 0 } }));
     setRegistrationOpen(false);
+    setCoverageEditing(false);
     setActionMessage('Camera created. Place it on the map, then save its placement.');
   };
 
@@ -290,7 +294,10 @@ export default function StoreLayout() {
             <button
               key={camera.cameraId}
               className={`${s.cameraRow} ${selectedCameraId === camera.cameraId ? s.activeRow : ''}`}
-              onClick={() => setSelectedCameraId(camera.cameraId)}
+              onClick={() => {
+                setSelectedCameraId(camera.cameraId);
+                setCoverageEditing(false);
+              }}
               aria-pressed={selectedCameraId === camera.cameraId}
               aria-label={`${camera.code} ${camera.name}`}
               disabled={zoneEditing}
@@ -302,7 +309,10 @@ export default function StoreLayout() {
           ))}
           {!detailsLoading && cameras.length === 0 && <p className={s.state}>No cameras registered on this floor.</p>}
         </div>
-        <Button variant="secondary" icon="plus-primary" block disabled={!selectedFloor || zoneEditing} onClick={() => setRegistrationOpen((open) => !open)}>
+        <Button variant="secondary" icon="plus-primary" block disabled={!selectedFloor || zoneEditing} onClick={() => {
+          setCoverageEditing(false);
+          setRegistrationOpen((open) => !open);
+        }}>
           {registrationOpen ? 'Close camera form' : 'Add camera'}
         </Button>
 
@@ -335,6 +345,9 @@ export default function StoreLayout() {
           />
         )}
         <Card className={s.canvas}>
+          {coverageEditing && selectedCamera ? (
+            <CameraCoverageEditor camera={selectedCamera} zones={zones} onClose={() => setCoverageEditing(false)} />
+          ) : <>
           <div className={s.canvasHeader}>
             <CardHeader
               title={selectedFloor?.name ?? 'Floor plan'}
@@ -352,6 +365,7 @@ export default function StoreLayout() {
                       if (next) setSelectedCameraId(null);
                       return next;
                     });
+                    setCoverageEditing(false);
                     setRegistrationOpen(false);
                     setActionError('');
                     setActionMessage('');
@@ -384,6 +398,7 @@ export default function StoreLayout() {
               <Button variant="secondary" icon="upload" disabled={!selectedFloor} onClick={() => fileInput.current?.click()}>Upload floor plan</Button>
             </div>
           )}
+          </>}
         </Card>
         {(loadError || actionError || actionMessage) && (
           <div className={s.feedback}>
@@ -394,7 +409,7 @@ export default function StoreLayout() {
         )}
       </div>
 
-      {selectedCamera && !zoneEditing && <Card className={s.props}>
+      {selectedCamera && !zoneEditing && !coverageEditing && <Card className={s.props}>
         <CardHeader title="Camera placement" />
         <div className={s.cameraTitle}>
           <Icon name="camera-row" size={17} />
@@ -402,6 +417,20 @@ export default function StoreLayout() {
           <Chip tone={selectedCamera.healthStatus === 'ONLINE' ? 'success' : 'neutral'}>{selectedCamera.healthStatus}</Chip>
         </div>
         <p className={s.placementHelp}>Drag the camera to position it. Drag its direction handle to rotate.</p>
+        <Button
+          variant="secondary"
+          block
+          disabled={zones.length === 0}
+          onClick={() => {
+            setCoverageEditing(true);
+            setRegistrationOpen(false);
+            setActionError('');
+            setActionMessage('');
+          }}
+        >
+          Configure coverage
+        </Button>
+        {zones.length === 0 && <p className={s.placementHelp}>Create a zone on this floor before mapping camera coverage.</p>}
         {selectedDraft && <p className={s.unsaved}>Unsaved placement</p>}
         <div className={s.actions}>
           <Button variant="secondary" disabled={!selectedDraft || saving} onClick={() => setDrafts((current) => {

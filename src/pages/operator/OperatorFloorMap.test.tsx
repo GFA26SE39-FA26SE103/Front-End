@@ -77,8 +77,8 @@ describe('OperatorFloorMap', () => {
     vi.mocked(listZones).mockResolvedValue([zone('zone-a', 'Checkout', 0.1), zone('zone-b', 'Entrance', 0.4), zone('zone-c', 'Aisles', 0.7)]);
     vi.mocked(listCameras).mockResolvedValue([camera('cam-1', 'CAM-01', 'ONLINE'), camera('cam-2', 'CAM-02', 'OFFLINE')]);
     vi.mocked(listCameraMappings).mockImplementation(async (cameraId) => cameraId === 'cam-1'
-      ? [{ cameraZoneId: 'm1', cameraId: 'cam-1', zoneId: 'zone-a', status: 'ACTIVE' }]
-      : [{ cameraZoneId: 'm2', cameraId: 'cam-2', zoneId: 'zone-b', status: 'ACTIVE' }]);
+      ? [{ cameraZoneId: 'm1', cameraId: 'cam-1', zoneId: 'zone-a', roiPolygon: [], status: 'ACTIVE' }]
+      : [{ cameraZoneId: 'm2', cameraId: 'cam-2', zoneId: 'zone-b', roiPolygon: [], status: 'ACTIVE' }]);
     vi.mocked(getFloorMap).mockResolvedValue(new Blob(['map'], { type: 'image/png' }));
     vi.mocked(getCameraPreview).mockResolvedValue(new Blob(['frame'], { type: 'image/jpeg' }));
     URL.createObjectURL = vi.fn(() => 'blob:test');

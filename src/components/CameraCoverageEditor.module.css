@@ -1,0 +1,264 @@
+.editor {
+  display: flex;
+  min-height: 500px;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.header,
+.layout,
+.editActions,
+.mappingHeader {
+  display: flex;
+  gap: 12px;
+}
+
+.header {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header > :first-child {
+  flex: 1;
+}
+
+.layout {
+  min-height: 0;
+  flex: 1;
+  align-items: flex-start;
+}
+
+.previewColumn {
+  min-width: 0;
+  flex: 1;
+}
+
+.previewFrame {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: #111827;
+}
+
+.preview,
+.drawingLayer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.preview {
+  object-fit: fill;
+}
+
+.drawingLayer {
+  z-index: 1;
+  touch-action: none;
+}
+
+.savedRoi,
+.activeRoi {
+  vector-effect: non-scaling-stroke;
+  stroke-width: 3;
+  fill-opacity: 0.18;
+  pointer-events: none;
+}
+
+.activeRoi {
+  fill-opacity: 0.28;
+  stroke-width: 4;
+}
+
+.movable {
+  cursor: move;
+  pointer-events: auto;
+}
+
+.resizeHandle,
+.point {
+  position: absolute;
+  z-index: 2;
+  width: 13px;
+  height: 13px;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--roi-color, #3b82f6);
+}
+
+.resizeHandle {
+  width: 20px;
+  height: 20px;
+  border: 5px solid transparent;
+  background: var(--roi-color);
+  background-clip: padding-box;
+  cursor: grab;
+  touch-action: none;
+}
+
+.resizeHandle:active {
+  cursor: grabbing;
+}
+
+.previewState {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #d1d5db;
+  font-size: 12px;
+}
+
+.hint,
+.muted,
+.error,
+.success {
+  margin: 8px 0 0;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.hint,
+.muted {
+  color: var(--color-text-muted);
+}
+
+.controls {
+  width: 290px;
+  flex: 0 0 290px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface-2);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.field select {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.editActions > * {
+  flex: 1;
+}
+
+.mappingHeader {
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 4px;
+  font-size: 11px;
+}
+
+.mappingList {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mappingList li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 8px;
+  padding: 9px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+}
+
+.mappingList li > span:nth-child(2) {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mappingList strong,
+.mappingList small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mappingList strong {
+  font-size: 10.5px;
+}
+
+.mappingList small {
+  color: var(--color-text-muted);
+  font-size: 9px;
+}
+
+.mappingList button {
+  grid-column: span 2;
+  min-height: 30px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--color-primary);
+  font-size: 9.5px;
+  font-weight: 650;
+}
+
+.mappingList button:hover:not(:disabled) {
+  background: var(--color-primary-tint);
+}
+
+.mappingList .remove {
+  color: var(--color-danger);
+}
+
+.zoneDot {
+  width: 9px;
+  height: 9px;
+  margin-top: 2px;
+  border-radius: 50%;
+}
+
+.error {
+  padding: 8px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--color-danger) 9%, transparent);
+  color: var(--color-danger);
+}
+
+.success {
+  color: var(--color-success);
+  font-weight: 650;
+}
+
+@media (max-width: 1050px) {
+  .layout {
+    flex-direction: column;
+  }
+
+  .controls {
+    width: 100%;
+    flex-basis: auto;
+  }
+}
