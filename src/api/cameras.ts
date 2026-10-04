@@ -48,6 +48,20 @@ export type CreateCameraRequest = {
   status: string;
 };
 
+export const cameraUpdateRequest = (camera: CameraRecord, status = camera.status): CreateCameraRequest => ({
+  code: camera.code,
+  name: camera.name,
+  manufacturer: camera.manufacturer,
+  model: camera.model,
+  serialNumber: camera.serialNumber,
+  installedAt: camera.installedAt ?? new Date(0).toISOString(),
+  warrantyExpiresAt: camera.warrantyExpiresAt ?? camera.installedAt ?? new Date(0).toISOString(),
+  mapX: camera.mapX ?? null,
+  mapY: camera.mapY ?? null,
+  mapRotationDeg: camera.mapRotationDeg ?? null,
+  status,
+});
+
 export type ConfigureConnectionRequest = {
   sourceType: 'LIVE';
   protocol: 'HTTP';
@@ -99,10 +113,11 @@ export const createCamera = (floorId: string, body: CreateCameraRequest) =>
     body: JSON.stringify(body),
   });
 
-export const updateCamera = (cameraId: string, body: CreateCameraRequest) =>
+export const updateCamera = (cameraId: string, body: CreateCameraRequest, signal?: AbortSignal) =>
   apiFetch<CameraRecord>(`/api/cameras/${cameraId}`, {
     method: 'PATCH',
     body: JSON.stringify(body),
+    signal,
   });
 
 export const configureCameraConnection = (cameraId: string, body: ConfigureConnectionRequest) =>

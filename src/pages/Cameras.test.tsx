@@ -1,8 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { saveSession } from '../auth/session';
+import { mockNativeDialogs } from '../test/dialog';
 import Cameras from './Cameras';
 
 const storeId = '10000000-0000-0000-0000-000000000001';
@@ -13,6 +14,8 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
   status,
   headers: { 'Content-Type': 'application/json' },
 });
+
+mockNativeDialogs();
 
 describe('Cameras registration', () => {
   beforeEach(() => {
@@ -225,5 +228,48 @@ describe('Cameras registration', () => {
 
     expect(await screen.findByText('HTTP · configured in backend')).toBeInTheDocument();
     expect(screen.queryByRole('form', { name: 'Configure camera connection' })).not.toBeInTheDocument();
+  });
+
+  it('edits camera metadata and deactivates it without deleting its record', async () => {
+    const patches: Record<string, unknown>[] = [];
+    const original = {
+      cameraId, floorId, code: 'CAM-EDIT', name: 'Old name', manufacturer: 'Acme', model: 'A1', serialNumber: 'SN-1',
+      installedAt: '2026-01-01T00:00:00Z', warrantyExpiresAt: '2027-01-01T00:00:00Z', mapX: 0.25, mapY: 0.75,
+      mapRotationDeg: 90, status: 'ACTIVE', healthStatus: 'ONLINE', lastSeenAt: '2026-10-04T01:00:00Z',
+    };
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      if (path === '/api/supermarkets') return json([{ supermarketId: storeId }]);
+      if (path === `/api/supermarkets/${storeId}/floors`) return json([{ floorId, floorNumber: 1, name: 'Ground floor' }]);
+      if (path === `/api/floors/${floorId}/cameras`) return json([original]);
+      if (path === `/api/floors/${floorId}/zones` || path === `/api/cameras/${cameraId}/zones`) return json([]);
+      if (path === `/api/cameras/${cameraId}` && init?.method === 'PATCH') {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        patches.push(body);
+        return json({ ...original, ...body, healthStatus: body.status === 'INACTIVE' ? 'UNKNOWN' : 'ONLINE' });
+      }
+      return json({ code: 'UNEXPECTED_REQUEST', path }, 500);
+    });
+    const user = userEvent.setup();
+    render(<MemoryRouter><Cameras /></MemoryRouter>);
+    await screen.findAllByText('CAM-EDIT');
+
+    await user.click(screen.getByRole('button', { name: 'Edit camera' }));
+    await user.clear(screen.getByLabelText('Camera name'));
+    await user.type(screen.getByLabelText('Camera name'), 'Checkout camera');
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save camera' }));
+    await screen.findByText('Ground floor · Checkout camera');
+
+    expect(patches[0]).toMatchObject({ name: 'Checkout camera', mapX: 0.25, mapY: 0.75, mapRotationDeg: 90, status: 'ACTIVE' });
+    await user.click(screen.getByRole('button', { name: 'Deactivate camera' }));
+    const confirmation = screen.getByRole('dialog');
+    expect(confirmation).toHaveTextContent('health will become UNKNOWN');
+    await user.click(within(confirmation).getByRole('button', { name: 'Deactivate camera' }));
+
+    await screen.findByText(/This camera is inactive/);
+    expect(patches[1]).toMatchObject({ name: 'Checkout camera', status: 'INACTIVE', mapX: 0.25, mapY: 0.75, mapRotationDeg: 90 });
+    expect(screen.getByRole('button', { name: 'Reactivate camera' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Test & enable' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Start AI preview' })).toBeDisabled();
   });
 });
