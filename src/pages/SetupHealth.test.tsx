@@ -26,51 +26,42 @@ export const dashboardFixture = (): SetupOverview => ({
 });
 let data: SetupOverview;
 let failOverview: boolean;
-let failCheck: boolean;
 let calls: { path: string; method: string; bearer: string | null }[];
 const show = () => render(<MemoryRouter><SetupHealth /></MemoryRouter>);
 
 describe('MF-01 setup dashboard', () => {
   beforeEach(() => {
-    data = dashboardFixture(); calls = []; failOverview = false; failCheck = false;
+    data = dashboardFixture(); calls = []; failOverview = false;
     saveSession({ accessToken: 'admin-token', expiresAt: '2099-01-01T00:00:00Z', user: { userId: 'admin', email: 'admin@test.example', fullName: 'Admin', roleId: 'role', role: 'ADMIN', status: 'ACTIVE' } }, true);
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const path = new URL(String(input)).pathname; const method = init?.method ?? 'GET';
       calls.push({ path, method, bearer: new Headers(init?.headers).get('Authorization') });
       if (path === '/api/setup/overview') return failOverview ? json({ code: 'LOAD_FAILED', detail: 'Setup unavailable.' }, 503) : json(data);
-      if (path === '/api/cameras/camera-1/health/check' && method === 'POST') {
-        if (failCheck) return json({ code: 'CHECK_FAILED', detail: 'Health check unavailable.' }, 503);
-        data.cameras[0].healthStatus = 'ONLINE'; data.cameras[0].monitoringReadiness = 'READY'; data.cameras[0].processingAvailability = 'AVAILABLE'; data.cameras[0].activeHealthIssues = []; data.cameras[0].lastSeenAt = '2026-10-03T11:00:00Z'; data.cameras[0].issues = [];
-        data.totals.onlineCameraCount = 1; data.totals.unresolvedHealthEventCount = 0; data.healthEvents = [];
-        return json({ connectionStatus: 'ONLINE', monitoringReadiness: 'READY', processingAvailability: 'AVAILABLE', activeHealthIssues: [] });
-      }
       return json({ code: 'UNEXPECTED_REQUEST' }, 500);
     });
   });
 
-  it('loads a read-only summary with activation separate from health and correct action targets', async () => {
+  it('loads a read-only setup summary without duplicating runtime camera health', async () => {
     show(); await screen.findByText('Checkout queue');
     expect(within(screen.getByRole('region', { name: 'Configuration activation' })).getByText('1 / 2')).toBeInTheDocument();
     expect(within(screen.getByRole('table', { name: 'Zone configurations' })).getByText('ACTIVE')).toBeInTheDocument();
-    expect(within(screen.getByRole('table', { name: 'Camera connectivity' })).getByText('OFFLINE')).toBeInTheDocument();
-    expect(within(screen.getByRole('table', { name: 'Camera connectivity' })).getByText('Not ready')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'View configuration' })).toHaveAttribute('href', '/admin/ai-config?zoneId=zone-1');
-    expect(screen.getByRole('link', { name: 'Manage CAM-01' })).toHaveAttribute('href', '/admin/cameras?cameraId=camera-1');
     expect(screen.getAllByRole('link', { name: 'Layout & ROI' })[0]).toHaveAttribute('href', '/admin/store-layout?floorId=floor-1&cameraId=camera-1');
+    expect(screen.queryByRole('table', { name: 'Camera connectivity' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Unresolved camera health alerts' })).not.toBeInTheDocument();
     expect(calls).toEqual([{ path: '/api/setup/overview', method: 'GET', bearer: 'Bearer admin-token' }]);
     expect(screen.queryByRole('button', { name: 'Activate monitoring' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Reconnect' })).not.toBeInTheDocument();
   });
 
-  it('filters zones and cameras by floor, search and missing setup', async () => {
+  it('filters zones by floor, search and missing setup', async () => {
     show(); await screen.findByText('Checkout queue');
     fireEvent.change(screen.getByLabelText('Filter dashboard by floor'), { target: { value: 'floor-2' } });
     expect(screen.queryByText('Checkout queue')).not.toBeInTheDocument(); expect(screen.getByText('Fresh food zone')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Manage CAM-01' })).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Filter dashboard by floor'), { target: { value: '' } });
-    fireEvent.change(screen.getByLabelText('Search zones and cameras'), { target: { value: 'Queue monitoring' } });
+    fireEvent.change(screen.getByLabelText('Search zones'), { target: { value: 'Queue monitoring' } });
     expect(screen.getByText('Checkout queue')).toBeInTheDocument(); expect(screen.queryByText('Fresh food zone')).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Search zones and cameras'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Search zones'), { target: { value: '' } });
     fireEvent.click(screen.getByLabelText('Needs attention only'));
     expect(screen.queryByText('Checkout queue')).not.toBeInTheDocument(); expect(screen.getByText('Fresh food zone')).toBeInTheDocument();
     fireEvent.click(screen.getByText('1 missing requirement')); expect(screen.getByText('Add incident rules.')).toBeInTheDocument();
@@ -81,7 +72,7 @@ describe('MF-01 setup dashboard', () => {
     Object.keys(data.totals).forEach(key => { data.totals[key as keyof typeof data.totals] = 0; });
     data.steps.forEach(step => { step.completed = 0; step.total = 0; });
     show(); await screen.findByText(/default store seed is missing/i);
-    expect(screen.getByText(/No floors yet/)).toBeInTheDocument(); expect(screen.getByText('No cameras registered yet.')).toBeInTheDocument();
+    expect(screen.getByText(/No floors yet/)).toBeInTheDocument();
     expect(screen.queryByText('MONITORING ACTIVE')).not.toBeInTheDocument(); expect(calls.every(c => c.method === 'GET')).toBe(true);
   });
 
@@ -92,24 +83,6 @@ describe('MF-01 setup dashboard', () => {
     failOverview = true; fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
     await screen.findByText('Showing the last successful snapshot. Status may have changed.');
     expect(screen.getByText('Checkout queue')).toBeInTheDocument(); expect(calls.every(c => c.method === 'GET')).toBe(true);
-  });
-
-  it('probes only on explicit click and reloads server status without changing activation', async () => {
-    show(); await screen.findByText('OFFLINE');
-    fireEvent.click(screen.getByRole('button', { name: 'Check health' })); await screen.findByText('ONLINE');
-    expect(calls.filter(c => c.method === 'POST')).toEqual([{ path: '/api/cameras/camera-1/health/check', method: 'POST', bearer: 'Bearer admin-token' }]);
-    expect(calls.filter(c => c.path === '/api/setup/overview')).toHaveLength(2);
-    expect(within(screen.getByRole('table', { name: 'Zone configurations' })).getByText('ACTIVE')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Unresolved camera health alerts' })).not.toBeInTheDocument();
-  });
-
-  it('preserves offline status on failed check and prevents probing disabled connections', async () => {
-    failCheck = true; show(); await screen.findByText('OFFLINE');
-    fireEvent.click(screen.getByRole('button', { name: 'Check health' })); await screen.findByText('Health check unavailable.');
-    expect(screen.getByText('OFFLINE')).toBeInTheDocument(); expect(screen.queryByText(/Health check completed/)).not.toBeInTheDocument();
-    data.cameras[0].isEnabled = false; data.cameras[0].healthStatus = 'UNKNOWN'; data.cameras[0].monitoringReadiness = 'NOT_READY'; data.cameras[0].processingAvailability = 'UNKNOWN';
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await screen.findByText('UNKNOWN');
-    expect(screen.getByRole('button', { name: 'Check health' })).toBeDisabled(); expect(screen.getByText('Health checks paused')).toBeInTheDocument();
   });
 
   it('refreshes visible snapshots periodically, pauses when hidden and cancels on unmount', async () => {

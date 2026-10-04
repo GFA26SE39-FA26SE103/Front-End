@@ -1,132 +1,103 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { checkCameraHealth, getSetupOverview, type SetupCamera, type SetupOverview } from '../api/setup';
 import { AdminLayout } from '../components/AdminLayout';
-import { Badge, Button, Overline, StatCard } from '../components/ui';
-import { cameras } from '../data/mock';
-import { perfCharts, pipeline, services } from '../data/mockOps';
-import s from './Monitoring.module.css';
+import { Button, Chip, type Tone } from '../components/ui';
+import s from './SetupHealth.module.css';
 
-const now = () => new Date().toLocaleTimeString('en-GB');
-const statusTone = { HEALTHY: 'success', DEGRADED: 'warning', DOWN: 'danger' } as const;
+const time = (value: string | null) => value ? new Date(value).toLocaleString() : 'No frame received yet';
+const cameraLink = (cameraId: string) => '/admin/cameras?cameraId=' + encodeURIComponent(cameraId);
+const tone = (status: string): Tone => status === 'ONLINE' || status === 'READY' || status === 'AVAILABLE'
+  ? 'success' : status === 'UNKNOWN' ? 'warning' : status === 'OFFLINE' || status === 'NOT_READY' || status === 'UNAVAILABLE' ? 'danger' : 'neutral';
+const healthIssueLabels: Record<string, string> = {
+  STREAM_UNAVAILABLE: 'Camera stream unavailable', CAMERA_VIEW_BLOCKED: 'Camera view blocked', CAMERA_VIEW_BLURRED: 'Camera view blurred',
+  CAMERA_VIEW_FROZEN: 'Camera view frozen', CAMERA_FRAME_INVALID: 'Camera frame invalid',
+};
+const healthIssueLabel = (eventType: string) => healthIssueLabels[eventType] ?? eventType.replaceAll('_', ' ').toLowerCase();
 
 export default function SystemHealth() {
-  const [updated, setUpdated] = useState(now);
-  const [refreshing, setRefreshing] = useState(false);
-  const [runbook, setRunbook] = useState(false);
-  const [responseNote, setResponseNote] = useState(false);
+  const [data, setData] = useState<SetupOverview | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(true);
+  const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [checking, setChecking] = useState<string | null>(null);
+  const actionController = useRef<AbortController | null>(null);
 
-  const online = cameras.filter((c) => c.status === 'Online').length;
-  const degraded = cameras.filter((c) => c.status === 'Degraded');
-  const offline = cameras.filter((c) => c.status === 'Offline');
-  const issues = services.filter((x) => x.status !== 'HEALTHY').length;
+  useEffect(() => {
+    let controller: AbortController | null = null;
+    let disposed = false;
+    const refresh = async () => {
+      controller?.abort(); controller = new AbortController(); const signal = controller.signal; setRefreshing(true);
+      try {
+        const saved = await getSetupOverview(signal);
+        if (disposed || signal.aborted) return;
+        setData(saved); setError('');
+      } catch (e) {
+        if (!disposed && !signal.aborted) setError(e instanceof Error ? e.message : 'Could not load system health.');
+      } finally { if (!disposed && !signal.aborted) setRefreshing(false); }
+    };
+    void refresh();
+    const timer = window.setInterval(() => { if (!document.hidden) void refresh(); }, 30000);
+    return () => { disposed = true; controller?.abort(); window.clearInterval(timer); };
+  }, [refreshKey]);
+  useEffect(() => () => actionController.current?.abort(), []);
 
-  function refresh() {
-    setRefreshing(true);
-    // TODO: GET /system/health
-    window.setTimeout(() => { setUpdated(now()); setRefreshing(false); }, 600);
+  async function check(camera: SetupCamera) {
+    const controller = new AbortController(); actionController.current = controller;
+    setChecking(camera.cameraId); setActionError(''); setNotice('');
+    try {
+      await checkCameraHealth(camera.cameraId, controller.signal);
+      if (controller.signal.aborted) return;
+      setNotice('Health check completed for ' + camera.code + '.'); setRefreshKey(key => key + 1);
+    } catch (e) {
+      if (!controller.signal.aborted) setActionError(e instanceof Error ? e.message : 'Health check failed.');
+    } finally { if (!controller.signal.aborted) setChecking(null); }
   }
 
-  return (
-    <AdminLayout
-      title="System health"
-      subtitle="Real-time infrastructure, processing and delivery health"
-      actions={
-        <>
-          <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--color-text-muted)' }}>Updated {updated}</span>
-          <Button onClick={refresh} disabled={refreshing} style={{ height: 36, width: 86 }}>{refreshing ? '…' : 'Refresh'}</Button>
-        </>
-      }
-    >
-      <div className={s.page}>
+  const cameras = data?.cameras ?? [];
+  const enabled = cameras.filter(camera => camera.status === 'ACTIVE' && camera.isEnabled && camera.connectionValid);
+  const ready = enabled.filter(camera => camera.monitoringReadiness === 'READY').length;
+  const overall = !cameras.length ? 'Not configured' : data && data.totals.unresolvedHealthEventCount === 0 && enabled.length > 0 && ready === enabled.length ? 'Healthy' : 'Needs attention';
+
+  return <AdminLayout title="System health" subtitle="Live camera connectivity, visual usability and monitoring readiness"
+    actions={<><span className={s.updated}>{data ? 'Fetched ' + time(data.generatedAt) : 'Loading system health'}</span><Button variant="secondary" disabled={refreshing || checking !== null} onClick={() => setRefreshKey(key => key + 1)}>{refreshing ? 'Refreshing…' : 'Refresh'}</Button></>}>
+    <div className={s.page}>
+      {error && <div className={s.alert} role="alert">{error}{data && <p>Showing the last successful snapshot. Status may have changed.</p>}<Button variant="secondary" disabled={refreshing} onClick={() => setRefreshKey(key => key + 1)}>Retry loading health</Button></div>}
+      {!data && refreshing && <p role="status">Loading camera and processing health…</p>}
+      {data && <>
         <div className={s.stats}>
-          <StatCard label="OVERALL STATUS" value={issues ? 'Degraded' : 'Healthy'} note={`${issues} active issues`} tone={issues ? 'warning' : 'success'} />
-          <StatCard label="CAMERAS" value={`${online} / ${cameras.length}`} note={`${degraded.length} degraded · ${offline.length} offline`} tone={online === cameras.length ? 'success' : 'warning'} />
-          <StatCard label="AI PROCESSING" value="97.8%" note="142 ms median latency" tone="success" />
-          <StatCard label="MOBILE SYNC" value="99.2%" note="12 items queued" tone="success" />
+          <Stat label="Overall status" value={overall} note={data.totals.unresolvedHealthEventCount + ' unresolved camera alerts'} />
+          <Stat label="Camera connectivity" value={data.totals.onlineCameraCount + ' / ' + enabled.length + ' online'} note={data.totals.cameraCount + ' registered · valid enabled live or recorded sources'} />
+          <Stat label="Monitoring readiness" value={ready + ' / ' + enabled.length + ' ready'} note="Connectivity, visual health and processing must all be available" />
+          <Stat label="Active health alerts" value={String(data.totals.unresolvedHealthEventCount)} note="Open or investigating camera-health events" />
         </div>
 
-        {issues > 0 && (
-          <div className={s.banner} role="status">
-            <i />
-            <div style={{ flex: 1 }}>
-              <p className={s.bannerTitle}>Service degradation detected</p>
-              <p className={s.bannerText}>{degraded.map((c) => c.code).join(', ') || 'Camera'} latency and notification delivery failures may delay incident dispatch.</p>
-            </div>
-            <button className={s.warnBtn} onClick={() => setRunbook((v) => !v)} aria-expanded={runbook}>{runbook ? 'Hide runbook' : 'View runbook'}</button>
-          </div>
-        )}
-        {runbook && (
-          <ol className={s.runbook}>
-            <li>Open Cameras and run “Test stream” on the degraded camera.</li>
-            <li>If latency stays above the threshold in AI Config, restart the camera or its switch port.</li>
-            <li>For notification failures, check the push provider status; staff still see tasks in the app.</li>
-            <li>Record what was done in the camera maintenance log.</li>
-          </ol>
-        )}
+        <section className={s.panel}>
+          <div className={s.head}><div><h2>Camera health</h2><p>Checks receive a real frame from the configured source. Monitoring activation remains separate from runtime health.</p></div><Link className={s.linkButton} to="/admin/cameras">Manage cameras</Link></div>
+          {actionError && <p className={s.alert} role="alert">{actionError}</p>}
+          {notice && <p className={s.ready} role="status">{notice}</p>}
+          {!cameras.length ? <p className={s.empty}>No cameras registered yet. <Link to="/admin/cameras">Add and configure a camera</Link>.</p> :
+            <div className={s.tableWrap}><table aria-label="Camera health"><thead><tr><th>Camera</th><th>Source</th><th>Connection</th><th>Monitoring</th><th>Last frame received</th><th>Needs attention</th><th>Actions</th></tr></thead><tbody>
+              {cameras.map(camera => <tr key={camera.cameraId}>
+                <td><strong>{camera.code}</strong><span>{camera.name}</span><span className={s.muted}>{camera.floorName} · {camera.status}</span></td>
+                <td><span>{camera.sourceType ? camera.sourceType + ' / ' + camera.protocol : 'Not configured'}</span><Chip tone={camera.connectionValid ? 'primary' : 'danger'}>{camera.connectionValid ? (camera.isEnabled ? 'Enabled' : 'Disabled') : 'Unsupported'}</Chip><span className={s.muted}>Test: {camera.lastTestResult ?? 'Not tested'}</span></td>
+                <td><Chip tone={camera.isEnabled && camera.connectionValid && camera.status === 'ACTIVE' ? tone(camera.healthStatus) : 'neutral'}>{camera.healthStatus}</Chip>{(!camera.isEnabled || !camera.connectionValid || camera.status !== 'ACTIVE') && <span className={s.muted}>Health checks paused</span>}</td>
+                <td><Chip tone={camera.isEnabled && camera.connectionValid && camera.status === 'ACTIVE' ? tone(camera.monitoringReadiness) : 'neutral'}>{camera.monitoringReadiness}</Chip><span className={s.muted}>Processing: {camera.processingAvailability}</span></td>
+                <td>{time(camera.lastSeenAt)}</td>
+                <td>{camera.issues.length ? <ul className={s.issues}>{camera.issues.map(issue => <li key={issue.code}>{issue.message}</li>)}</ul> : <span className={s.muted}>No current issues</span>}</td>
+                <td><div className={s.rowActions}><Link className={s.linkButton} to={cameraLink(camera.cameraId)}>Manage {camera.code}</Link><Button variant="secondary" disabled={!camera.isEnabled || !camera.connectionValid || camera.status !== 'ACTIVE' || checking !== null} onClick={() => void check(camera)}>{checking === camera.cameraId ? 'Checking…' : 'Check health'}</Button></div></td>
+              </tr>)}
+            </tbody></table></div>}
+          {!!data.healthEvents.length && <div className={s.events}><h3>Unresolved camera health alerts</h3>{data.healthEvents.map(event => <div key={event.healthEventId}><strong>{event.cameraCode}</strong><Chip tone={event.status === 'OPEN' ? 'danger' : 'warning'}>{event.status}</Chip><span>{healthIssueLabel(event.eventType)} · {time(event.detectedAt)}</span><Link to={cameraLink(event.cameraId)}>Investigate camera →</Link></div>)}</div>}
+          <p className={s.scope}>Missing frames are unavailable measurements, never a numeric zero. Camera failures do not deactivate monitoring configurations or transfer measurements to another camera.</p>
+        </section>
+      </>}
+    </div>
+  </AdminLayout>;
+}
 
-        <div className={s.split}>
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div className={s.box} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div className={s.headRow}><Overline>SERVICE STATUS</Overline><span>{services.length} monitored services</span></div>
-              <div className={s.divider} />
-              {services.map((x) => (
-                <div key={x.name} className={s.service}>
-                  <i className={s.dot} style={{ background: `var(--color-${statusTone[x.status]})` }} />
-                  <div>
-                    <p className={s.svcName}>{x.name}</p>
-                    <p className={s.svcDetail}>{x.name === 'Camera ingestion' ? `${cameras.length} configured cameras` : x.detail}</p>
-                  </div>
-                  <p className={s.metric}>{x.name === 'Camera ingestion' ? `${online} online · ${cameras.length - online} affected` : x.metric}</p>
-                  <Badge tone={statusTone[x.status]} width={112}>{x.status}</Badge>
-                </div>
-              ))}
-            </div>
-            <div className={s.box} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <Overline>PERFORMANCE · LAST 60 MINUTES</Overline>
-              <div className={s.charts}>
-                {perfCharts.map((c) => (
-                  <div key={c.label} className={s.chart}>
-                    <p style={{ fontSize: 8, fontWeight: 600, color: 'var(--color-text-dim)' }}>{c.label}</p>
-                    <p className={s.chartValue}>{c.value}<span>{c.unit}</span></p>
-                    <div className={s.bars} role="img" aria-label={`${c.label} over the last 60 minutes`}>
-                      {c.bars.map((h, i) => <i key={i} style={{ height: h, background: `color-mix(in srgb, var(--color-${c.tone}) 78%, transparent)` }} />)}
-                    </div>
-                    <p style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>Last 60 minutes</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ width: 386, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div className={s.box} style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 16px' }}>
-              <div className={s.headRow}><Overline>ACTIVE ALERTS</Overline><Badge tone="danger" width={66}>2 OPEN</Badge></div>
-              <div className={s.alertCard} style={{ background: 'var(--color-danger-tint)' }}>
-                <p className={s.alertHead}>{degraded[0]?.code ?? 'CAM-03'} ingestion latency<Badge tone="danger" width={72}>HIGH</Badge></p>
-                <p style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>Video latency is 2.8s above threshold.</p>
-                <p style={{ fontSize: 8, fontWeight: 500, color: 'var(--color-danger)' }}>Open for 6 min</p>
-              </div>
-              <div className={s.alertCard} style={{ background: 'var(--color-warning-tint)' }}>
-                <p className={s.alertHead}>Notification delivery degraded<Badge tone="warning" width={72}>MEDIUM</Badge></p>
-                <p style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>Push delivery failures reached 4.2%.</p>
-                <p style={{ fontSize: 8, fontWeight: 500, color: 'var(--color-warning)' }}>Open for 11 min</p>
-              </div>
-              <button className={s.outlineBtn} onClick={() => setResponseNote(true)}>Open incident response</button>
-              {responseNote && <p style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Incident response runs in the Operator console (main flow 2), which is not built yet.</p>}
-            </div>
-            <div className={s.box} style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '14px 16px', flex: 1 }}>
-              <Overline>INCIDENT PIPELINE</Overline>
-              <p style={{ fontSize: 13, fontWeight: 600 }}>End-to-end health</p>
-              {pipeline.map((p) => (
-                <div key={p.step} className={s.pipeStep}>
-                  <i style={{ background: `var(--color-${p.ok ? 'success' : 'warning'})` }} />
-                  <span>{p.step}</span>
-                  <span style={{ color: `var(--color-${p.ok ? 'success' : 'warning'})` }}>{p.ok ? 'Healthy' : 'Degraded'}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </AdminLayout>
-  );
+function Stat({ label, value, note }: { label: string; value: string; note: string }) {
+  return <section className={s.stat} aria-label={label}><p>{label}</p><strong>{value}</strong><span>{note}</span></section>;
 }
