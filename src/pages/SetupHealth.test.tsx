@@ -21,7 +21,7 @@ export const dashboardFixture = (): SetupOverview => ({
     { floorId: 'floor-1', floorNumber: 1, name: 'Ground floor', hasMap: true, zones: [{ zoneId: 'zone-1', code: 'QUEUE', name: 'Checkout queue', status: 'ACTIVE', configuration: { configId: 'config', name: 'Queue monitoring', status: 'ACTIVE', ruleCount: 1, enabledRuleCount: 1 }, setupReady: true, canActivate: false, cameras: [{ cameraId: 'camera-1', code: 'CAM-01', name: 'Queue camera', status: 'ACTIVE', mappingStatus: 'ACTIVE', roiPolygon: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }], sourceType: 'LIVE', protocol: 'HTTP', isEnabled: true, lastTestResult: 'SUCCESS', lastTestedAt: '2026-10-03T09:00:00Z', ready: true, issues: [] }], issues: [], warnings: ['MF-02 processing is separate.'] }] },
     { floorId: 'floor-2', floorNumber: 2, name: 'Fresh food floor', hasMap: false, zones: [{ zoneId: 'zone-2', code: 'FOOD', name: 'Fresh food zone', status: 'ACTIVE', configuration: null, setupReady: false, canActivate: false, cameras: [], issues: [{ code: 'CONFIGURATION_MISSING', message: 'Add incident rules.' }], warnings: [] }] },
   ],
-  cameras: [{ cameraId: 'camera-1', floorId: 'floor-1', floorName: 'Ground floor', code: 'CAM-01', name: 'Queue camera', status: 'ACTIVE', healthStatus: 'OFFLINE', lastSeenAt: null, hasConnection: true, connectionValid: true, isEnabled: true, sourceType: 'LIVE', protocol: 'HTTP', lastTestResult: 'SUCCESS', lastTestedAt: '2026-10-03T09:00:00Z', issues: [{ code: 'CAMERA_HEALTH_OFFLINE', message: 'Investigate camera connectivity.' }] }],
+  cameras: [{ cameraId: 'camera-1', floorId: 'floor-1', floorName: 'Ground floor', code: 'CAM-01', name: 'Queue camera', status: 'ACTIVE', healthStatus: 'OFFLINE', monitoringReadiness: 'NOT_READY', processingAvailability: 'UNKNOWN', activeHealthIssues: ['STREAM_UNAVAILABLE'], lastSeenAt: null, hasConnection: true, connectionValid: true, isEnabled: true, sourceType: 'LIVE', protocol: 'HTTP', lastTestResult: 'SUCCESS', lastTestedAt: '2026-10-03T09:00:00Z', issues: [{ code: 'CAMERA_HEALTH_OFFLINE', message: 'Investigate camera connectivity.' }] }],
   healthEvents: [{ healthEventId: 'event', cameraId: 'camera-1', cameraCode: 'CAM-01', eventType: 'STREAM_UNAVAILABLE', status: 'OPEN', detectedAt: '2026-10-03T10:00:00Z' }],
 });
 let data: SetupOverview;
@@ -40,9 +40,9 @@ describe('MF-01 setup dashboard', () => {
       if (path === '/api/setup/overview') return failOverview ? json({ code: 'LOAD_FAILED', detail: 'Setup unavailable.' }, 503) : json(data);
       if (path === '/api/cameras/camera-1/health/check' && method === 'POST') {
         if (failCheck) return json({ code: 'CHECK_FAILED', detail: 'Health check unavailable.' }, 503);
-        data.cameras[0].healthStatus = 'ONLINE'; data.cameras[0].lastSeenAt = '2026-10-03T11:00:00Z'; data.cameras[0].issues = [];
+        data.cameras[0].healthStatus = 'ONLINE'; data.cameras[0].monitoringReadiness = 'READY'; data.cameras[0].processingAvailability = 'AVAILABLE'; data.cameras[0].activeHealthIssues = []; data.cameras[0].lastSeenAt = '2026-10-03T11:00:00Z'; data.cameras[0].issues = [];
         data.totals.onlineCameraCount = 1; data.totals.unresolvedHealthEventCount = 0; data.healthEvents = [];
-        return json({ healthStatus: 'ONLINE' });
+        return json({ connectionStatus: 'ONLINE', monitoringReadiness: 'READY', processingAvailability: 'AVAILABLE', activeHealthIssues: [] });
       }
       return json({ code: 'UNEXPECTED_REQUEST' }, 500);
     });
@@ -53,6 +53,7 @@ describe('MF-01 setup dashboard', () => {
     expect(within(screen.getByRole('region', { name: 'Configuration activation' })).getByText('1 / 2')).toBeInTheDocument();
     expect(within(screen.getByRole('table', { name: 'Zone configurations' })).getByText('ACTIVE')).toBeInTheDocument();
     expect(within(screen.getByRole('table', { name: 'Camera connectivity' })).getByText('OFFLINE')).toBeInTheDocument();
+    expect(within(screen.getByRole('table', { name: 'Camera connectivity' })).getByText('Not ready')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'View configuration' })).toHaveAttribute('href', '/admin/ai-config?zoneId=zone-1');
     expect(screen.getByRole('link', { name: 'Manage CAM-01' })).toHaveAttribute('href', '/admin/cameras?cameraId=camera-1');
     expect(screen.getAllByRole('link', { name: 'Layout & ROI' })[0]).toHaveAttribute('href', '/admin/store-layout?floorId=floor-1&cameraId=camera-1');
@@ -99,14 +100,14 @@ describe('MF-01 setup dashboard', () => {
     expect(calls.filter(c => c.method === 'POST')).toEqual([{ path: '/api/cameras/camera-1/health/check', method: 'POST', bearer: 'Bearer admin-token' }]);
     expect(calls.filter(c => c.path === '/api/setup/overview')).toHaveLength(2);
     expect(within(screen.getByRole('table', { name: 'Zone configurations' })).getByText('ACTIVE')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Unresolved connection alerts' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Unresolved camera health alerts' })).not.toBeInTheDocument();
   });
 
   it('preserves offline status on failed check and prevents probing disabled connections', async () => {
     failCheck = true; show(); await screen.findByText('OFFLINE');
     fireEvent.click(screen.getByRole('button', { name: 'Check health' })); await screen.findByText('Health check unavailable.');
     expect(screen.getByText('OFFLINE')).toBeInTheDocument(); expect(screen.queryByText(/Health check completed/)).not.toBeInTheDocument();
-    data.cameras[0].isEnabled = false; data.cameras[0].healthStatus = 'UNKNOWN';
+    data.cameras[0].isEnabled = false; data.cameras[0].healthStatus = 'UNKNOWN'; data.cameras[0].monitoringReadiness = 'NOT_READY'; data.cameras[0].processingAvailability = 'UNKNOWN';
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await screen.findByText('UNKNOWN');
     expect(screen.getByRole('button', { name: 'Check health' })).toBeDisabled(); expect(screen.getByText('Health checks paused')).toBeInTheDocument();
   });
