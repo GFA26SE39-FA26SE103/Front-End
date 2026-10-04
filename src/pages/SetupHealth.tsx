@@ -9,7 +9,14 @@ const time = (value: string | null) => value ? new Date(value).toLocaleString() 
 const cameraLink = (cameraId: string) => '/admin/cameras?cameraId=' + encodeURIComponent(cameraId);
 const layoutLink = (floorId: string, cameraId?: string) => '/admin/store-layout?floorId=' + encodeURIComponent(floorId) + (cameraId ? '&cameraId=' + encodeURIComponent(cameraId) : '');
 const aiLink = (zoneId: string) => '/admin/ai-config?zoneId=' + encodeURIComponent(zoneId);
-const tone = (status: string): Tone => status === 'ACTIVE' || status === 'ONLINE' ? 'success' : status === 'DRAFT' || status === 'DEGRADED' ? 'warning' : status === 'OFFLINE' ? 'danger' : 'neutral';
+const tone = (status: string): Tone => status === 'ACTIVE' || status === 'ONLINE' || status === 'READY' || status === 'AVAILABLE' ? 'success' : status === 'DRAFT' || status === 'DEGRADED' || status === 'UNKNOWN' ? 'warning' : status === 'OFFLINE' || status === 'NOT_READY' || status === 'UNAVAILABLE' ? 'danger' : 'neutral';
+const readinessLabel = (status: string) => status === 'READY' ? 'Ready' : 'Not ready';
+const processingLabel = (status: string) => status === 'AVAILABLE' ? 'Visual checks available' : status === 'UNAVAILABLE' ? 'Visual checks unavailable' : 'Visual checks pending';
+const healthIssueLabels: Record<string, string> = {
+  STREAM_UNAVAILABLE: 'Camera stream unavailable', CAMERA_VIEW_BLOCKED: 'Camera view blocked', CAMERA_VIEW_BLURRED: 'Camera view blurred',
+  CAMERA_VIEW_FROZEN: 'Camera view frozen', CAMERA_FRAME_INVALID: 'Camera frame invalid',
+};
+const healthIssueLabel = (eventType: string) => healthIssueLabels[eventType] ?? eventType.replaceAll('_', ' ').toLowerCase();
 const stepLinks: Record<string, string> = { 'floor-zones': '/admin/store-layout', 'camera-source': '/admin/cameras', 'test-enable': '/admin/cameras', 'mapping-roi': '/admin/store-layout', rules: '/admin/ai-config', activation: '/admin/ai-config' };
 
 export default function SetupHealth() {
@@ -111,22 +118,23 @@ export default function SetupHealth() {
           {floors.filter(f => !f.hasMap || !f.zones.length).map(f => <p className={s.layoutIssue} key={f.floorId}>Floor {f.floorNumber} · {f.name}: {!f.hasMap ? 'floor map missing' : 'map saved'}{!f.zones.length ? ' · no zones' : ''}. <Link to={layoutLink(f.floorId)}>Complete layout</Link></p>)}
         </section>
         <section className={s.panel}>
-          <div className={s.head}><div><h2>Camera connectivity</h2><p>Saved health and last received frame. Refresh reads status; Check health probes an enabled connection.</p></div><Link className={s.linkButton} to="/admin/cameras">Manage cameras</Link></div>
+          <div className={s.head}><div><h2>Camera health & monitoring readiness</h2><p>Connection and visual usability are checked separately. Check health probes an enabled camera without changing monitoring activation.</p></div><Link className={s.linkButton} to="/admin/cameras">Manage cameras</Link></div>
           {actionError && <p className={s.alert} role="alert">{actionError}</p>}
           {notice && <p className={s.ready} role="status">{notice}</p>}
           {!cameras.length ? <p className={s.empty}>{data.totals.cameraCount ? 'No cameras match these filters.' : 'No cameras registered yet.'}</p> :
-            <div className={s.tableWrap}><table aria-label="Camera connectivity"><thead><tr><th>Camera</th><th>Source / connection</th><th>Health</th><th>Last frame received</th><th>Needs attention</th><th>Actions</th></tr></thead><tbody>
+            <div className={s.tableWrap}><table aria-label="Camera connectivity"><thead><tr><th>Camera</th><th>Source / connection</th><th>Connection</th><th>Monitoring</th><th>Last frame received</th><th>Needs attention</th><th>Actions</th></tr></thead><tbody>
               {cameras.map(c => <tr key={c.cameraId}>
                 <td><strong>{c.code}</strong><span>{c.name}</span><span className={s.muted}>{c.floorName} · {c.status}</span></td>
                 <td><span>{c.sourceType ? c.sourceType + ' / ' + c.protocol : 'Not configured'}</span><Chip tone={c.isEnabled ? 'primary' : 'neutral'}>{c.isEnabled ? 'Enabled' : 'Disabled'}</Chip><span className={s.muted}>Test: {c.lastTestResult ?? 'Not tested'}</span></td>
                 <td><Chip tone={c.isEnabled && c.status === 'ACTIVE' ? tone(c.healthStatus) : 'neutral'}>{c.healthStatus}</Chip>{(!c.isEnabled || c.status !== 'ACTIVE') && <span className={s.muted}>Health checks paused</span>}</td>
+                <td><Chip tone={c.isEnabled && c.status === 'ACTIVE' ? tone(c.monitoringReadiness) : 'neutral'}>{readinessLabel(c.monitoringReadiness)}</Chip><span className={s.muted}>{processingLabel(c.processingAvailability)}</span></td>
                 <td>{time(c.lastSeenAt)}</td>
                 <td>{c.issues.length ? <ul className={s.issues}>{c.issues.map(i => <li key={i.code}>{i.message}</li>)}</ul> : <span className={s.muted}>No saved setup issues</span>}</td>
                 <td><div className={s.rowActions}><Link className={s.linkButton} to={cameraLink(c.cameraId)}>Manage {c.code}</Link><Button variant="secondary" disabled={!c.isEnabled || c.status !== 'ACTIVE' || checking !== null} onClick={() => void check(c)}>{checking === c.cameraId ? 'Checking…' : 'Check health'}</Button></div></td>
               </tr>)}
             </tbody></table></div>}
-          {!!events.length && <div className={s.events}><h3>Unresolved connection alerts</h3>{events.map(e => <div key={e.healthEventId}><strong>{e.cameraCode}</strong><Chip tone={e.status === 'OPEN' ? 'danger' : 'warning'}>{e.status}</Chip><span>{e.eventType.replaceAll('_', ' ')} · {time(e.detectedAt)}</span><Link to={cameraLink(e.cameraId)}>Investigate camera →</Link></div>)}</div>}
-          <p className={s.scope}>Camera health events track connectivity. Recorded-file health reports frame readability; it does not report AI playback or GPU status.</p>
+          {!!events.length && <div className={s.events}><h3>Unresolved camera health alerts</h3>{events.map(e => <div key={e.healthEventId}><strong>{e.cameraCode}</strong><Chip tone={e.status === 'OPEN' ? 'danger' : 'warning'}>{e.status}</Chip><span>{healthIssueLabel(e.eventType)} · {time(e.detectedAt)}</span><Link to={cameraLink(e.cameraId)}>Investigate camera →</Link></div>)}</div>}
+          <p className={s.scope}>Camera events cover connection and whole-camera visual usability. Processing availability is separate and does not create a camera failure or deactivate monitoring.</p>
         </section>
       </>}
     </div>
