@@ -1,0 +1,9 @@
+.root { position: relative; flex-shrink: 0; }
+.trigger { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid transparent; border-radius: 50%; background: var(--color-surface-2); }
+.trigger:hover, .trigger[aria-expanded='true'] { background: var(--color-primary-tint); border-color: var(--color-border); }
+.menu { position: absolute; top: calc(100% + 12px); right: 0; z-index: 50; width: 280px; max-width: calc(100vw - 32px); padding: 6px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); box-shadow: var(--shadow-float); }
+.identity { padding: 12px; border-bottom: 1px solid var(--color-border); margin-bottom: 6px; }
+.name { font-size: 13px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.email { margin-top: 4px; color: var(--color-text-muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.logout { width: 100%; text-align: left; padding: 10px 12px; border-radius: 7px; color: var(--color-danger); font-size: 12px; font-weight: 600; }
+.logout:hover, .logout:focus-visible { background: var(--color-danger-tint); }

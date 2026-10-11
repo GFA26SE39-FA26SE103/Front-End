@@ -8,9 +8,12 @@ import SetupHealth from './pages/SetupHealth';
 import StoreLayout from './pages/StoreLayout';
 import SystemHealth from './pages/SystemHealth';
 import UsersRoles from './pages/UsersRoles';
+import OperatorCameraLive from './pages/operator/OperatorCameraLive';
+import OperatorFloorMap from './pages/operator/OperatorFloorMap';
 import Login from './pages/auth/Login';
 import { ForgotPassword, PasswordUpdated, ResetLinkExpired, ResetLinkSent, SetNewPassword } from './pages/auth/Recovery';
 import { ProtectedRoute } from './auth/ProtectedRoute';
+import RoleWorkspace, { RoleRedirect } from './pages/RoleWorkspace';
 
 export default function App() {
   return (
@@ -22,7 +25,7 @@ export default function App() {
       <Route path="/reset-password/done" element={<PasswordUpdated />} />
       <Route path="/reset-password/expired" element={<ResetLinkExpired />} />
 
-      <Route element={<ProtectedRoute />}>
+      <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>
         <Route path="/admin/dashboard" element={<SetupHealth />} />
         <Route path="/admin/setup" element={<Navigate to="/admin/dashboard" replace />} />
         <Route path="/admin/store-layout" element={<StoreLayout />} />
@@ -34,7 +37,22 @@ export default function App() {
         <Route path="/admin/audit-logs" element={<AuditLog />} />
         <Route path="/admin/system-health" element={<SystemHealth />} />
       </Route>
-      <Route path="*" element={<Navigate to="/login" replace />} />
+      <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'OPERATOR']} />}>
+        <Route path="/operator/dashboard" element={<Navigate to="/operator/floor-map" replace />} />
+        <Route path="/operator/floor-map" element={<OperatorFloorMap />} />
+        <Route path="/operator/cameras/:cameraId" element={<OperatorCameraLive />} />
+      </Route>
+      <Route element={<ProtectedRoute allowedRoles={['MANAGER']} />}>
+        <Route path="/manager/dashboard" element={<RoleWorkspace />} />
+      </Route>
+      <Route element={<ProtectedRoute allowedRoles={['STAFF']} />}>
+        <Route path="/staff/dashboard" element={<RoleWorkspace />} />
+      </Route>
+      <Route element={<ProtectedRoute />}>
+        <Route path="/" element={<RoleRedirect />} />
+        <Route path="/access-denied" element={<RoleWorkspace denied />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

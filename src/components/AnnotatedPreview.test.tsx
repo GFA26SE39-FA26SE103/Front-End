@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api/client';
 import {
@@ -20,6 +20,8 @@ const start = vi.mocked(startAiPreview);
 const status = vi.mocked(getAiPreviewStatus);
 const frame = vi.mocked(getAiPreviewFrame);
 const stop = vi.mocked(stopAiPreview);
+const sessionA = '00000000-0000-0000-0000-000000000001';
+const sessionB = '00000000-0000-0000-0000-000000000002';
 
 const live = (cameraId = 'camera-a') => ({
   cameraId,
@@ -37,7 +39,12 @@ describe('AnnotatedPreview', () => {
     urlIndex = 0;
     start.mockResolvedValue(live());
     status.mockResolvedValue(live());
-    frame.mockResolvedValue(new Blob(['jpeg'], { type: 'image/jpeg' }));
+    let delivered = false;
+    frame.mockImplementation(async () => {
+      if (delivered) return null;
+      delivered = true;
+      return { blob: new Blob(['jpeg'], { type: 'image/jpeg' }), frameSequence: 1, sessionId: sessionA };
+    });
     stop.mockResolvedValue({ ...live(), state: 'STOPPED' });
     URL.createObjectURL = vi.fn(() => `blob:frame-${++urlIndex}`);
     URL.revokeObjectURL = vi.fn();
@@ -55,12 +62,42 @@ describe('AnnotatedPreview', () => {
     expect(screen.getByRole('img', { name: /tracked preview/i })).toBeInTheDocument();
   });
 
-  it('revokes the previous blob URL after replacement', async () => {
+  it('keeps the previous decoded frame until the replacement image loads', async () => {
+    let sequence = 0;
+    frame.mockImplementation(async () => sequence < 2
+      ? { blob: new Blob(['jpeg'], { type: 'image/jpeg' }), frameSequence: ++sequence, sessionId: sessionA }
+      : null);
     render(<AnnotatedPreview cameraId="camera-a" enabled pollInterval={5} />);
 
     await waitFor(() => expect(vi.mocked(URL.createObjectURL).mock.calls.length).toBeGreaterThanOrEqual(2));
-
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith('blob:frame-1');
+    fireEvent.load(screen.getByRole('img', { name: /tracked preview/i }));
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:frame-1');
+  });
+
+  it('requests the next sequence without redrawing a duplicate frame', async () => {
+    render(<AnnotatedPreview cameraId="camera-a" enabled pollInterval={5} />);
+    await waitFor(() => expect(frame.mock.calls.length).toBeGreaterThanOrEqual(2));
+    expect(frame.mock.calls[1][2]).toBe(1);
+    expect(frame.mock.calls[1][3]).toBe(sessionA);
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+  });
+
+  it('draws zone ROIs while using the selected zone confidence', async () => {
+    const regions = [{ id: 'm1', label: 'Checkout', color: '#F97316', points: [{ x: 0.1, y: 0.2 }, { x: 0.5, y: 0.2 }, { x: 0.5, y: 0.6 }] }];
+    render(<AnnotatedPreview cameraId="camera-a" enabled pollInterval={50} zoneId="zone-checkout" regions={regions} />);
+    const image = await screen.findByRole('img', { name: /tracked preview/i });
+    expect(start).toHaveBeenCalledWith('camera-a', undefined, 'zone-checkout');
+    expect(screen.queryByTestId('roi-overlay')).not.toBeInTheDocument();
+
+    Object.defineProperty(image, 'naturalWidth', { configurable: true, value: 1280 });
+    Object.defineProperty(image, 'naturalHeight', { configurable: true, value: 720 });
+    fireEvent.load(image);
+
+    const overlay = await screen.findByTestId('roi-overlay');
+    expect(overlay).toHaveAttribute('viewBox', '0 0 1280 720');
+    expect(overlay.querySelector('polygon')).toHaveAttribute('points', '128,144 640,144 640,432');
+    expect(overlay).toHaveTextContent('Checkout');
   });
 
   it('keeps the final annotated frame and stops polling at recorded-video completion', async () => {
@@ -75,11 +112,36 @@ describe('AnnotatedPreview', () => {
     await waitFor(() => expect(stop).toHaveBeenCalled());
   });
 
+  it('does not offer viewer restart to replay backend-owned monitoring', async () => {
+    start.mockResolvedValue({ ...live(), purpose: 'MONITORING', annotationContext: 'confidence:0.7' });
+    status.mockResolvedValue({ ...live(), state: 'COMPLETED', purpose: 'MONITORING', annotationContext: 'confidence:0.7' });
+    render(<AnnotatedPreview cameraId="camera-a" enabled pollInterval={5} />);
+    expect(await screen.findByText(/Deactivate → Activate/)).toBeInTheDocument();
+    expect(screen.getByText(/confidence:0.7/)).toBeInTheDocument();
+    expect(screen.queryByText(/Stop then start/)).not.toBeInTheDocument();
+  });
+
+  it('waits for the worker when an attached monitoring session has not started yet', async () => {
+    start.mockResolvedValue({ ...live(), state: 'STARTING', purpose: 'MONITORING' });
+    status.mockResolvedValueOnce({ ...live(), state: 'STOPPED' }).mockResolvedValue(live());
+    render(<AnnotatedPreview cameraId="camera-a" enabled pollInterval={5} />);
+    expect(await screen.findByRole('img')).toBeInTheDocument();
+    expect(status.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('refreshes session status when a frame request races a restart', async () => {
+    frame.mockRejectedValueOnce(new ApiError(409, 'AI_PREVIEW_NOT_RUNNING', 'Not running'))
+      .mockResolvedValueOnce({ blob: new Blob(['jpeg'], { type: 'image/jpeg' }), frameSequence: 1, sessionId: sessionB });
+    render(<AnnotatedPreview cameraId="camera-a" enabled pollInterval={5} />);
+    expect(await screen.findByRole('img', { name: /tracked preview/i })).toBeInTheDocument();
+    expect(status.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
   it('aborts requests and revokes the final URL on unmount', async () => {
     let observedSignal: AbortSignal | undefined;
     frame.mockImplementation(async (_cameraId, signal) => {
       observedSignal = signal;
-      return new Blob(['jpeg'], { type: 'image/jpeg' });
+      return { blob: new Blob(['jpeg'], { type: 'image/jpeg' }), frameSequence: 1, sessionId: sessionA };
     });
     const view = render(<AnnotatedPreview cameraId="camera-a" enabled pollInterval={50} />);
     await waitFor(() => expect(screen.getByRole('img')).toBeInTheDocument());
@@ -114,13 +176,13 @@ describe('AnnotatedPreview', () => {
   });
 
   it('discards a frame that resolves after preview cleanup', async () => {
-    let finishFrame!: (blob: Blob) => void;
+    let finishFrame!: (value: { blob: Blob; frameSequence: number; sessionId: string }) => void;
     frame.mockImplementation(() => new Promise((resolve) => { finishFrame = resolve; }));
     const view = render(<AnnotatedPreview cameraId="camera-a" enabled pollInterval={20} />);
     await waitFor(() => expect(frame).toHaveBeenCalled());
 
     view.rerender(<AnnotatedPreview cameraId="camera-a" enabled={false} pollInterval={20} />);
-    finishFrame(new Blob(['late-jpeg'], { type: 'image/jpeg' }));
+    finishFrame({ blob: new Blob(['late-jpeg'], { type: 'image/jpeg' }), frameSequence: 1, sessionId: sessionA });
 
     await waitFor(() => expect(stop).toHaveBeenCalledWith('camera-a'));
     expect(URL.createObjectURL).not.toHaveBeenCalled();
@@ -153,5 +215,11 @@ describe('AnnotatedPreview', () => {
     render(<AnnotatedPreview cameraId="camera-b" enabled pollInterval={5} />);
 
     expect(await screen.findByText('Waiting for first tracked frame…')).toBeInTheDocument();
+  });
+
+  it('explains why a Draft preview cannot restart active monitoring', async () => {
+    start.mockRejectedValue(new ApiError(409, 'AI_SESSION_MONITORING_OWNED', 'Deactivate monitoring first.'));
+    render(<AnnotatedPreview cameraId="camera-a" zoneId="draft-zone" enabled />);
+    expect(await screen.findByText(/Deactivate monitoring before testing Draft confidence/)).toBeInTheDocument();
   });
 });

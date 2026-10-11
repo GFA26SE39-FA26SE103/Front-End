@@ -1,0 +1,178 @@
+.viewport {
+  width: 100%;
+  min-height: 360px;
+  overflow: auto;
+  border-radius: 10px;
+  background:
+    linear-gradient(45deg, color-mix(in srgb, var(--color-border) 24%, transparent) 25%, transparent 25%) 0 0 / 20px 20px,
+    linear-gradient(-45deg, color-mix(in srgb, var(--color-border) 24%, transparent) 25%, transparent 25%) 0 10px / 20px 20px,
+    var(--color-canvas);
+}
+
+.surface {
+  position: relative;
+  width: min(100%, 1100px);
+  min-width: 560px;
+  margin: 0 auto;
+  line-height: 0;
+  touch-action: none;
+  user-select: none;
+}
+
+.map {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 360px;
+  object-fit: contain;
+  background: var(--color-surface);
+}
+
+.pdfError {
+  min-height: 360px;
+  display: grid;
+  place-items: center;
+  color: var(--color-danger);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.cameraGroup {
+  position: absolute;
+  z-index: 2;
+  width: 52px;
+  height: 34px;
+  pointer-events: auto;
+  transform-origin: center;
+}
+
+.cameraGroup.selected {
+  z-index: 3;
+}
+
+.camera {
+  position: absolute;
+  inset: 0;
+  display: block;
+  border: 0;
+  border-radius: 7px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.camera:active {
+  cursor: grabbing;
+}
+
+.cameraBody {
+  position: absolute;
+  left: 3px;
+  top: 5px;
+  width: 35px;
+  height: 24px;
+  border: 2px solid var(--color-surface);
+  border-radius: 5px;
+  background: var(--color-primary);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-text) 35%, transparent);
+}
+
+.muzzle {
+  position: absolute;
+  left: 37px;
+  top: 10px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-surface);
+  border-left: 0;
+  border-radius: 0 8px 8px 0;
+  background: var(--color-primary);
+}
+
+.selected .cameraBody,
+.selected .muzzle {
+  background: var(--color-success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-success) 30%, transparent), 0 3px 10px color-mix(in srgb, var(--color-text) 35%, transparent);
+}
+
+.fov {
+  position: absolute;
+  left: 43px;
+  top: -24px;
+  width: 118px;
+  height: 82px;
+  clip-path: polygon(0 42%, 100% 0, 100% 100%, 0 58%);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-primary) 35%, transparent), transparent);
+  pointer-events: none;
+}
+
+.rotationHandle {
+  position: absolute;
+  left: 62px;
+  top: 9px;
+  width: 16px;
+  height: 16px;
+  border: 3px solid var(--color-surface);
+  border-radius: 50%;
+  background: var(--color-warning);
+  box-shadow: 0 0 0 1px var(--color-text-muted);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.rotationHandle::before {
+  content: '';
+  position: absolute;
+  right: 12px;
+  top: 5px;
+  width: 17px;
+  border-top: 1px dashed var(--color-text-muted);
+}
+
+.camera:focus-visible,
+.rotationHandle:focus-visible {
+  outline: 3px solid var(--color-warning);
+  outline-offset: 3px;
+}
+
+.label {
+  position: absolute;
+  left: 26px;
+  top: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: var(--color-text);
+  color: var(--color-surface);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  transform-origin: top center;
+  pointer-events: none;
+}
+
+.label strong {
+  color: var(--color-warning);
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 900px) {
+  .viewport {
+    min-height: 300px;
+  }
+
+  .surface,
+  .map {
+    min-height: 300px;
+  }
+}

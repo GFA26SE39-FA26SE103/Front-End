@@ -90,6 +90,38 @@ button.row:hover {
   gap: 8px;
 }
 
+.manageActions {
+  display: flex;
+  gap: 8px;
+}
+
+.inactiveNote {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.dialogText {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.confirmDeactivate {
+  background: var(--color-danger);
+}
+
 .detailTitle {
   display: flex;
   align-items: center;

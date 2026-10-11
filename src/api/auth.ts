@@ -1,5 +1,9 @@
 import { ApiError, apiFetch } from './client';
-import { saveSession, type AuthSession } from '../auth/session';
+import { saveSession, type AuthSession, type AuthUser } from '../auth/session';
+
+export function getCurrentUser(signal?: AbortSignal): Promise<AuthUser> {
+  return apiFetch<AuthUser>('/api/auth/me', { signal });
+}
 
 export type SignInResult = 'ok' | 'invalid' | 'error' | 'suspended' | 'rate-limited';
 

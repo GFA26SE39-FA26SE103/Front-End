@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { icon as iconUrl } from '../assets/icons';
 import {
   enableCameraConnection,
+  cameraUpdateRequest,
   listCameraMappings,
   listCameras,
   listFloors,
   listSupermarkets,
   listZones,
   testCameraConnection,
+  updateCamera,
   type CameraRecord,
   type FloorRecord,
   type ZoneRecord,
@@ -15,7 +18,9 @@ import {
 import { AdminLayout } from '../components/AdminLayout';
 import { AnnotatedPreview } from '../components/AnnotatedPreview';
 import { CameraRegistration, type CameraFloorOption } from '../components/CameraRegistration';
+import { CameraEditor } from '../components/CameraEditor';
 import { CameraConnectionConfiguration } from '../components/CameraConnectionConfiguration';
+import { Dialog } from '../components/Dialog';
 import { RecordedVideoUpload } from '../components/RecordedVideoUpload';
 import { Icon } from '../components/Icon';
 import { Button, Card, CardHeader, Chip, SearchBox, Select } from '../components/ui';
@@ -26,13 +31,14 @@ import s from './Cameras.module.css';
 type CameraStatus = 'Online' | 'Degraded' | 'Offline';
 type FloorOption = CameraFloorOption;
 type CameraView = {
+  record: CameraRecord;
   id: string;
   code: string;
   name: string;
   floorId: string;
   floor: string;
   floorLabel: string;
-  zones: { code: string; name: string }[];
+  zones: { zoneId: string; code: string; name: string }[];
   status: CameraStatus;
   lifecycleStatus: string;
   installed: string;
@@ -46,6 +52,8 @@ type TestState = { cameraId: string; state: 'running' | 'ok' | 'fail'; message?:
 const mini = (x: number, y: number) => ({ x: 7 + ((x - 14) * 96) / 508, y: 7 + ((y - 14) * 96) / 636 });
 
 export default function Cameras() {
+  const [params] = useSearchParams();
+  const requestedCameraId = params.get('cameraId') ?? '';
   const [cameras, setCameras] = useState<CameraView[]>([]);
   const [floors, setFloors] = useState<FloorOption[]>([]);
   const [query, setQuery] = useState('');
@@ -55,17 +63,23 @@ export default function Cameras() {
   const [previewEnabled, setPreviewEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [selectionError, setSelectionError] = useState('');
   const [streamLabels, setStreamLabels] = useState<Record<string, string>>({});
   const [registrationOpen, setRegistrationOpen] = useState(false);
   const [connectionEditorOpen, setConnectionEditorOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [lifecycleConfirmOpen, setLifecycleConfirmOpen] = useState(false);
+  const [lifecycleBusy, setLifecycleBusy] = useState(false);
+  const [lifecycleError, setLifecycleError] = useState('');
 
   useEffect(() => {
     const controller = new AbortController();
     const load = async () => {
       setLoading(true);
       setLoadError('');
+      setSelectionError('');
       try {
         const stores = await listSupermarkets(controller.signal);
         const floorRecords = (await Promise.all(stores.map((store) => listFloors(store.supermarketId, controller.signal)))).flat();
@@ -75,7 +89,10 @@ export default function Cameras() {
         const loaded = groups.flat();
         setFloors(floorOptions);
         setCameras(loaded);
-        setSelected((current) => loaded.some((camera) => camera.id === current) ? current : loaded[0]?.id ?? null);
+        const requested = loaded.find(camera => camera.id === requestedCameraId);
+        setSelected((current) => requestedCameraId ? requested?.id ?? null : loaded.some((camera) => camera.id === current) ? current : loaded[0]?.id ?? null);
+        if (requested) setFloorFilter(requested.floorId);
+        if (requestedCameraId && !requested) setSelectionError('The requested camera was not found. Choose a camera from the list.');
       } catch (error) {
         if (!controller.signal.aborted) setLoadError(error instanceof Error ? error.message : 'Could not load cameras.');
       } finally {
@@ -84,7 +101,7 @@ export default function Cameras() {
     };
     void load();
     return () => controller.abort();
-  }, []);
+  }, [requestedCameraId]);
 
   const visible = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -102,9 +119,12 @@ export default function Cameras() {
 
   const selectCamera = (cameraId: string) => {
     if (uploadBusy) return;
+    setSelectionError('');
     setUploadOpen(false);
     setPreviewEnabled(false);
     setConnectionEditorOpen(false);
+    setEditorOpen(false);
+    setLifecycleConfirmOpen(false);
     setSelected(cameraId);
     setTest(null);
   };
@@ -112,6 +132,7 @@ export default function Cameras() {
   const registered = (record: CameraRecord, recorded = false) => {
     const floor = floors.find((item) => item.id === record.floorId)!;
     const view: CameraView = {
+      record,
       id: record.cameraId,
       code: record.code,
       name: record.name,
@@ -136,6 +157,32 @@ export default function Cameras() {
     setStreamLabels((all) => ({ ...all, [view.id]: recorded ? 'No source · upload video next' : 'HTTP · configured in backend' }));
     setUploadOpen(recorded);
     setRegistrationOpen(false);
+  };
+
+  const saved = (record: CameraRecord) => {
+    setCameras((all) => all.map((item) => item.id === record.cameraId
+      ? updateView(item, record)
+      : item));
+    setEditorOpen(false);
+  };
+
+  const changeLifecycle = async (target: CameraView, status: 'ACTIVE' | 'INACTIVE') => {
+    setLifecycleBusy(true); setLifecycleError(''); setPreviewEnabled(false);
+    try {
+      const record = await updateCamera(target.id, cameraUpdateRequest(target.record, status));
+      saved(record);
+      setTest(null);
+      setConnectionEditorOpen(false);
+      setUploadOpen(false);
+      setLifecycleConfirmOpen(false);
+      setStreamLabels((all) => ({ ...all, [target.id]: status === 'INACTIVE'
+        ? 'Disabled · source configuration retained'
+        : 'Source retained · test & enable next' }));
+    } catch (error) {
+      setLifecycleError(error instanceof Error ? error.message : `Could not ${status === 'ACTIVE' ? 'reactivate' : 'deactivate'} the camera.`);
+    } finally {
+      setLifecycleBusy(false);
+    }
   };
 
   const runTest = async (target: CameraView) => {
@@ -170,6 +217,7 @@ export default function Cameras() {
 
         {loading && <p className={s.empty}>Loading camera registry…</p>}
         {loadError && <p className={s.errorBanner} role="alert">{loadError}</p>}
+        {selectionError && <p className={s.errorBanner} role="alert">{selectionError}</p>}
         {!loading && !loadError && (
           <div className={s.table} role="table">
             <div className={`${s.row} ${s.head}`} role="row">
@@ -202,6 +250,16 @@ export default function Cameras() {
             </div>
             <Chip tone={previewEnabled ? 'success' : 'neutral'}>{previewEnabled ? 'AI PREVIEW' : 'AI STOPPED'}</Chip>
           </div>
+
+          <div className={s.manageActions}>
+            <Button variant="secondary" disabled={uploadBusy || lifecycleBusy} onClick={() => { setLifecycleError(''); setEditorOpen(true); }}>Edit camera</Button>
+            {camera.lifecycleStatus === 'ACTIVE'
+              ? <Button variant="dangerGhost" disabled={uploadBusy || lifecycleBusy} onClick={() => { setLifecycleError(''); setLifecycleConfirmOpen(true); }}>Deactivate camera</Button>
+              : <Button variant="secondary" disabled={uploadBusy || lifecycleBusy} onClick={() => void changeLifecycle(camera, 'ACTIVE')}>{lifecycleBusy ? 'Reactivating…' : 'Reactivate camera'}</Button>}
+          </div>
+
+          {lifecycleError && <p className={s.errorBanner} role="alert">{lifecycleError}</p>}
+          {camera.lifecycleStatus !== 'ACTIVE' && <p className={s.inactiveNote}>This camera is inactive. Its configuration and history are retained; reactivate it before testing, previewing or changing its source.</p>}
 
           <div className={s.media}>
             <div className={s.trackedPreview}><AnnotatedPreview cameraId={camera.id} enabled={previewEnabled} /></div>
@@ -244,14 +302,22 @@ export default function Cameras() {
           }} />}
 
           <div className={s.actions}>
-            <Button variant="secondary" size="lg" disabled={uploadBusy} onClick={() => { setUploadOpen(false); setPreviewEnabled(false); setConnectionEditorOpen(true); }}>Configure connection</Button>
-            <Button variant="secondary" size="lg" disabled={uploadBusy || test?.state === 'running'} onClick={() => { setPreviewEnabled(false); setConnectionEditorOpen(false); setUploadOpen(true); }}>Upload video</Button>
-            <Button variant="secondary" size="lg" icon="refresh" onClick={() => void runTest(camera)} disabled={uploadOpen || test?.state === 'running'}>Test &amp; enable</Button>
-            <Button size="lg" disabled={uploadOpen || test?.state === 'running'} onClick={() => setPreviewEnabled((value) => !value)}>{previewEnabled ? 'Stop AI preview' : 'Start AI preview'}</Button>
+            <Button variant="secondary" size="lg" disabled={uploadBusy || camera.lifecycleStatus !== 'ACTIVE'} onClick={() => { setUploadOpen(false); setPreviewEnabled(false); setConnectionEditorOpen(true); }}>Configure connection</Button>
+            <Button variant="secondary" size="lg" disabled={uploadBusy || test?.state === 'running' || camera.lifecycleStatus !== 'ACTIVE'} onClick={() => { setPreviewEnabled(false); setConnectionEditorOpen(false); setUploadOpen(true); }}>Upload video</Button>
+            <Button variant="secondary" size="lg" icon="refresh" onClick={() => void runTest(camera)} disabled={uploadOpen || test?.state === 'running' || camera.lifecycleStatus !== 'ACTIVE'}>Test &amp; enable</Button>
+            <Button size="lg" disabled={uploadOpen || test?.state === 'running' || camera.lifecycleStatus !== 'ACTIVE'} onClick={() => setPreviewEnabled((value) => !value)}>{previewEnabled ? 'Stop AI preview' : 'Start AI preview'}</Button>
           </div>
           <p className={s.previewNote}>Bounding boxes and track IDs are drawn by YOLO + ByteTrack before this JPEG reaches React.</p>
+          {camera.zones.length ? <div className={s.actions}>{camera.zones.map(zone => <a key={zone.zoneId} href={`/admin/ai-config?zoneId=${encodeURIComponent(zone.zoneId)}`}>Configure monitoring: {zone.name}</a>)}</div> : <p className={s.previewNote}>Map this camera and draw its zone ROI in <a href="/admin/store-layout">Store layout</a> before configuring monitoring.</p>}
         </Card>
       )}
+      {camera && editorOpen && <CameraEditor camera={camera.record} floorLabel={camera.floorLabel} onClose={() => setEditorOpen(false)} onSaved={saved} />}
+      {camera && lifecycleConfirmOpen && <Dialog title="Deactivate camera?" busy={lifecycleBusy} onClose={() => { setLifecycleConfirmOpen(false); setLifecycleError(''); }}>
+        <p className={s.dialogText}>Deactivate <strong>{camera.code}</strong>? Its connection will be disabled and health will become UNKNOWN.</p>
+        <p className={s.dialogText}>Camera metadata, source configuration, zone mappings, health events and incident history are retained. You can reactivate it later.</p>
+        {lifecycleError && <p className={s.errorBanner} role="alert">{lifecycleError}</p>}
+        <div className={s.dialogActions}><Button variant="secondary" data-autofocus disabled={lifecycleBusy} onClick={() => setLifecycleConfirmOpen(false)}>Cancel</Button><Button className={s.confirmDeactivate} disabled={lifecycleBusy} onClick={() => void changeLifecycle(camera, 'INACTIVE')}>{lifecycleBusy ? 'Deactivating…' : 'Deactivate camera'}</Button></div>
+      </Dialog>}
     </AdminLayout>
   );
 }
@@ -269,13 +335,30 @@ async function loadFloor(floor: FloorRecord, floorOptions: FloorOption[], signal
 function toView(camera: CameraRecord, floor: FloorRecord, floorOptions: FloorOption[], zones: ZoneRecord[]): CameraView {
   const floorOption = floorOptions.find((item) => item.id === floor.floorId)!;
   return {
+    record: camera,
     id: camera.cameraId,
     code: camera.code,
     name: camera.name,
     floorId: camera.floorId,
     floor: floorOption.key,
     floorLabel: floorOption.label,
-    zones: zones.map((zone) => ({ code: zone.code, name: zone.name })),
+    zones: zones.map((zone) => ({ zoneId: zone.zoneId, code: zone.code, name: zone.name })),
+    status: healthStatus(camera.healthStatus),
+    lifecycleStatus: camera.status,
+    installed: formatDate(camera.installedAt),
+    warrantyUntil: formatDate(camera.warrantyExpiresAt),
+    model: [camera.manufacturer, camera.model].filter(Boolean).join(' · ') || '—',
+    serial: camera.serialNumber ?? '—',
+    lastSeen: formatDate(camera.lastSeenAt),
+  };
+}
+
+function updateView(current: CameraView, camera: CameraRecord): CameraView {
+  return {
+    ...current,
+    record: camera,
+    code: camera.code,
+    name: camera.name,
     status: healthStatus(camera.healthStatus),
     lifecycleStatus: camera.status,
     installed: formatDate(camera.installedAt),

@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { Icon } from './Icon';
 import { SearchBox } from './ui';
+import { AccountMenu } from './AccountMenu';
 import s from './AdminLayout.module.css';
 
 const NAV = [
@@ -14,11 +15,11 @@ const NAV = [
   { to: '/admin/users', label: 'Users & Roles', icon: 'nav-users', activeIcon: 'nav-users-active' },
   { to: '/admin/audit-logs', label: 'Audit Logs', icon: 'nav-file' },
   { to: '/admin/system-health', label: 'System Health', icon: 'nav-activity' },
+  { to: '/operator/floor-map', label: 'Live floor map', icon: 'layers' },
 ];
 
 export function AdminLayout({ title, subtitle, actions, children }: { title: string; subtitle: string; actions?: ReactNode; children: ReactNode }) {
   const [query, setQuery] = useState('');
-  const navigate = useNavigate();
 
   return (
     <div className={s.shell}>
@@ -50,9 +51,7 @@ export function AdminLayout({ title, subtitle, actions, children }: { title: str
           </div>
           <div style={{ flex: 1 }} />
           {actions ?? <SearchBox value={query} onChange={setQuery} placeholder="Search" width={220} height={34} iconName="header-search" iconSize={14} />}
-          <button className={s.avatar} aria-label="Sign out" title="Sign out" onClick={() => navigate('/login')}>
-            <Icon name="header-user" size={19} />
-          </button>
+          <AccountMenu />
         </header>
         <main className={s.content}>{children}</main>
       </div>

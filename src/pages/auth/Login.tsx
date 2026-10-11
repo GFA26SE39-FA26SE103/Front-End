@@ -3,6 +3,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AuthLayout } from '../../components/AuthLayout';
 import { Icon } from '../../components/Icon';
 import { LOCK_SECONDS, MAX_FAILED_ATTEMPTS, signIn } from '../../api/auth';
+import { loadSession } from '../../auth/session';
+import { roleHome } from '../../auth/roles';
 import s from './auth.module.css';
 
 type Status = 'idle' | 'loading' | 'invalid' | 'error' | 'suspended' | 'rate-limited';
@@ -13,6 +15,7 @@ export default function Login() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const sessionExpired = params.get('reason') === 'session-expired';
+  const accessChanged = params.get('reason') === 'access-changed';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -39,7 +42,7 @@ export default function Login() {
     setStatus('loading');
     const result = await signIn(email, password, remember);
     if (result === 'ok') {
-      navigate('/admin/dashboard'); // TODO: route by role once the API returns it
+      navigate(roleHome(loadSession()?.user.role ?? ''), { replace: true });
       return;
     }
     if (result === 'invalid') {
@@ -60,7 +63,7 @@ export default function Login() {
     loading ? { title: 'Signing in', hint: 'Please wait while we verify your account.' }
     : status === 'error' || status === 'rate-limited' ? { title: 'Unable to sign in', hint: 'We couldn’t complete your sign-in request.' }
     : suspended ? { title: 'Account suspended', hint: 'This account cannot access the operations workspace.' }
-    : sessionExpired ? { title: 'Sign in again', hint: 'Re-enter your password to continue securely.' }
+    : sessionExpired || accessChanged ? { title: 'Sign in again', hint: 'Re-enter your password to continue securely.' }
     : { title: 'Sign in', hint: 'Use your operations account to continue.' };
 
   const alert =
@@ -68,6 +71,7 @@ export default function Login() {
     : status === 'rate-limited' ? { tone: 'var(--color-warning)', icon: 'auth-clock-warning', title: 'Too many requests', text: 'Wait one minute before trying to sign in again.' }
     : status === 'error' ? { tone: 'var(--color-danger)', icon: 'auth-alert-danger', title: 'Something went wrong', text: 'The service is temporarily unavailable. Try again in a moment.' }
     : suspended ? { tone: 'var(--color-danger)', icon: 'auth-alert-danger', title: 'Access disabled by an administrator', text: 'Contact your store administrator to restore access.' }
+    : accessChanged && status === 'idle' ? { tone: 'var(--color-warning)', icon: 'auth-clock-warning', title: 'Account access changed', text: 'Sign in again to use your updated role. Disabled accounts cannot sign in.' }
     : sessionExpired && status === 'idle' ? { tone: 'var(--color-warning)', icon: 'auth-clock-warning', title: 'Session expired', text: 'Sign in again to continue where you left off.' }
     : null;
 

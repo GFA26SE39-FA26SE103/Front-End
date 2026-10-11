@@ -1,322 +1,522 @@
-import { useMemo, useState, type CSSProperties } from 'react';
-import { icon as iconSrc } from '../assets/icons';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { listCameras, updateCamera, type CameraRecord, type CreateCameraRequest } from '../api/cameras';
+import { ApiError } from '../api/client';
+import {
+  createZone,
+  getFloorMap,
+  listFloors,
+  listSupermarkets,
+  listZones,
+  updateZone,
+  uploadFloorMap,
+  type FloorRecord,
+  type SupermarketRecord,
+  type ZoneRequest,
+  type ZoneRecord,
+} from '../api/floors';
 import { AdminLayout } from '../components/AdminLayout';
+import { CameraCoverageEditor } from '../components/CameraCoverageEditor';
+import { FloorPlanSurface, type PlacementChange } from '../components/FloorPlanSurface';
+import { FloorEditor } from '../components/FloorEditor';
+import type { ZoneEditorSave } from '../components/ZoneEditorOverlay';
 import { Icon } from '../components/Icon';
-import { Button, Callout, Card, Checkbox, Chip, Field, Overline, Segmented, Select, TextInput, Toggle } from '../components/ui';
-import { cameras as initialCameras, floors, zones as initialZones, zoneLabel, type Camera, type Zone, type ZoneType } from '../data/mock';
-import { STAGE, blindSpot, cameraPlacements, counterLabels, fixtures, markerIcon, walls, zoneLabelPos, zoneRects, type Rect } from '../data/floorPlan';
-import { statusChip } from './cameraStatus';
+import { Button, Callout, Card, CardHeader, Chip, Overline } from '../components/ui';
 import s from './StoreLayout.module.css';
 
-const toneVar: Record<Zone['tone'], string> = {
-  success: 'var(--color-success)',
-  primary: 'var(--color-primary)',
-  warning: 'var(--color-warning)',
-  purple: 'var(--color-purple)',
-};
+const MAX_MAP_BYTES = 20 * 1024 * 1024;
+const SUPPORTED_MAP_TYPES = new Set(['image/png', 'image/jpeg', 'application/pdf']);
 
-const zoneTypes: ZoneType[] = ['Entrance', 'Checkout area', 'Aisles', 'Fresh food', 'Household', 'Electronics'];
-const tools = ['Select', 'Draw zone', 'Place camera', 'Calibrate'] as const;
-const toolIcon: Record<(typeof tools)[number], [string, string]> = {
-  Select: ['cursor', 'cursor'],
-  'Draw zone': ['edit', 'edit-white'],
-  'Place camera': ['camera-tool', 'camera-tool'],
-  Calibrate: ['scan', 'scan'],
-};
+type MapState =
+  | { status: 'idle' | 'loading' | 'missing'; url: null; contentType: null; message?: string }
+  | { status: 'ready'; url: string; contentType: string }
+  | { status: 'error'; url: null; contentType: null; message: string };
 
-const box = (r: Rect): CSSProperties => ({ left: r.x, top: r.y, width: r.w, height: r.h });
+const initialMapState: MapState = { status: 'idle', url: null, contentType: null };
+
+// New cameras are registered on the Cameras page without a map position; Store layout only places them.
+const isPlaced = (camera: Pick<CameraRecord, 'mapX' | 'mapY'>) => camera.mapX !== null && camera.mapY !== null;
 
 export default function StoreLayout() {
-  const [zones, setZones] = useState(initialZones);
-  const [cameras, setCameras] = useState(initialCameras);
-  const [floor, setFloor] = useState<'F1' | 'F2'>('F1');
-  const [openFloors, setOpenFloors] = useState<Record<string, boolean>>({ F1: true, F2: false });
-  const [selectedZoneId, setSelectedZoneId] = useState('B');
-  const [selectedCam, setSelectedCam] = useState<string | null>(null);
-  const [tab, setTab] = useState<'zone' | 'camera'>('zone');
-  const [tool, setTool] = useState<(typeof tools)[number]>('Draw zone');
-  const [draft, setDraft] = useState<Zone>(() => initialZones.find((z) => z.id === 'B')!);
-  const [saved, setSaved] = useState(false);
+  const [params] = useSearchParams();
+  const requestedFloorId = params.get('floorId') ?? '';
+  const requestedCameraId = params.get('cameraId') ?? '';
+  const [stores, setStores] = useState<SupermarketRecord[]>([]);
+  const [floors, setFloors] = useState<FloorRecord[]>([]);
+  const [floorEditor, setFloorEditor] = useState<FloorRecord | 'new' | null>(null);
+  const [selectedFloorId, setSelectedFloorId] = useState<string | null>(null);
+  const [zones, setZones] = useState<ZoneRecord[]>([]);
+  const [cameras, setCameras] = useState<CameraRecord[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, PlacementChange>>({});
+  const [mapState, setMapState] = useState<MapState>(initialMapState);
+  const [mapVersion, setMapVersion] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [cameraSelectionError, setCameraSelectionError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [actionMessage, setActionMessage] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [zoneEditing, setZoneEditing] = useState(false);
+  const [zoneSaving, setZoneSaving] = useState(false);
+  const [coverageEditing, setCoverageEditing] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
 
-  const zoneById = useMemo(() => Object.fromEntries(zones.map((z) => [z.id, z])), [zones]);
-  const camerasIn = (zoneId: string) => cameras.filter((c) => c.zones.includes(zoneId));
+  useEffect(() => {
+    const controller = new AbortController();
+    void (async () => {
+      setLoading(true);
+      setLoadError('');
+      try {
+        const loadedStores = await listSupermarkets(controller.signal);
+        const loadedFloors = (await Promise.all(loadedStores.map((store) => listFloors(store.supermarketId, controller.signal)))).flat();
+        if (controller.signal.aborted) return;
+        setStores(loadedStores);
+        setFloors(loadedFloors.sort((a, b) => a.floorNumber - b.floorNumber));
+        setSelectedFloorId((current) => requestedFloorId ? loadedFloors.find(floor => floor.floorId === requestedFloorId)?.floorId ?? null : loadedFloors.some((floor) => floor.floorId === current) ? current : loadedFloors[0]?.floorId ?? null);
+        if (requestedFloorId && !loadedFloors.some(f => f.floorId === requestedFloorId)) setLoadError('The requested floor was not found. Choose a floor from the list.');
+      } catch (reason) {
+        if (!controller.signal.aborted) setLoadError(messageOf(reason, 'Could not load the store layout.'));
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [requestedFloorId]);
 
-  function selectZone(id: string) {
-    const z = zoneById[id];
-    if (!z) return;
-    setSelectedZoneId(id);
-    setDraft(z);
-    setFloor(z.floor);
-    setTab('zone');
-    setSaved(false);
-  }
+  useEffect(() => {
+    if (!selectedFloorId) return;
+    const controller = new AbortController();
+    void (async () => {
+      setDetailsLoading(true);
+      setLoadError('');
+      setCameraSelectionError('');
+      try {
+        const [loadedZones, loadedCameras] = await Promise.all([
+          listZones(selectedFloorId, controller.signal),
+          listCameras(selectedFloorId, controller.signal),
+        ]);
+        if (controller.signal.aborted) return;
+        setZones(loadedZones);
+        setCameras(loadedCameras);
+        setDrafts({});
+        const targetCamera = selectedFloorId === requestedFloorId ? requestedCameraId : '';
+        setSelectedCameraId((current) => targetCamera ? loadedCameras.find(camera => camera.cameraId === targetCamera)?.cameraId ?? null : loadedCameras.some((camera) => camera.cameraId === current) ? current : null);
+        if (targetCamera && !loadedCameras.some(c => c.cameraId === targetCamera)) setCameraSelectionError('The requested camera was not found on this floor. Choose a camera from the list.');
+      } catch (reason) {
+        if (!controller.signal.aborted) setLoadError(messageOf(reason, 'Could not load floor details.'));
+      } finally {
+        if (!controller.signal.aborted) setDetailsLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [selectedFloorId, requestedFloorId, requestedCameraId]);
 
-  function selectCamera(code: string) {
-    setSelectedCam(code);
-    setTab('camera');
-  }
+  const selectedFloor = floors.find((floor) => floor.floorId === selectedFloorId) ?? null;
 
-  function saveZone() {
-    setZones((all) => all.map((z) => (z.id === draft.id ? draft : z)));
-    setSaved(true);
-  }
+  useEffect(() => {
+    if (!selectedFloorId || !selectedFloor?.mapAssetUrl) return;
+    const controller = new AbortController();
+    const mapAssetUrl = selectedFloor.mapAssetUrl;
+    let objectUrl: string | null = null;
+    void (async () => {
+      try {
+        const blob = await getFloorMap(selectedFloorId, controller.signal);
+        if (controller.signal.aborted) return;
+        objectUrl = URL.createObjectURL(blob);
+        setMapState({ status: 'ready', url: objectUrl, contentType: blob.type || mapTypeFromUrl(mapAssetUrl) });
+      } catch (reason) {
+        if (controller.signal.aborted) return;
+        if (reason instanceof ApiError && reason.status === 404) setMapState({ status: 'missing', url: null, contentType: null });
+        else setMapState({ status: 'error', url: null, contentType: null, message: messageOf(reason, 'Could not load the floor plan.') });
+      }
+    })();
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [mapVersion, selectedFloor?.mapAssetUrl, selectedFloorId]);
 
-  function deleteZone() {
-    if (!window.confirm(`Delete ${zoneLabel(draft)}? Cameras keep their other zones.`)) return;
-    setZones((all) => all.filter((z) => z.id !== draft.id));
-    setCameras((all) => all.map((c) => ({ ...c, zones: c.zones.filter((id) => id !== draft.id) })));
-    const next = zones.find((z) => z.id !== draft.id && z.floor === draft.floor);
-    if (next) selectZone(next.id);
-  }
+  const displayedCameras = useMemo(() => cameras.map((camera) => {
+    const draft = drafts[camera.cameraId];
+    return draft ? { ...camera, mapX: draft.x, mapY: draft.y, mapRotationDeg: draft.rotationDeg } : camera;
+  }), [cameras, drafts]);
+  const mapCameras = useMemo(() => displayedCameras.filter(isPlaced), [displayedCameras]);
+  const unplacedCameras = useMemo(() => cameras.filter((camera) => !isPlaced(camera) && !drafts[camera.cameraId]), [cameras, drafts]);
+  const selectedCamera = cameras.find((camera) => camera.cameraId === selectedCameraId) ?? null;
+  const selectedDraft = selectedCameraId ? drafts[selectedCameraId] : undefined;
+  const dirtyCameraIds = useMemo(() => new Set(Object.keys(drafts)), [drafts]);
+  const storeName = stores.find((store) => store.supermarketId === selectedFloor?.supermarketId)?.name ?? stores[0]?.name;
+  const floorChangesBlocked = uploading || saving || zoneSaving || zoneEditing || coverageEditing || dirtyCameraIds.size > 0;
 
-  function toggleCoverage(cam: Camera, zoneId: string) {
-    const covers = cam.zones.includes(zoneId);
-    if (covers && cam.zones.length === 1) return; // every camera must cover at least one zone
-    setCameras((all) => all.map((c) => (c.code === cam.code ? { ...c, zones: covers ? c.zones.filter((z) => z !== zoneId) : [...c.zones, zoneId] } : c)));
-  }
+  const selectFloor = (floorId: string) => {
+    setSelectedFloorId(floorId);
+    setMapState(initialMapState);
+    setActionError('');
+    setActionMessage('');
+    setPickerOpen(false);
+    setZoneEditing(false);
+    setCoverageEditing(false);
+  };
 
-  const floorZones = zones.filter((z) => z.floor === floor);
-  const floorCameras = cameras.filter((c) => c.floor === floor);
-  const selectedZone = zoneById[selectedZoneId];
-  const camera = cameras.find((c) => c.code === selectedCam);
+  const uploadMap = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !selectedFloorId) return;
+    setActionError('');
+    setActionMessage('');
+    if (!SUPPORTED_MAP_TYPES.has(file.type)) return setActionError('Choose a PNG, JPEG, or PDF floor plan.');
+    if (file.size <= 0 || file.size > MAX_MAP_BYTES) return setActionError('Choose a non-empty floor plan of at most 20 MB.');
+    setUploading(true);
+    try {
+      const result = await uploadFloorMap(selectedFloorId, file);
+      setFloors((all) => all.map((floor) => floor.floorId === selectedFloorId ? {
+        ...floor,
+        mapAssetUrl: result.mapUrl,
+        mapWidth: result.mapWidth,
+        mapHeight: result.mapHeight,
+      } : floor));
+      setMapState({ status: 'loading', url: null, contentType: null });
+      setMapVersion((value) => value + 1);
+      setActionMessage('Floor plan uploaded.');
+    } catch (reason) {
+      setActionError(messageOf(reason, 'Could not upload the floor plan.'));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const changePlacement = (cameraId: string, placement: PlacementChange) => {
+    setSelectedCameraId(cameraId);
+    setDrafts((current) => ({ ...current, [cameraId]: placement }));
+    setActionError('');
+    setActionMessage('');
+  };
+
+  const savePlacement = async () => {
+    if (!selectedCamera || !selectedDraft) return;
+    if (!selectedCamera.installedAt || !selectedCamera.warrantyExpiresAt) {
+      setActionError('This camera is missing installation or warranty metadata and cannot be updated safely.');
+      return;
+    }
+    const request: CreateCameraRequest = {
+      code: selectedCamera.code,
+      name: selectedCamera.name,
+      manufacturer: selectedCamera.manufacturer,
+      model: selectedCamera.model,
+      serialNumber: selectedCamera.serialNumber,
+      installedAt: selectedCamera.installedAt,
+      warrantyExpiresAt: selectedCamera.warrantyExpiresAt,
+      mapX: selectedDraft.x,
+      mapY: selectedDraft.y,
+      mapRotationDeg: selectedDraft.rotationDeg,
+      status: selectedCamera.status,
+    };
+    setSaving(true);
+    setActionError('');
+    setActionMessage('');
+    try {
+      const saved = await updateCamera(selectedCamera.cameraId, request);
+      setCameras((all) => all.map((camera) => camera.cameraId === saved.cameraId ? saved : camera));
+      setDrafts((current) => {
+        const next = { ...current };
+        delete next[saved.cameraId];
+        return next;
+      });
+      setActionMessage('Camera placement saved.');
+    } catch (reason) {
+      setActionError(messageOf(reason, 'Could not save camera placement.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const placeCamera = (camera: CameraRecord) => {
+    setSelectedCameraId(camera.cameraId);
+    setDrafts((current) => ({ ...current, [camera.cameraId]: { x: 0.5, y: 0.5, rotationDeg: camera.mapRotationDeg ?? 0 } }));
+    setPickerOpen(false);
+    setCoverageEditing(false);
+    setActionError('');
+    setActionMessage(`${camera.code} is in the centre of the map. Drag it into position, then save its placement.`);
+  };
+
+  const saveZone = async (draft: ZoneEditorSave) => {
+    if (!selectedFloorId) throw new Error('Select a floor before saving a zone.');
+    const existing = draft.zoneId ? zones.find((zone) => zone.zoneId === draft.zoneId) : undefined;
+    const request: ZoneRequest = {
+      code: existing?.code ?? createZoneCode(draft.name, zones),
+      name: draft.name,
+      zoneType: draft.zoneType,
+      mapPolygon: draft.mapPolygon,
+      colorHex: draft.colorHex,
+      areaM2: draft.areaM2,
+      status: existing?.status ?? 'ACTIVE',
+    };
+    setZoneSaving(true);
+    setActionError('');
+    setActionMessage('');
+    try {
+      const saved = existing
+        ? await updateZone(existing.zoneId, request)
+        : await createZone(selectedFloorId, request);
+      setZones((current) => [...current.filter((zone) => zone.zoneId !== saved.zoneId), saved]);
+      setActionMessage(existing ? 'Zone updated.' : 'Zone saved.');
+    } catch (reason) {
+      const message = messageOf(reason, 'Could not save the zone.');
+      setActionError(message);
+      throw reason instanceof Error ? reason : new Error(message);
+    } finally {
+      setZoneSaving(false);
+    }
+  };
+
+  const subtitle = loading
+    ? 'Loading store configuration…'
+    : `${storeName ?? 'No supermarket'} · ${floors.length} floor${floors.length === 1 ? '' : 's'} · ${cameras.length} camera${cameras.length === 1 ? '' : 's'} on selected floor`;
 
   return (
-    <AdminLayout title="Store layout" subtitle={`Central Q1 store · ${floors.length} floors · ${zones.length} zones · ${cameras.length} cameras`}>
-      {/* ---------- Structure tree ---------- */}
+    <AdminLayout title="Store layout" subtitle={subtitle}>
       <Card className={s.structure}>
-        <Overline>STORE STRUCTURE</Overline>
-        <div className={s.storeName}>
-          <Icon name="store" size={15} />
-          Central Q1 store
+        <CardHeader title="Store structure" subtitle="Configuration loaded from the backend" />
+        <div className={s.floorActions}>
+          <Button disabled={loading || !stores[0] || floorChangesBlocked} onClick={() => setFloorEditor('new')}>Create floor</Button>
+          <Button variant="secondary" disabled={loading || !selectedFloor || floorChangesBlocked} onClick={() => selectedFloor && setFloorEditor(selectedFloor)}>Edit floor</Button>
         </div>
-        <div className={s.tree} role="tree">
-          {floors.map((f) => {
-            const open = openFloors[f.id];
-            const fz = zones.filter((z) => z.floor === f.id);
-            return (
-              <div key={f.id} role="group">
-                <button className={`${s.treeRow} ${s.floorRow}`} onClick={() => { setOpenFloors((o) => ({ ...o, [f.id]: !open })); setFloor(f.id); }} aria-expanded={open}>
-                  <Icon name={open ? 'tree-chevron-down' : 'tree-chevron-right'} size={11} />
-                  <Icon name="layers" size={13} />
-                  <span>{f.name}</span>
-                  <span className={s.count}>{fz.length} zones</span>
-                </button>
-                {open &&
-                  fz.map((z) => {
-                    const selected = z.id === selectedZoneId;
-                    return (
-                      <div key={z.id}>
-                        <button className={`${s.treeRow} ${s.zoneRow} ${selected ? s.treeSelected : ''}`} onClick={() => selectZone(z.id)} aria-selected={selected}>
-                          <Icon name={selected ? 'tree-chevron-down-active' : 'tree-chevron-right'} size={11} />
-                          <Icon name={z.pin} size={13} />
-                          <span>{zoneLabel(z)}</span>
-                          <span className={s.count}>{camerasIn(z.id).length} cam</span>
-                        </button>
-                        {selected &&
-                          camerasIn(z.id).map((c) => (
-                            <button key={c.code} className={`${s.treeRow} ${s.camRow}`} onClick={() => selectCamera(c.code)}>
-                              <Icon name="tree-chevron-right" size={11} />
-                              <Icon name="tree-camera" size={13} />
-                              <span>{c.code}</span>
-                              {c.zones.filter((id) => id !== z.id).map((id) => (
-                                <Chip key={id} tone="neutral">+ Zone {id}</Chip>
-                              ))}
-                            </button>
-                          ))}
-                      </div>
-                    );
-                  })}
-              </div>
-            );
-          })}
-          <button className={s.addFloor}>
-            <Icon name="plus-primary" size={13} />
-            Add floor
-          </button>
-        </div>
-        <p className={s.hint}>A camera may cover several zones on its floor, so it can appear under more than one zone. Monitored areas of one zone must not overlap.</p>
-        <div style={{ flex: 1 }} />
-        <Overline>FLOOR PLAN SOURCE</Overline>
-        <div className={s.source}>
-          <div className={s.sourceFile}>
-            <Icon name="file-primary" size={16} />
-            <div>
-              <p className={s.sourceName}>floorplan_F1.pdf</p>
-              <p className={s.sourceMeta}>From store facilities · 24/09</p>
-            </div>
+        {floorChangesBlocked && <p className={s.meta}>Finish the current camera or zone edits before changing floors.</p>}
+        {loading ? <p className={s.state}>Loading floors…</p> : floors.length === 0 ? (
+          <Callout tone="warning" icon="alert-warning">{stores[0] ? 'No floors yet. Create the first floor, then upload its floor plan.' : 'The default store seed is missing. Ask the backend team to restore it before creating floors.'}</Callout>
+        ) : (
+          <div className={s.floorList} aria-label="Floors">
+            {floors.map((floor) => (
+              <button
+                key={floor.floorId}
+                className={`${s.floorRow} ${selectedFloorId === floor.floorId ? s.activeRow : ''}`}
+                aria-pressed={selectedFloorId === floor.floorId}
+                onClick={() => selectFloor(floor.floorId)}
+              >
+                <Icon name="layers" size={14} />
+                <span><strong>{floor.name || `Floor ${floor.floorNumber}`}</strong><small>Floor {floor.floorNumber}</small></span>
+                <Chip tone={floor.mapAssetUrl ? 'success' : 'neutral'}>{floor.mapAssetUrl ? 'Map' : 'No map'}</Chip>
+              </button>
+            ))}
           </div>
-          <p className={s.sourceMeta} style={{ fontWeight: 500 }}>Scale 1 px = 5 cm · 42 × 36 m</p>
-          <Button variant="secondary" icon="upload" block style={{ height: 30, fontSize: 11 }}>Replace floor plan</Button>
+        )}
+
+        <Overline>CAMERAS ON THIS FLOOR</Overline>
+        <div className={s.cameraList}>
+          {detailsLoading ? <p className={s.state}>Loading cameras…</p> : displayedCameras.map((camera) => (
+            <button
+              key={camera.cameraId}
+              className={`${s.cameraRow} ${selectedCameraId === camera.cameraId ? s.activeRow : ''}`}
+              onClick={() => {
+                setSelectedCameraId(camera.cameraId);
+                setCameraSelectionError('');
+                setCoverageEditing(false);
+              }}
+              aria-pressed={selectedCameraId === camera.cameraId}
+              aria-label={`${camera.code} ${camera.name}`}
+              disabled={zoneEditing}
+            >
+              <Icon name="tree-camera" size={14} />
+              <span><strong>{camera.code}</strong><small>{camera.name}</small></span>
+              {drafts[camera.cameraId] ? <i>Unsaved</i> : !isPlaced(camera) && <i className={s.notPlaced}>Not on map</i>}
+            </button>
+          ))}
+          {!detailsLoading && cameras.length === 0 && <p className={s.state}>No cameras registered on this floor.</p>}
+        </div>
+        <Button variant="secondary" icon="plus-primary" block disabled={!selectedFloor || zoneEditing || mapState.status !== 'ready'} onClick={() => {
+          setCoverageEditing(false);
+          setPickerOpen((open) => !open);
+        }}>
+          {pickerOpen ? 'Close camera list' : 'Add camera'}
+        </Button>
+
+        <div className={s.source}>
+          <Overline>FLOOR PLAN SOURCE</Overline>
+          <p className={s.sourceName}>{selectedFloor?.mapAssetUrl ? 'Authenticated uploaded asset' : 'No floor plan uploaded'}</p>
+          {selectedFloor?.mapWidth && selectedFloor.mapHeight && <p className={s.meta}>{selectedFloor.mapWidth} × {selectedFloor.mapHeight} px</p>}
+          <input
+            ref={fileInput}
+            className={s.fileInput}
+            type="file"
+            accept="image/png,image/jpeg,application/pdf"
+            aria-label="Upload floor plan"
+            disabled={!selectedFloor || uploading}
+            onChange={uploadMap}
+          />
+          <Button variant="secondary" icon="upload" block disabled={!selectedFloor || uploading} onClick={() => fileInput.current?.click()}>
+            {uploading ? 'Uploading…' : selectedFloor?.mapAssetUrl ? 'Replace floor plan' : 'Upload floor plan'}
+          </Button>
+          <p className={s.meta}>PNG, JPEG, or PDF · maximum 20 MB</p>
         </div>
       </Card>
 
-      {/* ---------- Floor plan ---------- */}
-      <Card className={s.canvas}>
-        <div className={s.toolbar}>
-          {tools.map((t) => (
-            <Button key={t} variant={tool === t ? 'primary' : 'secondary'} icon={toolIcon[t][tool === t ? 1 : 0]} onClick={() => setTool(t)} aria-pressed={tool === t} style={{ padding: '0 10px' }}>
-              {t}
-            </Button>
-          ))}
-          <div style={{ flex: 1 }} />
-          <div style={{ width: 125 }}>
-            <Segmented value={floor} onChange={setFloor} options={floors.map((f) => ({ value: f.id, label: f.short }))} />
-          </div>
-        </div>
-        <div className={s.stageWrap}>
-          {floor === 'F1' ? (
-            <div className={s.stage} style={{ width: STAGE.w, height: STAGE.h }}>
-              <div className={s.walls} style={box(walls)} />
-              {floorZones.filter((z) => zoneRects[z.id]).map((z) => (
-                <button
-                  key={z.id}
-                  aria-label={zoneLabel(z)}
-                  className={`${s.zone} ${z.id === selectedZoneId ? s.zoneSelected : ''}`}
-                  style={{ ...box(zoneRects[z.id]), ['--tone' as string]: toneVar[z.tone] }}
-                  onClick={() => selectZone(z.id)}
-                />
-              ))}
-              {fixtures.map((f, i) => <div key={i} className={s.fixture} style={box(f)} />)}
-              {counterLabels.map((c) => <span key={c.text} className={s.counterLabel} style={{ left: c.x, top: c.y }}>{c.text}</span>)}
-              <div className={s.abs} style={{ left: 43.31, top: 647, width: 87.92, height: 6, background: 'var(--color-surface)' }} />
-              <span className={s.entrance} style={{ left: 55.03, top: 624 }}>ENTRANCE</span>
-              <div className={s.blindSpot} style={box(blindSpot)} />
-              {floorCameras.map((c) => {
-                const p = cameraPlacements[c.code];
-                if (!p) return null;
-                return <img key={c.code} className={s.fov} src={iconSrc(p.fov.asset)} alt="" style={box(p.fov)} />;
-              })}
-              {floorCameras.map((c) => {
-                const p = cameraPlacements[c.code];
-                const home = zoneById[c.zones[0]];
-                if (!p || !home) return null;
-                const inSelected = c.zones.includes(selectedZoneId);
-                const tone = inSelected && selectedZone ? toneVar[selectedZone.tone] : toneVar[home.tone];
-                return (
-                  <span key={c.code}>
-                    <button
-                      className={`${s.marker} ${inSelected ? s.markerFilled : ''} ${selectedCam === c.code && tab === 'camera' ? s.markerActive : ''}`}
-                      style={{ left: p.marker.x, top: p.marker.y, ['--tone' as string]: tone }}
-                      aria-label={c.code}
-                      title={`${c.code} · covers ${c.zones.map((id) => `Zone ${id}`).join(', ')}`}
-                      onClick={() => selectCamera(c.code)}
-                    >
-                      <Icon name={inSelected ? 'cam-marker-white' : markerIcon[home.id] ?? 'cam-marker-success'} size={11} />
-                    </button>
-                    {inSelected && <span className={s.camTag} style={{ left: p.label.x, top: p.label.y }}>{c.code}</span>}
-                  </span>
-                );
-              })}
-              {floorZones.filter((z) => zoneLabelPos[z.id]).map((z) => (
-                <span key={z.id} className={s.zoneTag} style={{ left: zoneLabelPos[z.id].x, top: zoneLabelPos[z.id].y, ['--tone' as string]: toneVar[z.tone] }}>
-                  <Icon name={z.dot} size={7} />
-                  {zoneLabel(z)}
-                </span>
-              ))}
-              {selectedZone && zoneRects[selectedZone.id] && corners(zoneRects[selectedZone.id]).map((c, i) => <span key={i} className={s.handle} style={{ left: c.x, top: c.y, borderColor: toneVar[selectedZone.tone] }} />)}
-              <div className={s.legend} style={{ left: 14, top: 671 }}>
-                <span><i className={s.swatch} style={{ background: 'var(--color-placeholder)', border: '1px solid var(--color-border)' }} />Shelf / fixture</span>
-                <span><i className={s.swatch} style={{ background: 'color-mix(in srgb, var(--color-primary) 25%, transparent)' }} />Camera view</span>
-                <span><i className={s.swatch} style={{ background: 'color-mix(in srgb, var(--color-danger) 25%, transparent)', border: '1px dashed var(--color-danger)' }} />Blind spot</span>
+      {floorEditor && stores[0] && <FloorEditor
+        storeId={stores[0].supermarketId}
+        floor={floorEditor === 'new' ? undefined : floorEditor}
+        suggestedNumber={Math.max(0, ...floors.map(f => f.floorNumber)) + 1}
+        onClose={() => setFloorEditor(null)}
+        onSaved={saved => {
+          const creating = floorEditor === 'new';
+          setFloors(all => [...all.filter(f => f.floorId !== saved.floorId), saved].sort((a, b) => a.floorNumber - b.floorNumber));
+          setFloorEditor(null);
+          if (creating) selectFloor(saved.floorId);
+          setActionMessage(creating ? 'Floor created. Upload its floor plan to continue setup.' : 'Floor details updated.');
+        }}
+      />}
+
+      <div className={s.workspace}>
+        {pickerOpen && selectedFloor && (
+          <Card className={s.picker}>
+            <CardHeader title="Add camera to map" subtitle="Cameras registered on this floor that are not on the map yet." />
+            {unplacedCameras.length > 0 ? (
+              <div className={s.cameraList} aria-label="Cameras not on the map">
+                {unplacedCameras.map((camera) => (
+                  <button key={camera.cameraId} className={s.cameraRow} aria-label={`Place ${camera.code} ${camera.name} on the map`} onClick={() => placeCamera(camera)}>
+                    <Icon name="tree-camera" size={14} />
+                    <span><strong>{camera.code}</strong><small>{camera.name}</small></span>
+                    <i className={s.notPlaced}>Place</i>
+                  </button>
+                ))}
               </div>
-              <span className={s.abs} style={{ left: 357, top: 674 }}>
-                <Chip tone="danger" dot={undefined}>
-                  <Icon name="alert-danger" size={11} />
-                  <span style={{ fontSize: 10 }}>Coverage 96% · 1 blind spot</span>
-                </Chip>
-              </span>
-            </div>
+            ) : (
+              <p className={s.state}>Every camera registered on this floor is already on the map.</p>
+            )}
+            <p className={s.placementHelp}>
+              Need another camera? <Link to="/admin/cameras">Register it on the Cameras page</Link> and choose {selectedFloor.name || `Floor ${selectedFloor.floorNumber}`}.
+            </p>
+          </Card>
+        )}
+        <Card className={s.canvas}>
+          {coverageEditing && selectedCamera ? (
+            <CameraCoverageEditor camera={selectedCamera} zones={zones} onClose={() => setCoverageEditing(false)} />
+          ) : <>
+          <div className={s.canvasHeader}>
+            <CardHeader
+              title={selectedFloor?.name ?? 'Floor plan'}
+              subtitle={zoneEditing ? 'Draw rectangles by dragging, or click points to create a polygon.' : 'Drag the camera body. Use the amber handle to align its muzzle and field of view.'}
+            />
+            {selectedFloor && (
+              <div className={s.canvasTools}>
+                <Chip tone="neutral">{zones.length} zones</Chip>
+                <Button
+                  variant="secondary"
+                  disabled={mapState.status !== 'ready'}
+                  onClick={() => {
+                    setZoneEditing((active) => {
+                      const next = !active;
+                      if (next) setSelectedCameraId(null);
+                      return next;
+                    });
+                    setCoverageEditing(false);
+                    setPickerOpen(false);
+                    setActionError('');
+                    setActionMessage('');
+                  }}
+                >
+                  {zoneEditing ? 'Close zone editor' : 'Edit zones'}
+                </Button>
+              </div>
+            )}
+          </div>
+          {mapState.status === 'ready' ? (
+            <FloorPlanSurface
+              mapUrl={mapState.url}
+              mapContentType={mapState.contentType}
+              cameras={mapCameras}
+              selectedCameraId={selectedCameraId}
+              dirtyCameraIds={dirtyCameraIds}
+              onSelectCamera={id => { setSelectedCameraId(id); setCameraSelectionError(''); }}
+              onChangePlacement={changePlacement}
+              zones={zones}
+              zoneEditor={zoneEditing ? { zones, saving: zoneSaving, onSave: saveZone, onCancel: () => setZoneEditing(false) } : undefined}
+            />
+          ) : mapState.status === 'loading' || (mapState.status === 'idle' && Boolean(selectedFloor?.mapAssetUrl)) ? (
+            <div className={s.emptyPlan}><Icon name="scan" size={20} /><p>Loading floor plan…</p></div>
+          ) : mapState.status === 'error' ? (
+            <div className={s.emptyPlan}><p role="alert">{mapState.message}</p><Button variant="secondary" onClick={() => { setMapState({ status: 'loading', url: null, contentType: null }); setMapVersion((value) => value + 1); }}>Retry</Button></div>
           ) : (
             <div className={s.emptyPlan}>
-              <Icon name="upload" size={14} />
-              <p>No floor plan uploaded for Floor 2 yet.</p>
-              <Button variant="secondary" icon="upload">Upload floor plan</Button>
+              <Icon name="upload" size={20} />
+              <p>Upload a floor plan before positioning cameras.</p>
+              <Button variant="secondary" icon="upload" disabled={!selectedFloor} onClick={() => fileInput.current?.click()}>Upload floor plan</Button>
             </div>
           )}
-        </div>
-      </Card>
-
-      {/* ---------- Properties ---------- */}
-      <Card className={s.props}>
-        <Segmented value={tab} onChange={setTab} options={[{ value: 'zone', label: 'Zone' }, { value: 'camera', label: 'Camera' }]} />
-        {tab === 'zone' ? (
-          <>
-            <Field label="Zone name">
-              <TextInput value={draft.name} onChange={(name) => { setDraft({ ...draft, name }); setSaved(false); }} />
-            </Field>
-            <Field label="Floor">
-              <Select value={draft.floor} onChange={(f) => setDraft({ ...draft, floor: f })} options={floors.map((f) => ({ value: f.id, label: f.name }))} />
-            </Field>
-            <Field label="Zone type">
-              <Select value={draft.type} onChange={(type) => setDraft({ ...draft, type })} options={zoneTypes.map((t) => ({ value: t, label: t }))} />
-            </Field>
-            <Overline>CAMERAS COVERING THIS ZONE</Overline>
-            <div className={s.camList}>
-              {camerasIn(draft.id).map((c) => {
-                const others = c.zones.filter((id) => id !== draft.id);
-                return (
-                  <button key={c.code} className={s.camItem} style={{ width: '100%', textAlign: 'left' }} onClick={() => selectCamera(c.code)}>
-                    <Icon name="camera-row" size={14} />
-                    <div style={{ flex: 1 }}>
-                      <p className={s.camCode}>{c.code}</p>
-                      <p className={s.camNote}>{others.length ? `Also covers ${others.map((id) => `Zone ${id}`).join(', ')} · ${c.note}` : c.note}</p>
-                    </div>
-                    {statusChip(c.status)}
-                  </button>
-                );
-              })}
-              {camerasIn(draft.id).length === 0 && <p className={s.camItem} style={{ color: 'var(--color-text-muted)' }}>No camera covers this zone — it is a blind spot.</p>}
-            </div>
-            <Field label="Min. staff on shift">
-              <span className={s.stepper}>
-                <button aria-label="Decrease" disabled={draft.minStaff <= 1} onClick={() => setDraft({ ...draft, minStaff: draft.minStaff - 1 })}><Icon name="minus" size={14} /></button>
-                <output>{draft.minStaff}</output>
-                <button aria-label="Increase" onClick={() => setDraft({ ...draft, minStaff: draft.minStaff + 1 })}><Icon name="plus" size={14} /></button>
-              </span>
-            </Field>
-            <div className={s.toggleRow}>
-              <Toggle on={draft.recordingNotice} onChange={(v) => setDraft({ ...draft, recordingNotice: v })} label="Recording notice posted" />
-              Recording notice posted at zone entrances
-            </div>
-            <Callout tone="info" icon="info">Business rule: every zone needs at least 1 staff on each shift. The Manager assigns shifts.</Callout>
-            <div style={{ flex: 1 }} />
-            {saved && <p className={s.saved}>Zone saved.</p>}
-            <Button size="lg" block onClick={saveZone} style={{ height: 40 }}>Save zone</Button>
-            <Button variant="dangerGhost" block onClick={deleteZone} style={{ height: 30, fontSize: 12 }}>Delete zone</Button>
-          </>
-        ) : camera ? (
-          <>
-            <div>
-              <p className={s.camCode} style={{ fontSize: 15 }}>{camera.code}</p>
-              <p className={s.camNote} style={{ fontSize: 11 }}>{floors.find((f) => f.id === camera.floor)?.name} · {camera.model}</p>
-            </div>
-            <div>{statusChip(camera.status)}</div>
-            <Overline>ZONES THIS CAMERA COVERS</Overline>
-            <div className={s.camList}>
-              {zones.filter((z) => z.floor === camera.floor).map((z) => (
-                <div key={z.id} className={s.zoneChoice}>
-                  <Checkbox checked={camera.zones.includes(z.id)} onChange={() => toggleCoverage(camera, z.id)} label={zoneLabel(z)} />
-                  <Icon name={z.pin} size={13} />
-                  {zoneLabel(z)}
-                </div>
-              ))}
-            </div>
-            <Callout tone="info" icon="info">A camera covers one or more zones on its own floor. Draw one monitored area per zone so counts are not doubled.</Callout>
-          </>
-        ) : (
-          <p className={s.camNote} style={{ fontSize: 11.5 }}>Select a camera on the plan or in the tree.</p>
+          </>}
+        </Card>
+        {(loadError || cameraSelectionError || actionError || actionMessage) && (
+          <div className={s.feedback}>
+            {loadError && <p className={s.error} role="alert">{loadError}</p>}
+            {cameraSelectionError && <p className={s.error} role="alert">{cameraSelectionError}</p>}
+            {actionError && <p className={s.error} role="alert">{actionError}</p>}
+            {actionMessage && <p className={s.success} role="status">{actionMessage}</p>}
+          </div>
         )}
-      </Card>
+      </div>
+
+      {selectedCamera && !zoneEditing && !coverageEditing && <Card className={s.props}>
+        <CardHeader title="Camera placement" />
+        <div className={s.cameraTitle}>
+          <Icon name="camera-row" size={17} />
+          <div><strong>{selectedCamera.code}</strong><small>{selectedCamera.name}</small></div>
+          <Chip tone={selectedCamera.healthStatus === 'ONLINE' ? 'success' : 'neutral'}>{selectedCamera.healthStatus}</Chip>
+        </div>
+        {!isPlaced(selectedCamera) && !selectedDraft ? (
+          <>
+            <p className={s.placementHelp}>This camera is not on the map yet.</p>
+            <Button block disabled={mapState.status !== 'ready'} onClick={() => placeCamera(selectedCamera)}>Place on map</Button>
+          </>
+        ) : <p className={s.placementHelp}>Drag the camera to position it. Drag its direction handle to rotate.</p>}
+        <Button
+          variant="secondary"
+          block
+          disabled={zones.length === 0}
+          onClick={() => {
+            setCoverageEditing(true);
+            setPickerOpen(false);
+            setActionError('');
+            setActionMessage('');
+          }}
+        >
+          Configure coverage
+        </Button>
+        {zones.length === 0 && <p className={s.placementHelp}>Create a zone on this floor before mapping camera coverage.</p>}
+        {selectedDraft && <p className={s.unsaved}>Unsaved placement</p>}
+        <div className={s.actions}>
+          <Button variant="secondary" disabled={!selectedDraft || saving} onClick={() => setDrafts((current) => {
+            const next = { ...current };
+            delete next[selectedCamera.cameraId];
+            return next;
+          })}>Reset</Button>
+          <Button disabled={!selectedDraft || saving} onClick={() => void savePlacement()}>{saving ? 'Saving…' : 'Save placement'}</Button>
+        </div>
+      </Card>}
     </AdminLayout>
   );
 }
 
-function corners(r: Rect) {
-  return [
-    { x: r.x - 4, y: r.y - 4 },
-    { x: r.x + r.w - 4, y: r.y - 4 },
-    { x: r.x - 4, y: r.y + r.h - 4 },
-    { x: r.x + r.w - 4, y: r.y + r.h - 4 },
-  ];
+function messageOf(reason: unknown, fallback: string) {
+  return reason instanceof Error && reason.message ? reason.message : fallback;
 }
 
+function mapTypeFromUrl(url: string) {
+  const path = url.split('?', 1)[0].toLowerCase();
+  if (path.endsWith('.pdf')) return 'application/pdf';
+  if (path.endsWith('.jpg') || path.endsWith('.jpeg')) return 'image/jpeg';
+  return 'image/png';
+}
+
+function createZoneCode(name: string, zones: ZoneRecord[]) {
+  const base = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 44) || 'ZONE';
+  const used = new Set(zones.map((zone) => zone.code.toUpperCase()));
+  if (!used.has(base)) return base;
+  for (let suffix = 2; suffix <= 99999; suffix += 1) {
+    const ending = `-${suffix}`;
+    const candidate = `${base.slice(0, 50 - ending.length)}${ending}`;
+    if (!used.has(candidate)) return candidate;
+  }
+  throw new Error('Could not generate a unique zone code.');
+}
