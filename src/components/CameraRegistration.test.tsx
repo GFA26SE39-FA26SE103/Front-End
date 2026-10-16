@@ -29,7 +29,7 @@ describe('CameraRegistration recovery', () => {
     render(<CameraRegistration floors={[{ id: floorId, key: 'F1', label: 'Ground floor' }]} onCancel={() => undefined} onRegistered={registered} />);
 
     await user.type(screen.getByLabelText('Camera code'), 'CAM-PHONE');
-    await user.type(screen.getByLabelText('IP Webcam URL'), 'http://camera/video');
+    await user.type(screen.getByLabelText('Stream URL'), 'http://camera/video');
     await user.click(screen.getByRole('button', { name: 'Save camera' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Camera exists, but its connection was not saved.');
@@ -48,10 +48,10 @@ describe('CameraRegistration recovery', () => {
     render(<CameraRegistration floors={[{ id: floorId, key: 'F1', label: 'Ground floor' }]} onCancel={() => undefined} onRegistered={() => undefined} />);
 
     await user.type(screen.getByLabelText('Camera code'), 'CAM-PHONE');
-    await user.type(screen.getByLabelText('IP Webcam URL'), 'http://camera/video?token=secret');
+    await user.type(screen.getByLabelText('Stream URL'), 'http://camera/video?token=secret');
     await user.click(screen.getByRole('button', { name: 'Save camera' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('IP Webcam URL cannot contain a query string or fragment.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Stream URL cannot contain a query string or fragment.');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

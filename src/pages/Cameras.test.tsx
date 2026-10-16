@@ -78,7 +78,7 @@ describe('Cameras registration', () => {
     await screen.findByText('No camera matches “”.');
     await user.click(screen.getByRole('button', { name: 'Add camera' }));
     await user.selectOptions(screen.getByLabelText('Camera source'), 'RECORDED');
-    expect(screen.queryByLabelText('IP Webcam URL')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Stream URL')).not.toBeInTheDocument();
     await user.type(screen.getByLabelText('Camera code'), 'CAM-VIDEO');
     await user.click(screen.getByRole('button', { name: 'Save camera' }));
     await screen.findByRole('form', { name: 'Upload recorded video' });
@@ -119,7 +119,7 @@ describe('Cameras registration', () => {
     await user.type(screen.getByLabelText('Camera code'), 'CAM-PHONE');
     await user.clear(screen.getByLabelText('Camera name'));
     await user.type(screen.getByLabelText('Camera name'), 'Phone entrance');
-    await user.type(screen.getByLabelText('IP Webcam URL'), 'http://192.168.1.25:8080/video');
+    await user.type(screen.getByLabelText('Stream URL'), 'http://192.168.1.25:8080/video');
     await user.click(screen.getByRole('button', { name: 'Save camera' }));
 
     expect((await screen.findAllByText('CAM-PHONE')).length).toBeGreaterThanOrEqual(1);
@@ -128,12 +128,23 @@ describe('Cameras registration', () => {
     await waitFor(() => expect(screen.queryByRole('form', { name: 'Add camera' })).not.toBeInTheDocument());
   });
 
-  it('rejects a non-HTTP IP Webcam URL before creating a camera', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
-      const path = new URL(String(input)).pathname;
+  it('accepts an RTSP stream URL and sends the RTSP protocol', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = new URL(String(input));
+      const path = url.pathname;
       if (path === '/api/supermarkets') return json([{ supermarketId: storeId, code: 'STORE', name: 'Store', address: null, status: 'ACTIVE' }]);
       if (path === `/api/supermarkets/${storeId}/floors`) return json([{ floorId, supermarketId: storeId, floorNumber: 1, name: 'Ground floor' }]);
-      if (path === `/api/floors/${floorId}/cameras` || path === `/api/floors/${floorId}/zones`) return json([]);
+      if (path === `/api/floors/${floorId}/cameras` && (!init?.method || init.method === 'GET')) return json([]);
+      if (path === `/api/floors/${floorId}/zones`) return json([]);
+      if (path === `/api/floors/${floorId}/cameras` && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body));
+        return json({ cameraId, floorId, ...body, healthStatus: 'UNKNOWN', lastSeenAt: null }, 201);
+      }
+      if (path === `/api/cameras/${cameraId}/connection` && init?.method === 'PUT') {
+        const body = JSON.parse(String(init.body));
+        if (body.protocol !== 'RTSP' || body.streamUri !== 'rtsp://192.168.1.198:554/stream2') return json({ code: 'BAD_CONNECTION_BODY' }, 400);
+        return json({ cameraId, ...body, hasCredentials: false, isEnabled: false, lastTestedAt: null, lastTestResult: null, lastTestMessage: null });
+      }
       return json({}, 500);
     });
     const user = userEvent.setup();
@@ -142,11 +153,13 @@ describe('Cameras registration', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add camera' }));
     await user.type(screen.getByLabelText('Camera code'), 'CAM-PHONE');
-    await user.type(screen.getByLabelText('IP Webcam URL'), 'rtsp://192.168.1.25/live');
+    await user.type(screen.getByLabelText('Stream URL'), 'rtsp://192.168.1.198:554/stream2');
     await user.click(screen.getByRole('button', { name: 'Save camera' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Use an http:// or https:// IP Webcam URL.');
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(await screen.findByText('CAM-PHONE')).toBeInTheDocument();
+    const connectionCall = fetchMock.mock.calls.find(([, init]) => init?.method === 'PUT');
+    expect(connectionCall).toBeDefined();
+    expect(JSON.parse(String(connectionCall?.[1]?.body)).protocol).toBe('RTSP');
   });
 
   it('rejects credentials embedded in the stream URL', async () => {
@@ -163,7 +176,7 @@ describe('Cameras registration', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add camera' }));
     await user.type(screen.getByLabelText('Camera code'), 'CAM-PHONE');
-    await user.type(screen.getByLabelText('IP Webcam URL'), 'http://viewer:secret@192.168.1.25:8080/video');
+    await user.type(screen.getByLabelText('Stream URL'), 'http://viewer:secret@192.168.1.25:8080/video');
     await user.click(screen.getByRole('button', { name: 'Save camera' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Enter camera credentials in the separate username and password fields.');
@@ -196,7 +209,7 @@ describe('Cameras registration', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add camera' }));
     await user.type(screen.getByLabelText('Camera code'), 'CAM-NEW');
-    await user.type(screen.getByLabelText('IP Webcam URL'), 'http://camera/video');
+    await user.type(screen.getByLabelText('Stream URL'), 'http://camera/video');
     await user.click(screen.getByRole('button', { name: 'Save camera' }));
 
     expect(await screen.findByRole('button', { name: 'Start AI preview' })).toBeInTheDocument();
@@ -223,7 +236,7 @@ describe('Cameras registration', () => {
     await screen.findAllByText('CAM-PENDING');
 
     await user.click(screen.getByRole('button', { name: 'Configure connection' }));
-    await user.type(screen.getByLabelText('IP Webcam URL'), 'http://192.168.1.25:8080/video');
+    await user.type(screen.getByLabelText('Stream URL'), 'http://192.168.1.25:8080/video');
     await user.click(screen.getByRole('button', { name: 'Save connection' }));
 
     expect(await screen.findByText('HTTP · configured in backend')).toBeInTheDocument();

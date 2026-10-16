@@ -31,7 +31,7 @@ export function CameraRegistration({ floors, onCancel, onRegistered }: Props) {
   const [floorId, setFloorId] = useState(floors[0]?.id ?? '');
   const [source, setSource] = useState('LIVE');
   const [code, setCode] = useState('');
-  const [name, setName] = useState('IP Webcam');
+  const [name, setName] = useState('Live camera');
   const [streamUrl, setStreamUrl] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -43,8 +43,8 @@ export function CameraRegistration({ floors, onCancel, onRegistered }: Props) {
 
   const changeSource = (value: string) => {
     setSource(value);
-    setName((current) => current === 'IP Webcam' || current === 'Recorded video'
-      ? value === 'RECORDED' ? 'Recorded video' : 'IP Webcam' : current);
+    setName((current) => current === 'Live camera' || current === 'Recorded video'
+      ? value === 'RECORDED' ? 'Recorded video' : 'Live camera' : current);
   };
 
   const submit = async () => {
@@ -57,12 +57,12 @@ export function CameraRegistration({ floors, onCancel, onRegistered }: Props) {
       try {
         parsed = new URL(streamUrl.trim());
       } catch {
-        return setError('Use an http:// or https:// IP Webcam URL.');
+        return setError('Use an http://, https://, or rtsp:// stream URL.');
       }
-      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return setError('Use an http:// or https:// IP Webcam URL.');
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:' && parsed.protocol !== 'rtsp:') return setError('Use an http://, https://, or rtsp:// stream URL.');
       if (parsed.username || parsed.password) return setError('Enter camera credentials in the separate username and password fields.');
-      if (parsed.search || parsed.hash) return setError('IP Webcam URL cannot contain a query string or fragment.');
-      if (streamUrl.trim().length > 1000) return setError('IP Webcam URL must be 1000 characters or fewer.');
+      if (parsed.search || parsed.hash) return setError('Stream URL cannot contain a query string or fragment.');
+      if (streamUrl.trim().length > 1000) return setError('Stream URL must be 1000 characters or fewer.');
     }
     if (!installedAt || !warrantyExpiresAt || warrantyExpiresAt < installedAt) return setError('Warranty date must be on or after the installation date.');
 
@@ -85,7 +85,7 @@ export function CameraRegistration({ floors, onCancel, onRegistered }: Props) {
       setCreated(camera);
       if (source === 'LIVE') await configureCameraConnection(camera.cameraId, {
         sourceType: 'LIVE',
-        protocol: 'HTTP',
+        protocol: parsed!.protocol === 'rtsp:' ? 'RTSP' : 'HTTP',
         streamUri: parsed!.toString(),
         snapshotUri: null,
         username: username.trim() || null,
@@ -103,16 +103,16 @@ export function CameraRegistration({ floors, onCancel, onRegistered }: Props) {
   return (
     <form className={s.form} aria-label="Add camera" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
       <div className={s.heading}>
-        <div><h3>Add camera</h3><p>{source === 'LIVE' ? 'Use the /video stream URL from IP Webcam.' : 'Register the camera, then upload an MP4 as its source.'}</p></div>
+        <div><h3>Add camera</h3><p>{source === 'LIVE' ? 'Use an HTTP/HTTPS or RTSP live stream URL.' : 'Register the camera, then upload an MP4 as its source.'}</p></div>
         <Button variant="secondary" onClick={onCancel} disabled={saving || Boolean(created)}>Cancel</Button>
       </div>
       <div className={s.grid}>
-        <Field label="Camera source"><Select value={source} onChange={changeSource} disabled={saving || Boolean(created)} options={[{ value: 'LIVE', label: 'IP Webcam (live)' }, { value: 'RECORDED', label: 'Uploaded video (test source)' }]} /></Field>
+        <Field label="Camera source"><Select value={source} onChange={changeSource} disabled={saving || Boolean(created)} options={[{ value: 'LIVE', label: 'Live stream (HTTP/RTSP)' }, { value: 'RECORDED', label: 'Uploaded video (test source)' }]} /></Field>
         <Field label="Floor"><Select value={floorId} onChange={setFloorId} disabled={saving || Boolean(created)} options={floors.map((floor) => ({ value: floor.id, label: `${floor.key} · ${floor.label}` }))} /></Field>
         <Field label="Camera code"><TextInput value={code} onChange={setCode} placeholder="CAM-PHONE" disabled={saving || Boolean(created)} /></Field>
         <Field label="Camera name"><TextInput value={name} onChange={setName} disabled={saving || Boolean(created)} /></Field>
         {source === 'LIVE' && <>
-          <Field label="IP Webcam URL"><TextInput value={streamUrl} onChange={setStreamUrl} disabled={saving} placeholder="http://192.168.1.25:8080/video" /></Field>
+          <Field label="Stream URL"><TextInput value={streamUrl} onChange={setStreamUrl} disabled={saving} placeholder="rtsp://192.168.1.198:554/stream2" /></Field>
           <Field label="Username (optional)"><TextInput value={username} onChange={setUsername} disabled={saving} autoComplete="section-camera username" /></Field>
           <Field label="Password (optional)"><TextInput value={password} onChange={setPassword} disabled={saving} type="password" autoComplete="section-camera new-password" /></Field>
         </>}

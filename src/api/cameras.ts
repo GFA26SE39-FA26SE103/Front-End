@@ -64,7 +64,7 @@ export const cameraUpdateRequest = (camera: CameraRecord, status = camera.status
 
 export type ConfigureConnectionRequest = {
   sourceType: 'LIVE';
-  protocol: 'HTTP';
+  protocol: 'HTTP' | 'RTSP';
   streamUri: string;
   snapshotUri: string | null;
   username: string | null;
