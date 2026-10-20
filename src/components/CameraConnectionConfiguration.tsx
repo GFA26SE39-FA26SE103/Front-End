@@ -8,7 +8,7 @@ import s from './CameraRegistration.module.css';
 type Props = {
   cameraId: string;
   onCancel: () => void;
-  onSaved: () => void;
+  onSaved: () => void | Promise<void>;
 };
 
 export function CameraConnectionConfiguration({ cameraId, onCancel, onSaved }: Props) {
@@ -41,7 +41,7 @@ export function CameraConnectionConfiguration({ cameraId, onCancel, onSaved }: P
         username: username.trim() || null,
         password: password || null,
       });
-      onSaved();
+      await onSaved();
     } catch (reason) {
       setError(reason instanceof ApiError ? reason.message : 'Could not save the camera connection.');
     } finally {

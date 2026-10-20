@@ -163,14 +163,30 @@ button.row:hover {
 }
 
 .media {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  width: 100%;
 }
 
 .trackedPreview {
-  flex: 1;
+  width: 100%;
   min-width: 0;
+}
+
+.previewControls {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.controlLabel {
+  color: var(--color-text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.previewButton {
+  grid-column: 2;
+  width: 100%;
 }
 
 .snapshot {
@@ -320,6 +336,64 @@ button.row:hover {
 
 .streamInfo {
   margin: 0;
+}
+
+.connectionError {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+  color: var(--color-danger);
+  font-size: 11px;
+}
+
+.connectionError p {
+  margin: 2px 0 0;
+  color: var(--color-text-muted);
+}
+
+.errorActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.secondaryActions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.moreActions {
+  position: relative;
+}
+
+.moreActions > button {
+  width: 100%;
+}
+
+.actionsMenu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 20;
+  display: flex;
+  width: 190px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-float);
+}
+
+.actionsMenu button {
+  justify-content: flex-start;
+  width: 100%;
 }
 
 .actions {
