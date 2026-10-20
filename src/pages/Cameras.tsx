@@ -58,6 +58,7 @@ export default function Cameras() {
   const [floors, setFloors] = useState<FloorOption[]>([]);
   const [query, setQuery] = useState('');
   const [floorFilter, setFloorFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | CameraStatus>('all');
   const [selected, setSelected] = useState<string | null>(null);
   const [test, setTest] = useState<TestState | null>(null);
   const [previewEnabled, setPreviewEnabled] = useState(false);
@@ -107,8 +108,9 @@ export default function Cameras() {
     const normalized = query.trim().toLowerCase();
     return cameras.filter((camera) =>
       (floorFilter === 'all' || camera.floorId === floorFilter)
+      && (statusFilter === 'all' || camera.status === statusFilter)
       && (!normalized || camera.code.toLowerCase().includes(normalized) || camera.name.toLowerCase().includes(normalized) || camera.zones.some((zone) => zone.name.toLowerCase().includes(normalized))));
-  }, [cameras, floorFilter, query]);
+  }, [cameras, floorFilter, query, statusFilter]);
 
   const camera = cameras.find((item) => item.id === selected);
   const counts = {
@@ -206,11 +208,21 @@ export default function Cameras() {
     <AdminLayout title="Cameras" subtitle={`${cameras.length} cameras · ${counts.online} online · ${counts.degraded} unknown · ${counts.offline} offline`}>
       <Card className={s.registry}>
         <CardHeader title="Camera registry" subtitle="Live records loaded from the MF-01 backend">
-          <SearchBox value={query} onChange={setQuery} placeholder="Search camera" width={170} />
-          <div style={{ width: 130 }}>
-            <Select value={floorFilter} onChange={setFloorFilter} chevron="chevron-down-small" chevronSize={13} height={32} options={[{ value: 'all', label: 'All floors' }, ...floors.map((floor) => ({ value: floor.id, label: floor.label }))]} />
+          <div className={s.registryFilters}>
+            <SearchBox value={query} onChange={setQuery} placeholder="Search camera" width={170} />
+            <div className={s.floorFilter}>
+              <Select ariaLabel="Filter by floor" value={floorFilter} onChange={setFloorFilter} chevron="chevron-down-small" chevronSize={13} height={32} options={[{ value: 'all', label: 'All floors' }, ...floors.map((floor) => ({ value: floor.id, label: floor.label }))]} />
+            </div>
+            <div className={s.statusFilter}>
+              <Select ariaLabel="Filter by status" value={statusFilter} onChange={setStatusFilter} chevron="chevron-down-small" chevronSize={13} height={32} options={[
+                { value: 'all', label: 'All statuses' },
+                { value: 'Online', label: 'Online' },
+                { value: 'Degraded', label: 'Degraded' },
+                { value: 'Offline', label: 'Offline' },
+              ]} />
+            </div>
+            <Button onClick={() => { setUploadOpen(false); setConnectionEditorOpen(false); setRegistrationOpen(true); }} disabled={loading || uploadBusy}>Add camera</Button>
           </div>
-          <Button onClick={() => { setUploadOpen(false); setConnectionEditorOpen(false); setRegistrationOpen(true); }} disabled={loading || uploadBusy}>Add camera</Button>
         </CardHeader>
 
         {registrationOpen && <CameraRegistration floors={floors} onCancel={() => setRegistrationOpen(false)} onRegistered={registered} />}
@@ -236,7 +248,7 @@ export default function Cameras() {
                 </button>
               );
             })}
-            {visible.length === 0 && <p className={s.empty}>No camera matches “{query}”.</p>}
+            {visible.length === 0 && <p className={s.empty}>{statusFilter !== 'all' || floorFilter !== 'all' ? 'No cameras match the selected filters.' : `No camera matches “${query}”.`}</p>}
           </div>
         )}
       </Card>

@@ -4,6 +4,22 @@
   gap: 12px;
 }
 
+.registryFilters {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.floorFilter {
+  width: 130px;
+}
+
+.statusFilter {
+  width: 124px;
+}
+
 .table {
   display: flex;
   flex-direction: column;

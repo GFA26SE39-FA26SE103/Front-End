@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { configureCameraConnection } from '../api/cameras';
 import { ApiError } from '../api/client';
+import { Dialog } from './Dialog';
 import { Button, Field, TextInput } from './ui';
 import s from './CameraRegistration.module.css';
 
@@ -49,18 +50,20 @@ export function CameraConnectionConfiguration({ cameraId, onCancel, onSaved }: P
   };
 
   return (
-    <form className={s.form} aria-label="Configure camera connection" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-      <div className={s.heading}>
-        <div><h3>Configure camera connection</h3><p>Use an HTTP/HTTPS or RTSP stream. Saving replaces the current stream details and credentials.</p></div>
-        <Button variant="secondary" onClick={onCancel} disabled={saving}>Cancel</Button>
-      </div>
-      <div className={s.grid}>
-        <Field label="Stream URL"><TextInput value={streamUrl} onChange={setStreamUrl} placeholder="rtsp://192.168.1.198:554/stream2" /></Field>
-        <Field label="Username (optional)"><TextInput value={username} onChange={setUsername} autoComplete="section-camera username" /></Field>
-        <Field label="Password (optional)"><TextInput value={password} onChange={setPassword} type="password" autoComplete="section-camera new-password" /></Field>
-      </div>
-      {error && <p className={s.error} role="alert">{error}</p>}
-      <div className={s.actions}><Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save connection'}</Button></div>
-    </form>
+    <Dialog title="Configure camera connection" busy={saving} onClose={onCancel}>
+      <form className={s.dialogForm} aria-label="Configure camera connection" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+        <p className={s.dialogIntro}>Use an HTTP/HTTPS or RTSP stream. Saving replaces the current stream details and credentials.</p>
+        <div className={s.grid}>
+          <Field label="Stream URL"><TextInput value={streamUrl} onChange={setStreamUrl} placeholder="rtsp://192.168.1.198:554/stream2" /></Field>
+          <Field label="Username (optional)"><TextInput value={username} onChange={setUsername} autoComplete="section-camera username" /></Field>
+          <Field label="Password (optional)"><TextInput value={password} onChange={setPassword} type="password" autoComplete="section-camera new-password" /></Field>
+        </div>
+        {error && <p className={s.error} role="alert">{error}</p>}
+        <div className={s.actions}>
+          <Button variant="secondary" onClick={onCancel} disabled={saving}>Cancel</Button>
+          <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save connection'}</Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }

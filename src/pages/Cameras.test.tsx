@@ -45,7 +45,7 @@ describe('Cameras registration', () => {
     await screen.findByRole('row', { name: /CAM-TARGET/i });
     if (requested === cameraId) {
       expect(screen.getByText('Upper floor · Upper aisle camera')).toBeInTheDocument();
-      expect(screen.getByRole('combobox')).toHaveValue(secondFloorId);
+      expect(screen.getByRole('combobox', { name: 'Filter by floor' })).toHaveValue(secondFloorId);
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     } else {
       expect(screen.getByRole('alert')).toHaveTextContent('The requested camera was not found.');
@@ -82,6 +82,7 @@ describe('Cameras registration', () => {
     await user.type(screen.getByLabelText('Camera code'), 'CAM-VIDEO');
     await user.click(screen.getByRole('button', { name: 'Save camera' }));
     await screen.findByRole('form', { name: 'Upload recorded video' });
+    expect(screen.getByRole('dialog', { name: 'Upload video as camera source' })).toBeInTheDocument();
     await user.upload(screen.getByLabelText('Video file'), new File(['video'], 'sample.mp4', { type: 'video/mp4' }));
     await user.click(screen.getByRole('button', { name: 'Save video source' }));
     await screen.findByText('RECORDED · MP4 · test & enable next');
@@ -236,11 +237,35 @@ describe('Cameras registration', () => {
     await screen.findAllByText('CAM-PENDING');
 
     await user.click(screen.getByRole('button', { name: 'Configure connection' }));
+    expect(screen.getByRole('dialog', { name: 'Configure camera connection' })).toBeInTheDocument();
     await user.type(screen.getByLabelText('Stream URL'), 'http://192.168.1.25:8080/video');
     await user.click(screen.getByRole('button', { name: 'Save connection' }));
 
     expect(await screen.findByText('HTTP · configured in backend')).toBeInTheDocument();
     expect(screen.queryByRole('form', { name: 'Configure camera connection' })).not.toBeInTheDocument();
+  });
+
+  it('filters the camera registry by health status', async () => {
+    const offlineId = '30000000-0000-0000-0000-000000000077';
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      const path = new URL(String(input)).pathname;
+      if (path === '/api/supermarkets') return json([{ supermarketId: storeId }]);
+      if (path === `/api/supermarkets/${storeId}/floors`) return json([{ floorId, floorNumber: 1, name: 'Ground floor' }]);
+      if (path === `/api/floors/${floorId}/cameras`) return json([
+        { cameraId, floorId, code: 'CAM-ONLINE', name: 'Online camera', manufacturer: null, model: null, serialNumber: null, installedAt: '2026-01-01T00:00:00Z', warrantyExpiresAt: '2027-01-01T00:00:00Z', status: 'ACTIVE', healthStatus: 'ONLINE', lastSeenAt: '2026-10-20T00:00:00Z' },
+        { cameraId: offlineId, floorId, code: 'CAM-OFFLINE', name: 'Offline camera', manufacturer: null, model: null, serialNumber: null, installedAt: '2026-01-01T00:00:00Z', warrantyExpiresAt: '2027-01-01T00:00:00Z', status: 'ACTIVE', healthStatus: 'OFFLINE', lastSeenAt: null },
+      ]);
+      if (path === `/api/floors/${floorId}/zones` || path.endsWith('/zones')) return json([]);
+      return json({}, 500);
+    });
+    const user = userEvent.setup();
+    render(<MemoryRouter><Cameras /></MemoryRouter>);
+    await screen.findByRole('row', { name: /CAM-ONLINE/i });
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by status' }), 'Offline');
+
+    expect(screen.queryByRole('row', { name: /CAM-ONLINE/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('row', { name: /CAM-OFFLINE/i })).toBeInTheDocument();
   });
 
   it('edits camera metadata and deactivates it without deleting its record', async () => {

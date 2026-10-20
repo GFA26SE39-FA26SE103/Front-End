@@ -1,7 +1,10 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { mockNativeDialogs } from '../test/dialog';
 import { RecordedVideoUpload } from './RecordedVideoUpload';
+
+mockNativeDialogs();
 
 describe('RecordedVideoUpload', () => {
   it('sends the selected MP4 as multipart and waits for validation before saving', async () => {
@@ -10,6 +13,7 @@ describe('RecordedVideoUpload', () => {
     const busy = vi.fn();
     const user = userEvent.setup();
     render(<RecordedVideoUpload cameraId="camera-a" onSaved={saved} onCancel={() => undefined} onBusy={busy} />);
+    expect(screen.getByRole('dialog', { name: 'Upload video as camera source' })).toBeInTheDocument();
     const file = new File(['video'], 'sample.mp4', { type: 'video/mp4' });
     await user.upload(screen.getByLabelText('Video file'), file);
     await user.click(screen.getByRole('button', { name: 'Save video source' }));

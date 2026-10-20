@@ -331,7 +331,7 @@ export default function StoreLayout() {
           setCoverageEditing(false);
           setPickerOpen((open) => !open);
         }}>
-          {pickerOpen ? 'Close camera list' : 'Add camera'}
+          {pickerOpen ? 'Close camera picker' : 'Place camera on map'}
         </Button>
 
         <div className={s.source}>
@@ -371,7 +371,7 @@ export default function StoreLayout() {
       <div className={s.workspace}>
         {pickerOpen && selectedFloor && (
           <Card className={s.picker}>
-            <CardHeader title="Add camera to map" subtitle="Cameras registered on this floor that are not on the map yet." />
+            <CardHeader title="Place camera on map" subtitle="Choose a registered camera on this floor to place on the floor plan." />
             {unplacedCameras.length > 0 ? (
               <div className={s.cameraList} aria-label="Cameras not on the map">
                 {unplacedCameras.map((camera) => (
@@ -386,7 +386,7 @@ export default function StoreLayout() {
               <p className={s.state}>Every camera registered on this floor is already on the map.</p>
             )}
             <p className={s.placementHelp}>
-              Need another camera? <Link to="/admin/cameras">Register it on the Cameras page</Link> and choose {selectedFloor.name || `Floor ${selectedFloor.floorNumber}`}.
+              Need another camera? <Link to="/admin/cameras">Register a new camera</Link> and choose {selectedFloor.name || `Floor ${selectedFloor.floorNumber}`}.
             </p>
           </Card>
         )}

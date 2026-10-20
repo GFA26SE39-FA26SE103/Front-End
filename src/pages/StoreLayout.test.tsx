@@ -255,15 +255,16 @@ describe('StoreLayout', () => {
     expect(screen.queryByRole('button', { name: /place cam-02 at/i })).not.toBeInTheDocument();
     expect(screen.getByText('Not on map')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Add camera' }));
-    expect(screen.getByRole('heading', { name: 'Add camera to map' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Place camera on map' }));
+    expect(screen.getByRole('heading', { name: 'Place camera on map' })).toBeInTheDocument();
+    expect(screen.getByText('Choose a registered camera on this floor to place on the floor plan.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /place cam-01 entrance camera on the map/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Register it on the Cameras page' })).toHaveAttribute('href', '/admin/cameras');
+    expect(screen.getByRole('link', { name: 'Register a new camera' })).toHaveAttribute('href', '/admin/cameras');
     expect(screen.queryByLabelText(/camera code/i)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /place cam-02 spare camera on the map/i }));
 
-    expect(screen.queryByRole('heading', { name: 'Add camera to map' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Place camera on map' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Place CAM-02 at 50%, 50%' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Camera placement' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save placement' })).toBeEnabled();
@@ -274,7 +275,7 @@ describe('StoreLayout', () => {
     renderPage();
     await screen.findByRole('img', { name: /uploaded floor plan/i });
 
-    await user.click(screen.getByRole('button', { name: 'Add camera' }));
+    await user.click(screen.getByRole('button', { name: 'Place camera on map' }));
 
     expect(screen.getByText('Every camera registered on this floor is already on the map.')).toBeInTheDocument();
   });

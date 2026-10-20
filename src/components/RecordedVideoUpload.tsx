@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { uploadRecordedVideo } from '../api/cameras';
+import { Dialog } from './Dialog';
 import { Button } from './ui';
 import s from './CameraRegistration.module.css';
 
@@ -33,15 +34,20 @@ export function RecordedVideoUpload({ cameraId, onCancel, onSaved, onBusy }: Pro
   };
 
   return (
-    <form className={s.form} aria-label="Upload recorded video" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-      <div className={s.heading}><div><h3>Upload video as camera source</h3><p>MP4 · maximum 200 MB. Processing starts only when you start AI preview.</p></div></div>
-      <p>This replaces the current source and resets its connection test. Existing zone mappings remain: review their ROI if the scene changes. Deactivate monitoring before replacing its source.</p>
-      <label>Video file <input type="file" accept=".mp4,video/mp4" disabled={saving} onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></label>
-      {error && <p className={s.error} role="alert">{error}</p>}
-      <div className={s.actions}>
-        <Button variant="secondary" disabled={saving} onClick={onCancel}>Cancel upload</Button>
-        <Button type="submit" disabled={saving}>{saving ? 'Uploading & validating…' : 'Save video source'}</Button>
-      </div>
-    </form>
+    <Dialog title="Upload video as camera source" busy={saving} onClose={onCancel}>
+      <form className={s.dialogForm} aria-label="Upload recorded video" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+        <p className={s.dialogIntro}>MP4 · maximum 200 MB. Processing starts only when you start AI preview.</p>
+        <p className={s.replacementNote}>This replaces the current source and resets its connection test. Existing zone mappings remain: review their ROI if the scene changes. Deactivate monitoring before replacing its source.</p>
+        <label className={s.fileField}>
+          <span>Video file</span>
+          <input type="file" accept=".mp4,video/mp4" disabled={saving} onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+        </label>
+        {error && <p className={s.error} role="alert">{error}</p>}
+        <div className={s.actions}>
+          <Button variant="secondary" disabled={saving} onClick={onCancel}>Cancel upload</Button>
+          <Button type="submit" disabled={saving}>{saving ? 'Uploading & validating…' : 'Save video source'}</Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }

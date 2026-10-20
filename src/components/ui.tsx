@@ -87,7 +87,7 @@ export function TextInput({ value, onChange, suffix, style, type = 'text', place
   );
 }
 
-export function Select<T extends string>({ value, options, onChange, chevron = 'chevron-down', chevronSize = 14, height, disabled }: {
+export function Select<T extends string>({ value, options, onChange, chevron = 'chevron-down', chevronSize = 14, height, disabled, ariaLabel }: {
   value: T;
   options: readonly { value: T; label: string }[];
   onChange: (v: T) => void;
@@ -95,10 +95,11 @@ export function Select<T extends string>({ value, options, onChange, chevron = '
   chevronSize?: number;
   height?: number;
   disabled?: boolean;
+  ariaLabel?: string;
 }) {
   return (
     <span className={cx(s.input, s.selectWrap)} style={{ height }}>
-      <select value={value} onChange={(e) => onChange(e.target.value as T)} disabled={disabled}>
+      <select value={value} onChange={(e) => onChange(e.target.value as T)} disabled={disabled} aria-label={ariaLabel}>
         {options.map((o) => (
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
