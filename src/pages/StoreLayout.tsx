@@ -17,6 +17,7 @@ import {
 } from '../api/floors';
 import { AdminLayout } from '../components/AdminLayout';
 import { CameraCoverageEditor } from '../components/CameraCoverageEditor';
+import { Dialog } from '../components/Dialog';
 import { FloorPlanSurface, type PlacementChange } from '../components/FloorPlanSurface';
 import { FloorEditor } from '../components/FloorEditor';
 import type { ZoneEditorSave } from '../components/ZoneEditorOverlay';
@@ -59,6 +60,8 @@ export default function StoreLayout() {
   const [actionMessage, setActionMessage] = useState('');
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const [zoneEditing, setZoneEditing] = useState(false);
   const [zoneSaving, setZoneSaving] = useState(false);
   const [coverageEditing, setCoverageEditing] = useState(false);
@@ -114,6 +117,38 @@ export default function StoreLayout() {
     })();
     return () => controller.abort();
   }, [selectedFloorId, requestedFloorId, requestedCameraId]);
+
+  useEffect(() => {
+    if (!selectedFloorId) return;
+    let disposed = false;
+    let inFlight = false;
+    let controller: AbortController | null = null;
+    const refreshCameraStatus = async () => {
+      if (document.hidden || inFlight) return;
+      inFlight = true;
+      controller = new AbortController();
+      try {
+        const records = await listCameras(selectedFloorId, controller.signal);
+        if (!disposed && !controller.signal.aborted) {
+          const healthById = new Map(records.map((record) => [record.cameraId, record]));
+          setCameras((current) => current.map((camera) => {
+            const refreshed = healthById.get(camera.cameraId);
+            return refreshed ? { ...camera, healthStatus: refreshed.healthStatus, lastSeenAt: refreshed.lastSeenAt } : camera;
+          }));
+        }
+      } catch {
+        // Preserve the last known floor state until the next refresh succeeds.
+      } finally {
+        inFlight = false;
+      }
+    };
+    const timer = window.setInterval(() => void refreshCameraStatus(), 15000);
+    return () => {
+      disposed = true;
+      controller?.abort();
+      window.clearInterval(timer);
+    };
+  }, [selectedFloorId]);
 
   const selectedFloor = floors.find((floor) => floor.floorId === selectedFloorId) ?? null;
 
@@ -241,6 +276,45 @@ export default function StoreLayout() {
     setCoverageEditing(false);
     setActionError('');
     setActionMessage(`${camera.code} is in the centre of the map. Drag it into position, then save its placement.`);
+  };
+
+  const removePlacement = async () => {
+    if (!selectedCamera) return;
+    if (!selectedCamera.installedAt || !selectedCamera.warrantyExpiresAt) {
+      setActionError('This camera is missing installation or warranty metadata and cannot be updated safely.');
+      setRemoveConfirmOpen(false);
+      return;
+    }
+    setRemoving(true);
+    setActionError('');
+    setActionMessage('');
+    try {
+      const saved = await updateCamera(selectedCamera.cameraId, {
+        code: selectedCamera.code,
+        name: selectedCamera.name,
+        manufacturer: selectedCamera.manufacturer,
+        model: selectedCamera.model,
+        serialNumber: selectedCamera.serialNumber,
+        installedAt: selectedCamera.installedAt,
+        warrantyExpiresAt: selectedCamera.warrantyExpiresAt,
+        mapX: null,
+        mapY: null,
+        mapRotationDeg: null,
+        status: selectedCamera.status,
+      });
+      setCameras((all) => all.map((camera) => camera.cameraId === saved.cameraId ? saved : camera));
+      setDrafts((current) => {
+        const next = { ...current };
+        delete next[saved.cameraId];
+        return next;
+      });
+      setRemoveConfirmOpen(false);
+      setActionMessage(`${saved.code} was removed from the map.`);
+    } catch (reason) {
+      setActionError(messageOf(reason, 'Could not remove the camera from the map.'));
+    } finally {
+      setRemoving(false);
+    }
   };
 
   const saveZone = async (draft: ZoneEditorSave) => {
@@ -493,7 +567,19 @@ export default function StoreLayout() {
           })}>Reset</Button>
           <Button disabled={!selectedDraft || saving} onClick={() => void savePlacement()}>{saving ? 'Saving…' : 'Save placement'}</Button>
         </div>
+        {isPlaced(selectedCamera) && (
+          <Button variant="dangerGhost" block disabled={saving || removing} onClick={() => setRemoveConfirmOpen(true)}>
+            Remove from map
+          </Button>
+        )}
       </Card>}
+      {selectedCamera && removeConfirmOpen && <Dialog title="Remove camera from map?" busy={removing} onClose={() => setRemoveConfirmOpen(false)}>
+        <p className={s.placementHelp}><strong>{selectedCamera.code}</strong> will return to the “Not on map” list. Its camera record, connection settings and coverage configuration will be kept.</p>
+        <div className={s.actions}>
+          <Button variant="secondary" data-autofocus disabled={removing} onClick={() => setRemoveConfirmOpen(false)}>Cancel</Button>
+          <Button variant="dangerGhost" disabled={removing} onClick={() => void removePlacement()}>{removing ? 'Removing…' : 'Remove from map'}</Button>
+        </div>
+      </Dialog>}
     </AdminLayout>
   );
 }

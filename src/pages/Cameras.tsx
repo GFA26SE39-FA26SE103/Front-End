@@ -121,6 +121,37 @@ export default function Cameras() {
     return () => controller.abort();
   }, [requestedCameraId]);
 
+  useEffect(() => {
+    if (floors.length === 0) return;
+    let disposed = false;
+    let inFlight = false;
+    let controller: AbortController | null = null;
+    const refreshHealth = async () => {
+      if (document.hidden || inFlight) return;
+      inFlight = true;
+      controller = new AbortController();
+      try {
+        const groups = await Promise.all(floors.map((floor) => listCameras(floor.id, controller!.signal)));
+        if (disposed || controller.signal.aborted) return;
+        const records = new Map(groups.flat().map((record) => [record.cameraId, record]));
+        setCameras((current) => current.map((item) => {
+          const record = records.get(item.id);
+          return record ? updateView(item, { ...item.record, healthStatus: record.healthStatus, lastSeenAt: record.lastSeenAt }) : item;
+        }));
+      } catch {
+        // Keep the last known status. The next poll or a manual reload can recover.
+      } finally {
+        inFlight = false;
+      }
+    };
+    const timer = window.setInterval(() => void refreshHealth(), 15000);
+    return () => {
+      disposed = true;
+      controller?.abort();
+      window.clearInterval(timer);
+    };
+  }, [floors]);
+
   const visible = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return cameras.filter((camera) =>

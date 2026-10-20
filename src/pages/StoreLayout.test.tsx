@@ -330,6 +330,34 @@ describe('StoreLayout', () => {
     expect(screen.getAllByText('Unsaved').length).toBeGreaterThan(0);
   });
 
+  it('removes a saved camera placement without deleting the camera', async () => {
+    vi.mocked(updateCamera).mockResolvedValueOnce({ ...camera, mapX: null, mapY: null, mapRotationDeg: null });
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole('button', { name: /place cam-01/i });
+    await user.click(screen.getByRole('button', { name: 'CAM-01 Entrance camera' }));
+
+    await user.click(screen.getByRole('button', { name: 'Remove from map' }));
+    const dialog = screen.getByRole('dialog', { name: 'Remove camera from map?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Remove from map' }));
+
+    await waitFor(() => expect(updateCamera).toHaveBeenCalledWith('camera-1', {
+      code: camera.code,
+      name: camera.name,
+      manufacturer: camera.manufacturer,
+      model: camera.model,
+      serialNumber: camera.serialNumber,
+      installedAt: camera.installedAt,
+      warrantyExpiresAt: camera.warrantyExpiresAt,
+      mapX: null,
+      mapY: null,
+      mapRotationDeg: null,
+      status: camera.status,
+    }));
+    expect(await screen.findByText('CAM-01 was removed from the map.')).toBeInTheDocument();
+    expect(screen.getByText('Not on map')).toBeInTheDocument();
+  });
+
   it('opens the zone overlay and saves a dragged rectangle', async () => {
     const user = userEvent.setup();
     renderPage();
