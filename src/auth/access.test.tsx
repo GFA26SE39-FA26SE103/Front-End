@@ -37,7 +37,7 @@ describe('role routing and authenticated access', () => {
   it.each([
     ['ADMIN', '/admin/dashboard', 'Dashboard'],
     ['OPERATOR', '/operator/floor-map', 'Floor map screen'],
-    ['MANAGER', '/manager/dashboard', 'Manager workspace'],
+    ['MANAGER', '/manager/schedule', 'Schedule'],
     ['STAFF', '/staff/dashboard', 'Staff workspace'],
   ])('sends %s login to its own workspace', async (role, path, heading) => {
     const user = userEvent.setup();

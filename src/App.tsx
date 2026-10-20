@@ -14,6 +14,10 @@ import Login from './pages/auth/Login';
 import { ForgotPassword, PasswordUpdated, ResetLinkExpired, ResetLinkSent, SetNewPassword } from './pages/auth/Recovery';
 import { ProtectedRoute } from './auth/ProtectedRoute';
 import RoleWorkspace, { RoleRedirect } from './pages/RoleWorkspace';
+import Leave from './pages/manager/Leave';
+import Schedule from './pages/manager/Schedule';
+import ShiftTemplates from './pages/manager/ShiftTemplates';
+import { SwapRequestDetail, SwapRequests } from './pages/manager/SwapRequests';
 
 export default function App() {
   return (
@@ -43,7 +47,12 @@ export default function App() {
         <Route path="/operator/cameras/:cameraId" element={<OperatorCameraLive />} />
       </Route>
       <Route element={<ProtectedRoute allowedRoles={['MANAGER']} />}>
-        <Route path="/manager/dashboard" element={<RoleWorkspace />} />
+        <Route path="/manager/dashboard" element={<Navigate to="/manager/schedule" replace />} />
+        <Route path="/manager/schedule" element={<Schedule />} />
+        <Route path="/manager/swaps" element={<SwapRequests />} />
+        <Route path="/manager/swaps/:swapRequestId" element={<SwapRequestDetail />} />
+        <Route path="/manager/leave" element={<Leave />} />
+        <Route path="/manager/shifts" element={<ShiftTemplates />} />
       </Route>
       <Route element={<ProtectedRoute allowedRoles={['STAFF']} />}>
         <Route path="/staff/dashboard" element={<RoleWorkspace />} />

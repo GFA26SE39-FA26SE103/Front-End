@@ -12,7 +12,7 @@ export function roleHome(role: string): string {
   switch (role) {
     case 'ADMIN': return '/admin/dashboard';
     case 'OPERATOR': return '/operator/floor-map';
-    case 'MANAGER': return '/manager/dashboard';
+    case 'MANAGER': return '/manager/schedule';
     case 'STAFF': return '/staff/dashboard';
     default: return '/access-denied';
   }
