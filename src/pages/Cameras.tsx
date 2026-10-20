@@ -1,20 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { icon as iconUrl } from '../assets/icons';
 import {
   enableCameraConnection,
   cameraUpdateRequest,
+  getCameraConnection,
   listCameraMappings,
   listCameras,
   listFloors,
   listSupermarkets,
   listZones,
+  stopAiPreview,
   testCameraConnection,
   updateCamera,
   type CameraRecord,
   type FloorRecord,
   type ZoneRecord,
 } from '../api/cameras';
+import { ApiError } from '../api/client';
 import { AdminLayout } from '../components/AdminLayout';
 import { AnnotatedPreview } from '../components/AnnotatedPreview';
 import { CameraLivePreview } from '../components/CameraLivePreview';
@@ -24,8 +26,7 @@ import { CameraConnectionConfiguration } from '../components/CameraConnectionCon
 import { Dialog } from '../components/Dialog';
 import { RecordedVideoUpload } from '../components/RecordedVideoUpload';
 import { Icon } from '../components/Icon';
-import { Button, Card, CardHeader, Chip, SearchBox, Select } from '../components/ui';
-import { cameraPlacements, zoneRects } from '../data/floorPlan';
+import { Button, Card, CardHeader, Chip, SearchBox, Segmented, Select } from '../components/ui';
 import { statusChip } from './cameraStatus';
 import s from './Cameras.module.css';
 
@@ -48,10 +49,18 @@ type CameraView = {
   serial: string;
   lastSeen: string;
 };
-type TestState = { cameraId: string; state: 'running' | 'ok' | 'fail'; message?: string };
-type PreviewMode = 'off' | 'live' | 'ai';
-
-const mini = (x: number, y: number) => ({ x: 7 + ((x - 14) * 96) / 508, y: 7 + ((y - 14) * 96) / 636 });
+type ViewMode = 'live' | 'ai';
+type PreviewState = 'stopped' | 'connecting' | 'running' | 'error';
+type ConnectionState = 'not-configured' | 'checking' | 'ready' | 'failed' | 'inactive';
+type ConnectionView = {
+  cameraId: string;
+  state: ConnectionState;
+  protocol?: string;
+  lastChecked?: string | null;
+  errorCode?: string;
+  message?: string;
+  actionableError?: boolean;
+};
 
 export default function Cameras() {
   const [params] = useSearchParams();
@@ -62,12 +71,12 @@ export default function Cameras() {
   const [floorFilter, setFloorFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<'all' | CameraStatus>('all');
   const [selected, setSelected] = useState<string | null>(null);
-  const [test, setTest] = useState<TestState | null>(null);
-  const [previewMode, setPreviewMode] = useState<PreviewMode>('off');
+  const [viewMode, setViewMode] = useState<ViewMode>('live');
+  const [previewState, setPreviewState] = useState<PreviewState>('stopped');
+  const [connection, setConnection] = useState<ConnectionView | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [selectionError, setSelectionError] = useState('');
-  const [streamLabels, setStreamLabels] = useState<Record<string, string>>({});
   const [registrationOpen, setRegistrationOpen] = useState(false);
   const [connectionEditorOpen, setConnectionEditorOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -76,6 +85,7 @@ export default function Cameras() {
   const [lifecycleConfirmOpen, setLifecycleConfirmOpen] = useState(false);
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [lifecycleError, setLifecycleError] = useState('');
+  const [moreActionsOpen, setMoreActionsOpen] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -115,6 +125,47 @@ export default function Cameras() {
   }, [cameras, floorFilter, query, statusFilter]);
 
   const camera = cameras.find((item) => item.id === selected);
+  const selectedCameraId = camera?.id;
+  const selectedLifecycleStatus = camera?.lifecycleStatus;
+  useEffect(() => {
+    if (!selectedCameraId || selectedLifecycleStatus !== 'ACTIVE') return;
+
+    const controller = new AbortController();
+    void getCameraConnection(selectedCameraId, controller.signal)
+      .then((current) => {
+        if (controller.signal.aborted) return;
+        setConnection({
+          cameraId: selectedCameraId,
+          state: current.isEnabled && current.lastTestResult === 'SUCCESS'
+            ? 'ready'
+            : current.lastTestResult && current.lastTestResult !== 'SUCCESS'
+              ? 'failed'
+              : 'not-configured',
+          protocol: current.protocol,
+          lastChecked: current.lastTestedAt,
+          errorCode: current.lastTestResult && current.lastTestResult !== 'SUCCESS'
+            ? current.lastTestMessage ?? current.lastTestResult
+            : undefined,
+          message: current.lastTestResult && current.lastTestResult !== 'SUCCESS'
+            ? 'The last connection test failed.'
+            : undefined,
+        });
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        setConnection(error instanceof ApiError && error.status === 404
+          ? { cameraId: selectedCameraId, state: 'not-configured' }
+          : {
+              cameraId: selectedCameraId,
+              state: 'failed',
+              errorCode: error instanceof ApiError ? error.code : 'CONNECTION_STATUS_UNAVAILABLE',
+              message: error instanceof Error ? error.message : 'Could not read the camera connection.',
+              actionableError: false,
+            });
+      });
+    return () => controller.abort();
+  }, [selectedCameraId, selectedLifecycleStatus]);
+
   const counts = {
     online: cameras.filter((item) => item.status === 'Online').length,
     degraded: cameras.filter((item) => item.status === 'Degraded').length,
@@ -125,12 +176,13 @@ export default function Cameras() {
     if (uploadBusy) return;
     setSelectionError('');
     setUploadOpen(false);
-    setPreviewMode('off');
+    setPreviewState('stopped');
+    setViewMode('live');
     setConnectionEditorOpen(false);
     setEditorOpen(false);
     setLifecycleConfirmOpen(false);
+    setMoreActionsOpen(false);
     setSelected(cameraId);
-    setTest(null);
   };
 
   const registered = (record: CameraRecord, recorded = false) => {
@@ -153,12 +205,12 @@ export default function Cameras() {
       lastSeen: formatDate(record.lastSeenAt),
     };
     setCameras((all) => [...all.filter((item) => item.id !== view.id), view]);
-    setPreviewMode('off');
+    setPreviewState('stopped');
+    setViewMode('live');
     setConnectionEditorOpen(false);
-    setTest(null);
+    setConnection({ cameraId: view.id, state: recorded ? 'not-configured' : 'checking' });
     setSelected(view.id);
     setFloorFilter(view.floorId);
-    setStreamLabels((all) => ({ ...all, [view.id]: recorded ? 'No source · upload video next' : 'HTTP · configured in backend' }));
     setUploadOpen(recorded);
     setRegistrationOpen(false);
   };
@@ -171,17 +223,14 @@ export default function Cameras() {
   };
 
   const changeLifecycle = async (target: CameraView, status: 'ACTIVE' | 'INACTIVE') => {
-    setLifecycleBusy(true); setLifecycleError(''); setPreviewMode('off');
+    setLifecycleBusy(true); setLifecycleError(''); setPreviewState('stopped');
     try {
       const record = await updateCamera(target.id, cameraUpdateRequest(target.record, status));
       saved(record);
-      setTest(null);
+      setConnection({ cameraId: target.id, state: status === 'INACTIVE' ? 'inactive' : 'checking' });
       setConnectionEditorOpen(false);
       setUploadOpen(false);
       setLifecycleConfirmOpen(false);
-      setStreamLabels((all) => ({ ...all, [target.id]: status === 'INACTIVE'
-        ? 'Disabled · source configuration retained'
-        : 'Source retained · test & enable next' }));
     } catch (error) {
       setLifecycleError(error instanceof Error ? error.message : `Could not ${status === 'ACTIVE' ? 'reactivate' : 'deactivate'} the camera.`);
     } finally {
@@ -189,21 +238,60 @@ export default function Cameras() {
     }
   };
 
-  const runTest = async (target: CameraView) => {
-    setPreviewMode('off');
-    setTest({ cameraId: target.id, state: 'running' });
+  const prepareConnection = async (target: CameraView) => {
+    setConnection({ cameraId: target.id, state: 'checking' });
     try {
       const tested = await testCameraConnection(target.id);
       if (tested.lastTestResult !== 'SUCCESS') {
-        setTest({ cameraId: target.id, state: 'fail', message: tested.lastTestMessage ?? 'No frame received.' });
-        return;
+        setConnection({
+          cameraId: target.id,
+          state: 'failed',
+          protocol: tested.protocol,
+          lastChecked: tested.lastTestedAt,
+          errorCode: tested.lastTestMessage ?? tested.lastTestResult ?? 'CONNECTION_TEST_FAILED',
+          message: 'The camera did not return a usable frame.',
+          actionableError: true,
+        });
+        return false;
       }
       const enabled = tested.isEnabled ? tested : await enableCameraConnection(target.id);
-      setStreamLabels((all) => ({ ...all, [target.id]: `${enabled.protocol} · configured in backend` }));
-      setTest({ cameraId: target.id, state: 'ok', message: tested.lastTestMessage ?? 'FRAME_RECEIVED' });
+      setConnection({ cameraId: target.id, state: 'ready', protocol: enabled.protocol, lastChecked: tested.lastTestedAt });
+      return true;
     } catch (error) {
-      setTest({ cameraId: target.id, state: 'fail', message: error instanceof Error ? error.message : 'Stream test failed.' });
+      setConnection({
+        cameraId: target.id,
+        state: 'failed',
+        errorCode: error instanceof ApiError ? error.code : 'CONNECTION_TEST_FAILED',
+        message: error instanceof Error ? error.message : 'Could not connect to the camera.',
+        actionableError: true,
+      });
+      return false;
     }
+  };
+
+  const startPreview = async (target: CameraView) => {
+    if (target.lifecycleStatus !== 'ACTIVE') return;
+    setPreviewState('connecting');
+    const ready = connection?.cameraId === target.id && connection.state === 'ready'
+      ? true
+      : await prepareConnection(target);
+    setPreviewState(ready ? 'running' : 'error');
+  };
+
+  const changeViewMode = async (next: ViewMode) => {
+    if (!camera || next === viewMode) return;
+    const restart = previewState === 'running';
+    setPreviewState('stopped');
+    setViewMode(next);
+    if (!restart) return;
+    try {
+      if (viewMode === 'ai') await stopAiPreview(camera.id);
+      else await new Promise((resolve) => window.setTimeout(resolve, 0));
+    } catch (error) {
+      setLifecycleError(error instanceof Error ? error.message : 'Could not stop the previous preview.');
+      return;
+    }
+    setPreviewState('running');
   };
 
   return (
@@ -259,17 +347,10 @@ export default function Cameras() {
         <Card className={s.detail}>
           <div className={s.detailHeader}>
             <div style={{ flex: 1 }}>
-              <div className={s.detailTitle}>{camera.code}{statusChip(camera.status)}</div>
+              <div className={s.detailTitle}>{camera.code}</div>
               <p className={s.detailSub}>{camera.floorLabel} · {camera.name}</p>
             </div>
-            <Chip tone={previewMode !== 'off' ? 'success' : 'neutral'}>{previewMode === 'live' ? 'DIRECT LIVE' : previewMode === 'ai' ? 'AI PREVIEW' : 'PREVIEW STOPPED'}</Chip>
-          </div>
-
-          <div className={s.manageActions}>
-            <Button variant="secondary" disabled={uploadBusy || lifecycleBusy} onClick={() => { setLifecycleError(''); setEditorOpen(true); }}>Edit camera</Button>
-            {camera.lifecycleStatus === 'ACTIVE'
-              ? <Button variant="dangerGhost" disabled={uploadBusy || lifecycleBusy} onClick={() => { setLifecycleError(''); setLifecycleConfirmOpen(true); }}>Deactivate camera</Button>
-              : <Button variant="secondary" disabled={uploadBusy || lifecycleBusy} onClick={() => void changeLifecycle(camera, 'ACTIVE')}>{lifecycleBusy ? 'Reactivating…' : 'Reactivate camera'}</Button>}
+            <Chip tone={connectionBadge(camera, connection, previewState, viewMode).tone}>{connectionBadge(camera, connection, previewState, viewMode).label}</Chip>
           </div>
 
           {lifecycleError && <p className={s.errorBanner} role="alert">{lifecycleError}</p>}
@@ -277,56 +358,78 @@ export default function Cameras() {
 
           <div className={s.media}>
             <div className={s.trackedPreview}>
-              {previewMode === 'ai'
-                ? <AnnotatedPreview key={`${camera.id}-ai`} cameraId={camera.id} enabled />
-                : <CameraLivePreview key={`${camera.id}-${previewMode}`} cameraId={camera.id} enabled={previewMode === 'live'} />}
+              {viewMode === 'ai'
+                ? <AnnotatedPreview key={`${camera.id}-ai`} cameraId={camera.id} enabled={previewState === 'running'} />
+                : <CameraLivePreview key={`${camera.id}-live`} cameraId={camera.id} enabled={previewState === 'running'} />}
             </div>
-            <Placement camera={camera} />
           </div>
 
-          <dl className={s.streamInfo}>
-            <KV k="Model" v={camera.model} />
-            <KV k="Serial no." v={camera.serial} />
-            <KV k="Lifecycle" v={camera.lifecycleStatus} />
-            <KV k="Stream" v={streamLabels[camera.id] ?? 'Stored securely in backend'} />
-            <KV k="Preview" v="Direct camera frames or YOLO + ByteTrack" />
-          </dl>
+          <div className={s.previewControls}>
+            <span className={s.controlLabel}>View mode</span>
+            <Segmented value={viewMode} onChange={(mode) => void changeViewMode(mode)} options={[
+              { value: 'live', label: 'Live feed' },
+              { value: 'ai', label: 'AI detection' },
+            ]} />
+            <Button
+              className={s.previewButton}
+              size="lg"
+              disabled={uploadOpen || uploadBusy || previewState === 'connecting' || camera.lifecycleStatus !== 'ACTIVE'}
+              onClick={() => previewState === 'running' ? setPreviewState('stopped') : void startPreview(camera)}
+            >
+              {previewState === 'connecting' ? 'Connecting…' : previewState === 'running' ? 'Stop preview' : 'Start preview'}
+            </Button>
+          </div>
 
-          {test?.cameraId === camera.id && (
-            <p className={s.testResult} style={{ color: test.state === 'fail' ? 'var(--color-danger)' : test.state === 'ok' ? 'var(--color-success)' : 'var(--color-text-muted)' }} role="status">
-              {test.state === 'running' ? 'Testing stream…' : test.state === 'ok' ? `Stream ready · ${test.message}` : `Stream failed · ${test.message}`}
-            </p>
+          {connection?.cameraId === camera.id && connection.state === 'failed' && connection.actionableError && (
+            <div className={s.connectionError} role="alert">
+              <strong>Could not connect to camera</strong>
+              <span>{connection.errorCode ?? 'CONNECTION_TEST_FAILED'}</span>
+              {connection.message && <p>{connection.message}</p>}
+              <div className={s.errorActions}>
+                <Button variant="secondary" onClick={() => void startPreview(camera)}>Retry</Button>
+                <Button variant="secondary" onClick={() => { setUploadOpen(false); setConnectionEditorOpen(true); }}>Edit connection</Button>
+              </div>
+            </div>
           )}
+
+          <dl className={s.streamInfo}>
+            <KV k="Camera source" v={connection?.cameraId === camera.id ? connection.protocol ?? '—' : '—'} />
+            <KV k="Connection status" v={connectionDetail(camera, connection)} />
+            <KV k="Last checked" v={connection?.cameraId === camera.id ? formatDateTime(connection.lastChecked) : '—'} />
+          </dl>
 
           {connectionEditorOpen && (
             <CameraConnectionConfiguration
               cameraId={camera.id}
               onCancel={() => setConnectionEditorOpen(false)}
-              onSaved={() => {
-                setPreviewMode('off');
-                setTest(null);
-                setStreamLabels((all) => ({ ...all, [camera.id]: 'HTTP · configured in backend' }));
+              onSaved={async () => {
+                setPreviewState('stopped');
+                await prepareConnection(camera);
                 setConnectionEditorOpen(false);
               }}
             />
           )}
 
           {uploadOpen && <RecordedVideoUpload key={camera.id} cameraId={camera.id} onBusy={setUploadBusy} onCancel={() => setUploadOpen(false)} onSaved={() => {
-            setPreviewMode('off');
-            setTest(null);
+            setPreviewState('stopped');
+            setConnection({ cameraId: camera.id, state: 'not-configured', protocol: 'FILE' });
             setCameras((all) => all.map((item) => item.id === camera.id ? { ...item, status: 'Degraded' } : item));
-            setStreamLabels((all) => ({ ...all, [camera.id]: 'RECORDED · MP4 · test & enable next' }));
             setUploadOpen(false);
           }} />}
 
-          <div className={s.actions}>
-            <Button variant="secondary" size="lg" disabled={uploadBusy || camera.lifecycleStatus !== 'ACTIVE'} onClick={() => { setUploadOpen(false); setPreviewMode('off'); setConnectionEditorOpen(true); }}>Configure connection</Button>
-            <Button variant="secondary" size="lg" disabled={uploadBusy || test?.state === 'running' || camera.lifecycleStatus !== 'ACTIVE'} onClick={() => { setPreviewMode('off'); setConnectionEditorOpen(false); setUploadOpen(true); }}>Upload video</Button>
-            <Button className={s.testConnection} variant="secondary" size="lg" icon="refresh" onClick={() => void runTest(camera)} disabled={uploadOpen || test?.state === 'running' || camera.lifecycleStatus !== 'ACTIVE'}>Test &amp; enable</Button>
-            <Button variant="secondary" size="lg" disabled={uploadOpen || test?.state === 'running' || camera.lifecycleStatus !== 'ACTIVE'} onClick={() => setPreviewMode((mode) => mode === 'live' ? 'off' : 'live')}>{previewMode === 'live' ? 'Stop live view' : 'Start live view'}</Button>
-            <Button size="lg" disabled={uploadOpen || test?.state === 'running' || camera.lifecycleStatus !== 'ACTIVE'} onClick={() => setPreviewMode((mode) => mode === 'ai' ? 'off' : 'ai')}>{previewMode === 'ai' ? 'Stop AI preview' : 'Start AI preview'}</Button>
+          <div className={s.secondaryActions}>
+            <Button variant="secondary" size="lg" disabled={uploadBusy || camera.lifecycleStatus !== 'ACTIVE'} onClick={() => { setUploadOpen(false); setPreviewState('stopped'); setConnectionEditorOpen(true); }}>Connection settings</Button>
+            <div className={s.moreActions}>
+              <Button variant="secondary" size="lg" aria-haspopup="menu" aria-expanded={moreActionsOpen} onClick={() => setMoreActionsOpen((open) => !open)}>More actions ⋯</Button>
+              {moreActionsOpen && <div className={s.actionsMenu} role="menu" aria-label="Camera actions">
+                <Button role="menuitem" variant="secondary" disabled={uploadBusy || camera.lifecycleStatus !== 'ACTIVE'} onClick={() => { setMoreActionsOpen(false); setPreviewState('stopped'); setConnectionEditorOpen(false); setUploadOpen(true); }}>Upload video</Button>
+                <Button role="menuitem" variant="secondary" disabled={uploadBusy || lifecycleBusy} onClick={() => { setMoreActionsOpen(false); setLifecycleError(''); setEditorOpen(true); }}>Edit camera</Button>
+                {camera.lifecycleStatus === 'ACTIVE'
+                  ? <Button role="menuitem" variant="dangerGhost" disabled={uploadBusy || lifecycleBusy} onClick={() => { setMoreActionsOpen(false); setLifecycleError(''); setLifecycleConfirmOpen(true); }}>Deactivate camera</Button>
+                  : <Button role="menuitem" variant="secondary" disabled={uploadBusy || lifecycleBusy} onClick={() => { setMoreActionsOpen(false); void changeLifecycle(camera, 'ACTIVE'); }}>{lifecycleBusy ? 'Reactivating…' : 'Reactivate camera'}</Button>}
+              </div>}
+            </div>
           </div>
-          <p className={s.previewNote}>Live view shows direct camera frames. AI preview sends the source through the remote YOLO + ByteTrack service. Starting one preview stops the other.</p>
           {camera.zones.length ? <div className={s.actions}>{camera.zones.map(zone => <a key={zone.zoneId} href={`/admin/ai-config?zoneId=${encodeURIComponent(zone.zoneId)}`}>Configure monitoring: {zone.name}</a>)}</div> : <p className={s.previewNote}>Map this camera and draw its zone ROI in <a href="/admin/store-layout">Store layout</a> before configuring monitoring.</p>}
         </Card>
       )}
@@ -400,27 +503,31 @@ function formatDate(value: string | null): string {
   return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat('en-GB').format(date);
 }
 
-function KV({ k, v }: { k: string; v: string }) {
-  return <div className={s.kv}><dt>{k}</dt><dd>{v}</dd></div>;
+function formatDateTime(value?: string | null): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? '—'
+    : new Intl.DateTimeFormat('en-GB', { dateStyle: 'short', timeStyle: 'short' }).format(date);
 }
 
-function Placement({ camera }: { camera: CameraView }) {
-  const placement = cameraPlacements[camera.code];
-  return (
-    <div className={s.placement} aria-label="Position on floor plan">
-      <span className={s.planBase} />
-      {camera.zones.map((zone) => {
-        const rect = zoneRects[zone.code];
-        if (!rect) return null;
-        const a = mini(rect.x, rect.y);
-        const b = mini(rect.x + rect.w, rect.y + rect.h);
-        return <span key={zone.code} style={{ position: 'absolute', left: a.x, top: a.y, width: b.x - a.x, height: b.y - a.y, background: 'color-mix(in srgb, var(--color-primary) 18%, transparent)', border: '1.2px solid var(--color-primary)' }} />;
-      })}
-      {placement && (() => {
-        const marker = mini(placement.marker.x + 11, placement.marker.y + 11);
-        return <img src={iconUrl('placement-dot')} width={10} height={10} alt="" style={{ position: 'absolute', left: Math.min(marker.x - 5, 93), top: Math.min(marker.y - 5, 93) }} />;
-      })()}
-      <span className={s.planLabel}>Floor plan</span>
-    </div>
-  );
+function connectionBadge(camera: CameraView, connection: ConnectionView | null, preview: PreviewState, mode: ViewMode) {
+  if (camera.lifecycleStatus !== 'ACTIVE') return { label: 'Inactive', tone: 'neutral' as const };
+  if (preview === 'running') return { label: mode === 'live' ? 'LIVE FEED' : 'AI DETECTION', tone: 'success' as const };
+  if (preview === 'connecting' || connection?.cameraId !== camera.id || connection.state === 'checking') return { label: 'Connecting…', tone: 'warning' as const };
+  if (connection.state === 'ready') return { label: 'Connected', tone: 'success' as const };
+  if (connection.state === 'failed') return { label: 'Connection failed', tone: 'danger' as const };
+  return { label: 'Not configured', tone: 'neutral' as const };
+}
+
+function connectionDetail(camera: CameraView, connection: ConnectionView | null): string {
+  if (camera.lifecycleStatus !== 'ACTIVE') return 'Inactive';
+  if (connection?.cameraId !== camera.id || connection.state === 'checking') return 'Checking…';
+  if (connection.state === 'ready') return 'Ready';
+  if (connection.state === 'failed') return 'Failed';
+  return 'Needs setup';
+}
+
+function KV({ k, v }: { k: string; v: string }) {
+  return <div className={s.kv}><dt>{k}</dt><dd>{v}</dd></div>;
 }
