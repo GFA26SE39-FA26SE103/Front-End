@@ -246,7 +246,7 @@ describe('Cameras registration', () => {
     await user.type(screen.getByLabelText('Stream URL'), 'http://192.168.1.25:8080/video');
     await user.click(screen.getByRole('button', { name: 'Save connection' }));
 
-    expect(await screen.findByText('Connected')).toBeInTheDocument();
+    expect(await screen.findByText('Test passed')).toBeInTheDocument();
     expect(screen.queryByRole('form', { name: 'Configure camera connection' })).not.toBeInTheDocument();
   });
 
@@ -313,7 +313,7 @@ describe('Cameras registration', () => {
 
     await screen.findByText(/This camera is inactive/);
     expect(patches[1]).toMatchObject({ name: 'Checkout camera', status: 'INACTIVE', mapX: 0.25, mapY: 0.75, mapRotationDeg: 90 });
-    expect(screen.getAllByText('Inactive')).toHaveLength(2);
+    expect(screen.getAllByText('Inactive')).toHaveLength(4);
     expect(screen.getByRole('button', { name: 'Start preview' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Test & enable' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'More actions ⋯' }));
@@ -391,6 +391,42 @@ describe('Cameras registration', () => {
     expect(screen.queryByRole('button', { name: 'Stop preview' })).not.toBeInTheDocument();
   });
 
+  it('marks source readiness failed when a previously ready live view stops returning frames', async () => {
+    const otherCameraId = '30000000-0000-0000-0000-000000000066';
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      if (path === '/api/supermarkets') return json([{ supermarketId: storeId }]);
+      if (path === `/api/supermarkets/${storeId}/floors`) return json([{ floorId, floorNumber: 1, name: 'Ground floor' }]);
+      if (path === `/api/floors/${floorId}/cameras`) return json([
+        { cameraId, floorId, code: 'CAM-RUNTIME-FAIL', name: 'Runtime failure camera', manufacturer: null, model: null, serialNumber: null, installedAt: '2026-01-01T00:00:00Z', warrantyExpiresAt: '2027-01-01T00:00:00Z', status: 'ACTIVE', healthStatus: 'UNKNOWN', lastSeenAt: null },
+        { cameraId: otherCameraId, floorId, code: 'CAM-OTHER', name: 'Other camera', manufacturer: null, model: null, serialNumber: null, installedAt: '2026-01-01T00:00:00Z', warrantyExpiresAt: '2027-01-01T00:00:00Z', status: 'ACTIVE', healthStatus: 'UNKNOWN', lastSeenAt: null },
+      ]);
+      if (path === `/api/floors/${floorId}/zones` || path.endsWith('/zones')) return json([]);
+      if (path === `/api/cameras/${cameraId}/connection` && (!init?.method || init.method === 'GET')) return json({ cameraId, protocol: 'RTSP', isEnabled: true, lastTestResult: 'SUCCESS', lastTestMessage: 'FRAME_RECEIVED', lastTestedAt: '2026-10-20T09:30:00Z' });
+      if (path === `/api/cameras/${otherCameraId}/connection` && (!init?.method || init.method === 'GET')) return json({ cameraId: otherCameraId, protocol: 'RTSP', isEnabled: true, lastTestResult: 'SUCCESS', lastTestMessage: 'FRAME_RECEIVED', lastTestedAt: '2026-10-20T09:30:00Z' });
+      if (path === `/api/cameras/${cameraId}/preview`) return json({ code: 'STREAM_UNAVAILABLE' }, 503);
+      return json({ code: 'UNEXPECTED_REQUEST', path }, 500);
+    });
+    const user = userEvent.setup();
+    render(<MemoryRouter><Cameras /></MemoryRouter>);
+    await screen.findAllByText('CAM-RUNTIME-FAIL');
+    await screen.findByText('Test passed');
+
+    await user.click(screen.getByRole('button', { name: 'Start preview' }));
+
+    await waitFor(() => expect(screen.getByText('STREAM_UNAVAILABLE')).toBeInTheDocument(), { timeout: 4_000 });
+    expect(screen.getByText('Source unavailable')).toBeInTheDocument();
+    expect(screen.queryByText('LIVE FEED')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('row', { name: /CAM-OTHER/i }));
+    await screen.findByText('Other camera', { exact: false });
+    await user.click(screen.getByRole('row', { name: /CAM-RUNTIME-FAIL/i }));
+
+    expect(screen.getByText('Source unavailable')).toBeInTheDocument();
+    expect(screen.getByText('STREAM_UNAVAILABLE')).toBeInTheDocument();
+    expect(screen.queryByText('Test passed')).not.toBeInTheDocument();
+  });
+
   it('tests and enables a newly saved connection without starting preview', async () => {
     const calls: string[] = [];
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -414,7 +450,7 @@ describe('Cameras registration', () => {
     await user.type(screen.getByLabelText('Stream URL'), 'http://camera/video');
     await user.click(screen.getByRole('button', { name: 'Save connection' }));
 
-    expect(await screen.findByText('Connected')).toBeInTheDocument();
+    expect(await screen.findByText('Test passed')).toBeInTheDocument();
     expect(calls).toContain(`POST /api/cameras/${cameraId}/connection/test`);
     expect(calls).toContain(`POST /api/cameras/${cameraId}/connection/enable`);
     expect(calls).not.toContain(`GET /api/cameras/${cameraId}/preview`);

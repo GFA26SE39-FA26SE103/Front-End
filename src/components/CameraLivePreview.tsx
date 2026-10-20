@@ -3,20 +3,26 @@ import { ApiError } from '../api/client';
 import { getCameraPreview } from '../api/cameras';
 import s from './AnnotatedPreview.module.css';
 
-type LiveViewState = 'idle' | 'starting' | 'live' | 'reconnecting' | 'error' | 'unauthorized';
+export type CameraLiveViewState = 'idle' | 'starting' | 'live' | 'reconnecting' | 'error' | 'unauthorized';
 
 export type CameraLivePreviewProps = {
   cameraId: string;
   enabled: boolean;
   pollInterval?: number;
+  onStateChange?: (state: CameraLiveViewState, error?: ApiError) => void;
 };
 
 /** Polls the backend's direct camera-frame endpoint. No AI service is involved. */
-export function CameraLivePreview({ cameraId, enabled, pollInterval = 750 }: CameraLivePreviewProps) {
-  const [viewState, setViewState] = useState<LiveViewState>('idle');
+export function CameraLivePreview({ cameraId, enabled, pollInterval = 750, onStateChange }: CameraLivePreviewProps) {
+  const [viewState, setViewState] = useState<CameraLiveViewState>('idle');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const imageUrlRef = useRef<string | null>(null);
   const staleUrlsRef = useRef<string[]>([]);
+  const onStateChangeRef = useRef(onStateChange);
+
+  useEffect(() => {
+    onStateChangeRef.current = onStateChange;
+  }, [onStateChange]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -26,6 +32,11 @@ export function CameraLivePreview({ cameraId, enabled, pollInterval = 750 }: Cam
     let failures = 0;
     const controller = new AbortController();
     const staleUrls = staleUrlsRef.current;
+    const updateState = (next: CameraLiveViewState, error?: ApiError) => {
+      if (!active) return;
+      setViewState(next);
+      onStateChangeRef.current?.(next, error);
+    };
 
     const replaceImage = (blob: Blob) => {
       const next = URL.createObjectURL(blob);
@@ -33,7 +44,7 @@ export function CameraLivePreview({ cameraId, enabled, pollInterval = 750 }: Cam
       while (staleUrls.length > 4) URL.revokeObjectURL(staleUrls.shift()!);
       imageUrlRef.current = next;
       setImageUrl(next);
-      setViewState('live');
+      updateState('live');
     };
 
     const poll = async () => {
@@ -44,11 +55,11 @@ export function CameraLivePreview({ cameraId, enabled, pollInterval = 750 }: Cam
       } catch (error) {
         if (!active || controller.signal.aborted) return;
         if (error instanceof ApiError && error.status === 401) {
-          setViewState('unauthorized');
+          updateState('unauthorized', error);
           return;
         }
         failures += 1;
-        setViewState(failures >= 3 ? 'error' : 'reconnecting');
+        updateState(failures >= 3 ? 'error' : 'reconnecting', error instanceof ApiError ? error : undefined);
         if (failures < 3) timer = window.setTimeout(poll, 1200);
       }
     };
@@ -66,7 +77,7 @@ export function CameraLivePreview({ cameraId, enabled, pollInterval = 750 }: Cam
     };
   }, [cameraId, enabled, pollInterval]);
 
-  const visibleState: LiveViewState = !enabled ? 'idle' : viewState === 'idle' ? 'starting' : viewState;
+  const visibleState: CameraLiveViewState = !enabled ? 'idle' : viewState === 'idle' ? 'starting' : viewState;
   return (
     <div className={s.preview} aria-live="polite">
       {enabled && imageUrl && (
@@ -83,7 +94,7 @@ export function CameraLivePreview({ cameraId, enabled, pollInterval = 750 }: Cam
   );
 }
 
-function stateLabel(state: LiveViewState): string {
+function stateLabel(state: CameraLiveViewState): string {
   if (state === 'idle') return 'Live view is stopped';
   if (state === 'starting') return 'Connecting to camera…';
   if (state === 'reconnecting') return 'Camera frame unavailable · reconnecting…';

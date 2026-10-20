@@ -1,13 +1,16 @@
 import { Chip } from '../components/ui';
-import type { CameraStatus } from '../data/mock';
+import type { Tone } from '../components/ui';
 
-const map = {
+export type CameraDisplayStatus = 'Online' | 'Offline' | 'Not checked' | 'Inactive';
+
+const map: Record<CameraDisplayStatus, { tone: Tone; dot?: string }> = {
   Online: { tone: 'success', dot: 'dot-success' },
-  Degraded: { tone: 'warning', dot: 'dot-warning' },
   Offline: { tone: 'danger', dot: 'dot-danger' },
-} as const;
+  'Not checked': { tone: 'neutral' },
+  Inactive: { tone: 'neutral' },
+};
 
-export function statusChip(status: CameraStatus) {
+export function statusChip(status: CameraDisplayStatus) {
   const m = map[status];
   return <Chip tone={m.tone} dot={m.dot}>{status}</Chip>;
 }

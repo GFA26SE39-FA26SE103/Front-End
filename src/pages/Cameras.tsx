@@ -19,7 +19,7 @@ import {
 import { ApiError } from '../api/client';
 import { AdminLayout } from '../components/AdminLayout';
 import { AnnotatedPreview } from '../components/AnnotatedPreview';
-import { CameraLivePreview } from '../components/CameraLivePreview';
+import { CameraLivePreview, type CameraLiveViewState } from '../components/CameraLivePreview';
 import { CameraRegistration, type CameraFloorOption } from '../components/CameraRegistration';
 import { CameraEditor } from '../components/CameraEditor';
 import { CameraConnectionConfiguration } from '../components/CameraConnectionConfiguration';
@@ -27,10 +27,9 @@ import { Dialog } from '../components/Dialog';
 import { RecordedVideoUpload } from '../components/RecordedVideoUpload';
 import { Icon } from '../components/Icon';
 import { Button, Card, CardHeader, Chip, SearchBox, Segmented, Select } from '../components/ui';
-import { statusChip } from './cameraStatus';
+import { statusChip, type CameraDisplayStatus } from './cameraStatus';
 import s from './Cameras.module.css';
 
-type CameraStatus = 'Online' | 'Degraded' | 'Offline';
 type FloorOption = CameraFloorOption;
 type CameraView = {
   record: CameraRecord;
@@ -41,7 +40,7 @@ type CameraView = {
   floor: string;
   floorLabel: string;
   zones: { zoneId: string; code: string; name: string }[];
-  status: CameraStatus;
+  status: CameraDisplayStatus;
   lifecycleStatus: string;
   installed: string;
   warrantyUntil: string;
@@ -50,7 +49,7 @@ type CameraView = {
   lastSeen: string;
 };
 type ViewMode = 'live' | 'ai';
-type PreviewState = 'stopped' | 'connecting' | 'running' | 'error';
+type PreviewState = 'stopped' | 'connecting' | 'starting' | 'running' | 'error';
 type ConnectionState = 'not-configured' | 'checking' | 'ready' | 'failed' | 'inactive';
 type ConnectionView = {
   cameraId: string;
@@ -61,6 +60,11 @@ type ConnectionView = {
   message?: string;
   actionableError?: boolean;
 };
+type PreviewFailure = {
+  errorCode: string;
+  message: string;
+  actionableError: boolean;
+};
 
 export default function Cameras() {
   const [params] = useSearchParams();
@@ -69,10 +73,11 @@ export default function Cameras() {
   const [floors, setFloors] = useState<FloorOption[]>([]);
   const [query, setQuery] = useState('');
   const [floorFilter, setFloorFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | CameraStatus>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | CameraDisplayStatus>('all');
   const [selected, setSelected] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('live');
   const [previewState, setPreviewState] = useState<PreviewState>('stopped');
+  const [previewFailures, setPreviewFailures] = useState<Record<string, PreviewFailure>>({});
   const [connection, setConnection] = useState<ConnectionView | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -125,6 +130,7 @@ export default function Cameras() {
   }, [cameras, floorFilter, query, statusFilter]);
 
   const camera = cameras.find((item) => item.id === selected);
+  const previewFailure = camera ? previewFailures[camera.id] : undefined;
   const selectedCameraId = camera?.id;
   const selectedLifecycleStatus = camera?.lifecycleStatus;
   useEffect(() => {
@@ -168,15 +174,16 @@ export default function Cameras() {
 
   const counts = {
     online: cameras.filter((item) => item.status === 'Online').length,
-    degraded: cameras.filter((item) => item.status === 'Degraded').length,
     offline: cameras.filter((item) => item.status === 'Offline').length,
+    notChecked: cameras.filter((item) => item.status === 'Not checked').length,
+    inactive: cameras.filter((item) => item.status === 'Inactive').length,
   };
 
   const selectCamera = (cameraId: string) => {
     if (uploadBusy) return;
     setSelectionError('');
     setUploadOpen(false);
-    setPreviewState('stopped');
+    setPreviewState(previewFailures[cameraId] ? 'error' : 'stopped');
     setViewMode('live');
     setConnectionEditorOpen(false);
     setEditorOpen(false);
@@ -196,7 +203,7 @@ export default function Cameras() {
       floor: floor.key,
       floorLabel: floor.label,
       zones: [],
-      status: healthStatus(record.healthStatus),
+      status: displayStatus(record),
       lifecycleStatus: record.status,
       installed: formatDate(record.installedAt),
       warrantyUntil: formatDate(record.warrantyExpiresAt),
@@ -256,6 +263,7 @@ export default function Cameras() {
       }
       const enabled = tested.isEnabled ? tested : await enableCameraConnection(target.id);
       setConnection({ cameraId: target.id, state: 'ready', protocol: enabled.protocol, lastChecked: tested.lastTestedAt });
+      setPreviewFailures((current) => withoutKey(current, target.id));
       return true;
     } catch (error) {
       setConnection({
@@ -271,16 +279,17 @@ export default function Cameras() {
 
   const startPreview = async (target: CameraView) => {
     if (target.lifecycleStatus !== 'ACTIVE') return;
+    setPreviewFailures((current) => withoutKey(current, target.id));
     setPreviewState('connecting');
     const ready = connection?.cameraId === target.id && connection.state === 'ready'
       ? true
       : await prepareConnection(target);
-    setPreviewState(ready ? 'running' : 'error');
+    setPreviewState(ready ? (viewMode === 'live' ? 'starting' : 'running') : 'error');
   };
 
   const changeViewMode = async (next: ViewMode) => {
     if (!camera || next === viewMode) return;
-    const restart = previewState === 'running';
+    const restart = previewState === 'running' || previewState === 'starting';
     setPreviewState('stopped');
     setViewMode(next);
     if (!restart) return;
@@ -291,11 +300,33 @@ export default function Cameras() {
       setLifecycleError(error instanceof Error ? error.message : 'Could not stop the previous preview.');
       return;
     }
-    setPreviewState('running');
+    setPreviewState(next === 'live' ? 'starting' : 'running');
+  };
+
+  const liveViewChanged = (target: CameraView, state: CameraLiveViewState, error?: ApiError) => {
+    if (state === 'live') {
+      setPreviewFailures((current) => withoutKey(current, target.id));
+      setPreviewState('running');
+      return;
+    }
+    if (state === 'starting' || state === 'reconnecting') {
+      setPreviewState('starting');
+      return;
+    }
+    if (state !== 'error' && state !== 'unauthorized') return;
+    const failure: PreviewFailure = {
+      errorCode: state === 'unauthorized' ? 'SESSION_EXPIRED' : error?.code ?? 'LIVE_VIEW_UNAVAILABLE',
+      message: state === 'unauthorized'
+        ? 'Your session expired while opening the live view.'
+        : error?.message ?? 'The camera source stopped returning preview frames.',
+      actionableError: state !== 'unauthorized',
+    };
+    setPreviewFailures((current) => ({ ...current, [target.id]: failure }));
+    setPreviewState('error');
   };
 
   return (
-    <AdminLayout title="Cameras" subtitle={`${cameras.length} cameras · ${counts.online} online · ${counts.degraded} unknown · ${counts.offline} offline`}>
+    <AdminLayout title="Cameras" subtitle={cameraSummary(cameras.length, counts)}>
       <Card className={s.registry}>
         <CardHeader title="Camera registry" subtitle="Live records loaded from the MF-01 backend">
           <div className={s.registryFilters}>
@@ -307,8 +338,9 @@ export default function Cameras() {
               <Select ariaLabel="Filter by status" value={statusFilter} onChange={setStatusFilter} chevron="chevron-down-small" chevronSize={13} height={32} options={[
                 { value: 'all', label: 'All statuses' },
                 { value: 'Online', label: 'Online' },
-                { value: 'Degraded', label: 'Degraded' },
                 { value: 'Offline', label: 'Offline' },
+                { value: 'Not checked', label: 'Not checked' },
+                { value: 'Inactive', label: 'Inactive' },
               ]} />
             </div>
             <Button onClick={() => { setUploadOpen(false); setConnectionEditorOpen(false); setRegistrationOpen(true); }} disabled={loading || uploadBusy}>Add camera</Button>
@@ -350,7 +382,7 @@ export default function Cameras() {
               <div className={s.detailTitle}>{camera.code}</div>
               <p className={s.detailSub}>{camera.floorLabel} · {camera.name}</p>
             </div>
-            <Chip tone={connectionBadge(camera, connection, previewState, viewMode).tone}>{connectionBadge(camera, connection, previewState, viewMode).label}</Chip>
+            <Chip tone={connectionBadge(camera, connection, previewState, viewMode, Boolean(previewFailure)).tone}>{connectionBadge(camera, connection, previewState, viewMode, Boolean(previewFailure)).label}</Chip>
           </div>
 
           {lifecycleError && <p className={s.errorBanner} role="alert">{lifecycleError}</p>}
@@ -360,7 +392,12 @@ export default function Cameras() {
             <div className={s.trackedPreview}>
               {viewMode === 'ai'
                 ? <AnnotatedPreview key={`${camera.id}-ai`} cameraId={camera.id} enabled={previewState === 'running'} />
-                : <CameraLivePreview key={`${camera.id}-live`} cameraId={camera.id} enabled={previewState === 'running'} />}
+                : <CameraLivePreview
+                    key={`${camera.id}-live`}
+                    cameraId={camera.id}
+                    enabled={previewState === 'starting' || previewState === 'running'}
+                    onStateChange={(state, error) => liveViewChanged(camera, state, error)}
+                  />}
             </div>
           </div>
 
@@ -373,28 +410,41 @@ export default function Cameras() {
             <Button
               className={s.previewButton}
               size="lg"
-              disabled={uploadOpen || uploadBusy || previewState === 'connecting' || camera.lifecycleStatus !== 'ACTIVE'}
+              disabled={uploadOpen || uploadBusy || previewState === 'connecting' || previewState === 'starting' || camera.lifecycleStatus !== 'ACTIVE'}
               onClick={() => previewState === 'running' ? setPreviewState('stopped') : void startPreview(camera)}
             >
-              {previewState === 'connecting' ? 'Connecting…' : previewState === 'running' ? 'Stop preview' : 'Start preview'}
+              {previewState === 'connecting' || previewState === 'starting' ? 'Connecting…' : previewState === 'running' ? 'Stop preview' : 'Start preview'}
             </Button>
           </div>
 
-          {connection?.cameraId === camera.id && connection.state === 'failed' && connection.actionableError && (
+          {previewFailure && (
+            <div className={s.connectionError} role="alert">
+              <strong>Preview could not read the camera source</strong>
+              <span>{previewFailure.errorCode}</span>
+              <p>{previewFailure.message}</p>
+              {previewFailure.actionableError && <div className={s.errorActions}>
+                <Button variant="secondary" onClick={() => void startPreview(camera)}>Retry</Button>
+                <Button variant="secondary" onClick={() => { setUploadOpen(false); setConnectionEditorOpen(true); }}>Edit connection</Button>
+              </div>}
+            </div>
+          )}
+
+          {!previewFailure && connection?.cameraId === camera.id && connection.state === 'failed'
+            && (connection.actionableError || connection.errorCode === 'SESSION_EXPIRED') && (
             <div className={s.connectionError} role="alert">
               <strong>Could not connect to camera</strong>
               <span>{connection.errorCode ?? 'CONNECTION_TEST_FAILED'}</span>
               {connection.message && <p>{connection.message}</p>}
-              <div className={s.errorActions}>
-                <Button variant="secondary" onClick={() => void startPreview(camera)}>Retry</Button>
-                <Button variant="secondary" onClick={() => { setUploadOpen(false); setConnectionEditorOpen(true); }}>Edit connection</Button>
-              </div>
+              {connection.actionableError && <div className={s.errorActions}>
+                  <Button variant="secondary" onClick={() => void startPreview(camera)}>Retry</Button>
+                  <Button variant="secondary" onClick={() => { setUploadOpen(false); setConnectionEditorOpen(true); }}>Edit connection</Button>
+                </div>}
             </div>
           )}
 
           <dl className={s.streamInfo}>
             <KV k="Camera source" v={connection?.cameraId === camera.id ? connection.protocol ?? '—' : '—'} />
-            <KV k="Connection status" v={connectionDetail(camera, connection)} />
+            <KV k="Last source test" v={connectionDetail(camera, connection)} />
             <KV k="Last checked" v={connection?.cameraId === camera.id ? formatDateTime(connection.lastChecked) : '—'} />
           </dl>
 
@@ -413,7 +463,7 @@ export default function Cameras() {
           {uploadOpen && <RecordedVideoUpload key={camera.id} cameraId={camera.id} onBusy={setUploadBusy} onCancel={() => setUploadOpen(false)} onSaved={() => {
             setPreviewState('stopped');
             setConnection({ cameraId: camera.id, state: 'not-configured', protocol: 'FILE' });
-            setCameras((all) => all.map((item) => item.id === camera.id ? { ...item, status: 'Degraded' } : item));
+            setCameras((all) => all.map((item) => item.id === camera.id ? { ...item, status: 'Not checked' } : item));
             setUploadOpen(false);
           }} />}
 
@@ -465,7 +515,7 @@ function toView(camera: CameraRecord, floor: FloorRecord, floorOptions: FloorOpt
     floor: floorOption.key,
     floorLabel: floorOption.label,
     zones: zones.map((zone) => ({ zoneId: zone.zoneId, code: zone.code, name: zone.name })),
-    status: healthStatus(camera.healthStatus),
+    status: displayStatus(camera),
     lifecycleStatus: camera.status,
     installed: formatDate(camera.installedAt),
     warrantyUntil: formatDate(camera.warrantyExpiresAt),
@@ -481,7 +531,7 @@ function updateView(current: CameraView, camera: CameraRecord): CameraView {
     record: camera,
     code: camera.code,
     name: camera.name,
-    status: healthStatus(camera.healthStatus),
+    status: displayStatus(camera),
     lifecycleStatus: camera.status,
     installed: formatDate(camera.installedAt),
     warrantyUntil: formatDate(camera.warrantyExpiresAt),
@@ -491,10 +541,28 @@ function updateView(current: CameraView, camera: CameraRecord): CameraView {
   };
 }
 
-function healthStatus(value: string): CameraStatus {
-  if (value === 'ONLINE') return 'Online';
-  if (value === 'OFFLINE') return 'Offline';
-  return 'Degraded';
+function displayStatus(camera: CameraRecord): CameraDisplayStatus {
+  if (camera.status !== 'ACTIVE') return 'Inactive';
+  if (camera.healthStatus === 'ONLINE') return 'Online';
+  if (camera.healthStatus === 'OFFLINE') return 'Offline';
+  return 'Not checked';
+}
+
+function cameraSummary(total: number, counts: { online: number; offline: number; notChecked: number; inactive: number }): string {
+  return [
+    `${total} cameras`,
+    `${counts.online} online`,
+    `${counts.offline} offline`,
+    `${counts.notChecked} not checked`,
+    counts.inactive ? `${counts.inactive} inactive` : '',
+  ].filter(Boolean).join(' · ');
+}
+
+function withoutKey<T>(record: Record<string, T>, key: string): Record<string, T> {
+  if (!(key in record)) return record;
+  const next = { ...record };
+  delete next[key];
+  return next;
 }
 
 function formatDate(value: string | null): string {
@@ -511,21 +579,22 @@ function formatDateTime(value?: string | null): string {
     : new Intl.DateTimeFormat('en-GB', { dateStyle: 'short', timeStyle: 'short' }).format(date);
 }
 
-function connectionBadge(camera: CameraView, connection: ConnectionView | null, preview: PreviewState, mode: ViewMode) {
+function connectionBadge(camera: CameraView, connection: ConnectionView | null, preview: PreviewState, mode: ViewMode, previewFailed: boolean) {
   if (camera.lifecycleStatus !== 'ACTIVE') return { label: 'Inactive', tone: 'neutral' as const };
   if (preview === 'running') return { label: mode === 'live' ? 'LIVE FEED' : 'AI DETECTION', tone: 'success' as const };
-  if (preview === 'connecting' || connection?.cameraId !== camera.id || connection.state === 'checking') return { label: 'Connecting…', tone: 'warning' as const };
-  if (connection.state === 'ready') return { label: 'Connected', tone: 'success' as const };
-  if (connection.state === 'failed') return { label: 'Connection failed', tone: 'danger' as const };
+  if (previewFailed) return { label: 'Source unavailable', tone: 'danger' as const };
+  if (preview === 'connecting' || preview === 'starting' || connection?.cameraId !== camera.id || connection.state === 'checking') return { label: 'Connecting…', tone: 'warning' as const };
+  if (connection.state === 'ready') return { label: 'Test passed', tone: 'success' as const };
+  if (connection.state === 'failed') return { label: 'Source unavailable', tone: 'danger' as const };
   return { label: 'Not configured', tone: 'neutral' as const };
 }
 
 function connectionDetail(camera: CameraView, connection: ConnectionView | null): string {
   if (camera.lifecycleStatus !== 'ACTIVE') return 'Inactive';
   if (connection?.cameraId !== camera.id || connection.state === 'checking') return 'Checking…';
-  if (connection.state === 'ready') return 'Ready';
+  if (connection.state === 'ready') return 'Passed';
   if (connection.state === 'failed') return 'Failed';
-  return 'Needs setup';
+  return 'Not tested';
 }
 
 function KV({ k, v }: { k: string; v: string }) {
