@@ -125,6 +125,7 @@ describe('Cameras registration', () => {
 
     expect((await screen.findAllByText('CAM-PHONE')).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/Phone entrance/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start live view' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start AI preview' })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole('form', { name: 'Add camera' })).not.toBeInTheDocument());
   });
@@ -192,9 +193,7 @@ describe('Cameras registration', () => {
       if (path === `/api/supermarkets/${storeId}/floors`) return json([{ floorId, supermarketId: storeId, floorNumber: 1, name: 'Ground floor' }]);
       if (path === `/api/floors/${floorId}/cameras` && (!init?.method || init.method === 'GET')) return json([{ cameraId: oldCameraId, floorId, code: 'CAM-OLD', name: 'Old camera', manufacturer: null, model: null, serialNumber: null, installedAt: '2026-01-01T00:00:00Z', warrantyExpiresAt: '2027-01-01T00:00:00Z', status: 'ACTIVE', healthStatus: 'UNKNOWN', lastSeenAt: null }]);
       if (path === `/api/floors/${floorId}/zones` || path === `/api/cameras/${oldCameraId}/zones`) return json([]);
-      if (path === `/api/cameras/${oldCameraId}/ai-preview/start`) return json({ cameraId: oldCameraId, state: 'LIVE', startedAt: null, updatedAt: '2026-01-01T00:00:00Z', frameSequence: 0, errorCode: null });
-      if (path === `/api/cameras/${oldCameraId}/ai-preview/status`) return json({ cameraId: oldCameraId, state: 'STOPPED', startedAt: null, updatedAt: '2026-01-01T00:00:00Z', frameSequence: 0, errorCode: null });
-      if (path === `/api/cameras/${oldCameraId}/ai-preview/stop`) return json({ cameraId: oldCameraId, state: 'STOPPED', startedAt: null, updatedAt: '2026-01-01T00:00:00Z', frameSequence: 0, errorCode: null });
+      if (path === `/api/cameras/${oldCameraId}/preview`) return new Response(new Blob(['frame'], { type: 'image/jpeg' }), { headers: { 'Content-Type': 'image/jpeg' } });
       if (path === `/api/floors/${floorId}/cameras` && init?.method === 'POST') {
         const body = JSON.parse(String(init.body));
         return json({ cameraId, floorId, ...body, healthStatus: 'UNKNOWN', lastSeenAt: null }, 201);
@@ -205,16 +204,16 @@ describe('Cameras registration', () => {
     const user = userEvent.setup();
     render(<MemoryRouter><Cameras /></MemoryRouter>);
     await screen.findAllByText('CAM-OLD');
-    await user.click(screen.getByRole('button', { name: 'Start AI preview' }));
-    expect(screen.getByRole('button', { name: 'Stop AI preview' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Start live view' }));
+    expect(screen.getByRole('button', { name: 'Stop live view' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Add camera' }));
     await user.type(screen.getByLabelText('Camera code'), 'CAM-NEW');
     await user.type(screen.getByLabelText('Stream URL'), 'http://camera/video');
     await user.click(screen.getByRole('button', { name: 'Save camera' }));
 
-    expect(await screen.findByRole('button', { name: 'Start AI preview' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Stop AI preview' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Start live view' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Stop live view' })).not.toBeInTheDocument();
   });
 
   it('can configure an existing camera after a reload interrupted registration', async () => {
@@ -308,6 +307,7 @@ describe('Cameras registration', () => {
     expect(patches[1]).toMatchObject({ name: 'Checkout camera', status: 'INACTIVE', mapX: 0.25, mapY: 0.75, mapRotationDeg: 90 });
     expect(screen.getByRole('button', { name: 'Reactivate camera' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Test & enable' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Start live view' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Start AI preview' })).toBeDisabled();
   });
 });

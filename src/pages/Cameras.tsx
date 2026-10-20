@@ -17,6 +17,7 @@ import {
 } from '../api/cameras';
 import { AdminLayout } from '../components/AdminLayout';
 import { AnnotatedPreview } from '../components/AnnotatedPreview';
+import { CameraLivePreview } from '../components/CameraLivePreview';
 import { CameraRegistration, type CameraFloorOption } from '../components/CameraRegistration';
 import { CameraEditor } from '../components/CameraEditor';
 import { CameraConnectionConfiguration } from '../components/CameraConnectionConfiguration';
@@ -48,6 +49,7 @@ type CameraView = {
   lastSeen: string;
 };
 type TestState = { cameraId: string; state: 'running' | 'ok' | 'fail'; message?: string };
+type PreviewMode = 'off' | 'live' | 'ai';
 
 const mini = (x: number, y: number) => ({ x: 7 + ((x - 14) * 96) / 508, y: 7 + ((y - 14) * 96) / 636 });
 
@@ -61,7 +63,7 @@ export default function Cameras() {
   const [statusFilter, setStatusFilter] = useState<'all' | CameraStatus>('all');
   const [selected, setSelected] = useState<string | null>(null);
   const [test, setTest] = useState<TestState | null>(null);
-  const [previewEnabled, setPreviewEnabled] = useState(false);
+  const [previewMode, setPreviewMode] = useState<PreviewMode>('off');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [selectionError, setSelectionError] = useState('');
@@ -123,7 +125,7 @@ export default function Cameras() {
     if (uploadBusy) return;
     setSelectionError('');
     setUploadOpen(false);
-    setPreviewEnabled(false);
+    setPreviewMode('off');
     setConnectionEditorOpen(false);
     setEditorOpen(false);
     setLifecycleConfirmOpen(false);
@@ -151,7 +153,7 @@ export default function Cameras() {
       lastSeen: formatDate(record.lastSeenAt),
     };
     setCameras((all) => [...all.filter((item) => item.id !== view.id), view]);
-    setPreviewEnabled(false);
+    setPreviewMode('off');
     setConnectionEditorOpen(false);
     setTest(null);
     setSelected(view.id);
@@ -169,7 +171,7 @@ export default function Cameras() {
   };
 
   const changeLifecycle = async (target: CameraView, status: 'ACTIVE' | 'INACTIVE') => {
-    setLifecycleBusy(true); setLifecycleError(''); setPreviewEnabled(false);
+    setLifecycleBusy(true); setLifecycleError(''); setPreviewMode('off');
     try {
       const record = await updateCamera(target.id, cameraUpdateRequest(target.record, status));
       saved(record);
@@ -188,7 +190,7 @@ export default function Cameras() {
   };
 
   const runTest = async (target: CameraView) => {
-    setPreviewEnabled(false);
+    setPreviewMode('off');
     setTest({ cameraId: target.id, state: 'running' });
     try {
       const tested = await testCameraConnection(target.id);
@@ -260,7 +262,7 @@ export default function Cameras() {
               <div className={s.detailTitle}>{camera.code}{statusChip(camera.status)}</div>
               <p className={s.detailSub}>{camera.floorLabel} · {camera.name}</p>
             </div>
-            <Chip tone={previewEnabled ? 'success' : 'neutral'}>{previewEnabled ? 'AI PREVIEW' : 'AI STOPPED'}</Chip>
+            <Chip tone={previewMode !== 'off' ? 'success' : 'neutral'}>{previewMode === 'live' ? 'DIRECT LIVE' : previewMode === 'ai' ? 'AI PREVIEW' : 'PREVIEW STOPPED'}</Chip>
           </div>
 
           <div className={s.manageActions}>
@@ -274,7 +276,11 @@ export default function Cameras() {
           {camera.lifecycleStatus !== 'ACTIVE' && <p className={s.inactiveNote}>This camera is inactive. Its configuration and history are retained; reactivate it before testing, previewing or changing its source.</p>}
 
           <div className={s.media}>
-            <div className={s.trackedPreview}><AnnotatedPreview cameraId={camera.id} enabled={previewEnabled} /></div>
+            <div className={s.trackedPreview}>
+              {previewMode === 'ai'
+                ? <AnnotatedPreview key={`${camera.id}-ai`} cameraId={camera.id} enabled />
+                : <CameraLivePreview key={`${camera.id}-${previewMode}`} cameraId={camera.id} enabled={previewMode === 'live'} />}
+            </div>
             <Placement camera={camera} />
           </div>
 
@@ -283,7 +289,7 @@ export default function Cameras() {
             <KV k="Serial no." v={camera.serial} />
             <KV k="Lifecycle" v={camera.lifecycleStatus} />
             <KV k="Stream" v={streamLabels[camera.id] ?? 'Stored securely in backend'} />
-            <KV k="Tracking" v="YOLO person · ByteTrack camera-local ID" />
+            <KV k="Preview" v="Direct camera frames or YOLO + ByteTrack" />
           </dl>
 
           {test?.cameraId === camera.id && (
@@ -297,7 +303,7 @@ export default function Cameras() {
               cameraId={camera.id}
               onCancel={() => setConnectionEditorOpen(false)}
               onSaved={() => {
-                setPreviewEnabled(false);
+                setPreviewMode('off');
                 setTest(null);
                 setStreamLabels((all) => ({ ...all, [camera.id]: 'HTTP · configured in backend' }));
                 setConnectionEditorOpen(false);
@@ -306,7 +312,7 @@ export default function Cameras() {
           )}
 
           {uploadOpen && <RecordedVideoUpload key={camera.id} cameraId={camera.id} onBusy={setUploadBusy} onCancel={() => setUploadOpen(false)} onSaved={() => {
-            setPreviewEnabled(false);
+            setPreviewMode('off');
             setTest(null);
             setCameras((all) => all.map((item) => item.id === camera.id ? { ...item, status: 'Degraded' } : item));
             setStreamLabels((all) => ({ ...all, [camera.id]: 'RECORDED · MP4 · test & enable next' }));
@@ -314,12 +320,13 @@ export default function Cameras() {
           }} />}
 
           <div className={s.actions}>
-            <Button variant="secondary" size="lg" disabled={uploadBusy || camera.lifecycleStatus !== 'ACTIVE'} onClick={() => { setUploadOpen(false); setPreviewEnabled(false); setConnectionEditorOpen(true); }}>Configure connection</Button>
-            <Button variant="secondary" size="lg" disabled={uploadBusy || test?.state === 'running' || camera.lifecycleStatus !== 'ACTIVE'} onClick={() => { setPreviewEnabled(false); setConnectionEditorOpen(false); setUploadOpen(true); }}>Upload video</Button>
-            <Button variant="secondary" size="lg" icon="refresh" onClick={() => void runTest(camera)} disabled={uploadOpen || test?.state === 'running' || camera.lifecycleStatus !== 'ACTIVE'}>Test &amp; enable</Button>
-            <Button size="lg" disabled={uploadOpen || test?.state === 'running' || camera.lifecycleStatus !== 'ACTIVE'} onClick={() => setPreviewEnabled((value) => !value)}>{previewEnabled ? 'Stop AI preview' : 'Start AI preview'}</Button>
+            <Button variant="secondary" size="lg" disabled={uploadBusy || camera.lifecycleStatus !== 'ACTIVE'} onClick={() => { setUploadOpen(false); setPreviewMode('off'); setConnectionEditorOpen(true); }}>Configure connection</Button>
+            <Button variant="secondary" size="lg" disabled={uploadBusy || test?.state === 'running' || camera.lifecycleStatus !== 'ACTIVE'} onClick={() => { setPreviewMode('off'); setConnectionEditorOpen(false); setUploadOpen(true); }}>Upload video</Button>
+            <Button className={s.testConnection} variant="secondary" size="lg" icon="refresh" onClick={() => void runTest(camera)} disabled={uploadOpen || test?.state === 'running' || camera.lifecycleStatus !== 'ACTIVE'}>Test &amp; enable</Button>
+            <Button variant="secondary" size="lg" disabled={uploadOpen || test?.state === 'running' || camera.lifecycleStatus !== 'ACTIVE'} onClick={() => setPreviewMode((mode) => mode === 'live' ? 'off' : 'live')}>{previewMode === 'live' ? 'Stop live view' : 'Start live view'}</Button>
+            <Button size="lg" disabled={uploadOpen || test?.state === 'running' || camera.lifecycleStatus !== 'ACTIVE'} onClick={() => setPreviewMode((mode) => mode === 'ai' ? 'off' : 'ai')}>{previewMode === 'ai' ? 'Stop AI preview' : 'Start AI preview'}</Button>
           </div>
-          <p className={s.previewNote}>Bounding boxes and track IDs are drawn by YOLO + ByteTrack before this JPEG reaches React.</p>
+          <p className={s.previewNote}>Live view shows direct camera frames. AI preview sends the source through the remote YOLO + ByteTrack service. Starting one preview stops the other.</p>
           {camera.zones.length ? <div className={s.actions}>{camera.zones.map(zone => <a key={zone.zoneId} href={`/admin/ai-config?zoneId=${encodeURIComponent(zone.zoneId)}`}>Configure monitoring: {zone.name}</a>)}</div> : <p className={s.previewNote}>Map this camera and draw its zone ROI in <a href="/admin/store-layout">Store layout</a> before configuring monitoring.</p>}
         </Card>
       )}

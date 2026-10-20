@@ -328,6 +328,10 @@ button.row:hover {
   gap: 8px;
 }
 
+.testConnection {
+  grid-column: 1 / -1;
+}
+
 .previewNote {
   margin: -4px 0 0;
   color: var(--color-text-muted);
