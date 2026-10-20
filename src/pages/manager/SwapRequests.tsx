@@ -139,6 +139,7 @@ export function SwapRequestDetail() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [showChecks, setShowChecks] = useState(false);
 
   async function decide(approve: boolean) {
     if (!request) return;
@@ -161,6 +162,9 @@ export function SwapRequestDetail() {
 
   const r = request;
   const failing = r?.checks.filter((c) => !c.passed) ?? [];
+  // One chip per rule; a per-person rule fails if it fails for either Staff member.
+  const rules = [...new Set(r?.checks.map((c) => c.code) ?? [])]
+    .map((code) => ({ code, passed: (r?.checks ?? []).filter((c) => c.code === code).every((c) => c.passed) }));
   return (
     <ManagerLayout title="Review shift swap" subtitle="Swap requests" actions={<Button variant="secondary" onClick={() => navigate('/manager/swaps')}>Back</Button>}>
       <div className={s.page}>
@@ -178,50 +182,57 @@ export function SwapRequestDetail() {
                   <div><p>Decide before</p><p>{r.expiresAt ? dateTime(r.expiresAt) : '—'}</p></div>
                 </div>
               </Card>
-              <div className={s.row}>
-                <Card className={s.grow}>
-                  <CardHeader title={`${r.type === 'COVER' ? 'Cover' : 'Two-way exchange'} · ${r.targetRespondedAt ? `accepted by ${r.target?.fullName}` : 'not accepted yet'}`}
-                    subtitle={r.type === 'COVER'
-                      ? `${r.target?.fullName} takes ${r.requester.fullName}'s shift after approval.`
-                      : 'Both assignments change together only after approval.'} />
-                  <div className={s.exchange}>
-                    <div className={s.column}>
-                      <span className={s.boxLabel}>Before</span>
-                      <ShiftBox label={r.requester.fullName} shift={r.requesterShift} />
-                      {r.targetShift && <ShiftBox label={r.target?.fullName ?? ''} shift={r.targetShift} />}
-                    </div>
-                    <div className={s.column}>
-                      <span className={s.boxLabel}>After approval</span>
-                      {r.targetShift && <ShiftBox label={r.requester.fullName} shift={r.targetShift} after />}
-                      <ShiftBox label={r.target?.fullName ?? ''} shift={r.requesterShift} after />
-                    </div>
-                  </div>
-                </Card>
-                <Card className={s.side}>
-                  <CardHeader title="Business rule checks" subtitle="Checked again when you approve." />
-                  {r.checks.length === 0 ? <p className={s.note}>{r.canDecide ? 'No checks returned.' : 'Rules are checked while a request waits for your decision.'}</p> : (
-                    <div className={s.checks}>
-                      {/* Per-person rules (overlap, availability, hours) appear once for each Staff member. */}
-                      {r.checks.map((c, i) => (
-                        <div key={`${c.code}-${i}`} className={s.check}>
-                          <b>{CHECK_NAMES[c.code] ?? c.code}</b>
-                          <span className={c.passed ? s.pass : s.fail}>{c.passed ? '✓ ' : '✕ '}{c.message}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {r.canDecide && (failing.length === 0
-                    ? <p className={s.success}>Ready for approval{r.expiresAt ? ` · decide before ${dateTime(r.expiresAt)}` : ''}.</p>
-                    : <p className={s.error}>{failing.length === 1 ? '1 rule fails' : `${failing.length} rules fail`}. Approving will be refused; reject with a reason.</p>)}
-                </Card>
-              </div>
               <Card>
+                <CardHeader title={`${r.type === 'COVER' ? 'Cover' : 'Two-way exchange'} · ${r.targetRespondedAt ? `accepted by ${r.target?.fullName}` : 'not accepted yet'}`}
+                  subtitle={r.type === 'COVER'
+                    ? `${r.target?.fullName} takes ${r.requester.fullName}'s shift after approval.`
+                    : 'Both assignments change together only after approval.'} />
+                <div className={s.exchange}>
+                  <div className={s.column}>
+                    <span className={s.boxLabel}>Before</span>
+                    <ShiftBox label={r.requester.fullName} shift={r.requesterShift} />
+                    {r.targetShift && <ShiftBox label={r.target?.fullName ?? ''} shift={r.targetShift} />}
+                  </div>
+                  <div className={s.column}>
+                    <span className={s.boxLabel}>After approval</span>
+                    {r.targetShift && <ShiftBox label={r.requester.fullName} shift={r.targetShift} after />}
+                    <ShiftBox label={r.target?.fullName ?? ''} shift={r.requesterShift} after />
+                  </div>
+                </div>
+              </Card>
+              <Card>
+                <CardHeader title="Decision" subtitle={r.canDecide ? 'Rules are checked again when you approve.' : undefined}>
+                  {r.checks.length > 0 && (
+                    <Button variant="secondary" aria-expanded={showChecks} onClick={() => setShowChecks((v) => !v)}>
+                      {showChecks ? 'Hide rule details' : 'Show rule details'}
+                    </Button>
+                  )}
+                </CardHeader>
+                {rules.length > 0 && (
+                  <div className={s.ruleChips} aria-label="Business rule checks">
+                    {rules.map((rule) => (
+                      <span key={rule.code} className={rule.passed ? s.rulePass : s.ruleFail}>{rule.passed ? '✓' : '✕'} {CHECK_NAMES[rule.code] ?? rule.code}</span>
+                    ))}
+                  </div>
+                )}
+                {(showChecks || failing.length > 0) && r.checks.length > 0 && (
+                  <ul className={s.ruleList}>
+                    {/* Per-person rules (overlap, availability, hours) appear once for each Staff member. */}
+                    {(showChecks ? r.checks : failing).map((c, i) => (
+                      <li key={`${c.code}-${i}`} className={c.passed ? s.pass : s.fail}><b>{CHECK_NAMES[c.code] ?? c.code}:</b> {c.message}</li>
+                    ))}
+                  </ul>
+                )}
                 {r.canDecide ? (
-                  <form className={s.form} onSubmit={(e) => { e.preventDefault(); void decide(true); }}>
-                    <label>
-                      Decision note (required when rejecting)
-                      <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Coverage or scheduling reason…" disabled={busy} />
-                    </label>
+                  <form className={s.decision} onSubmit={(e) => { e.preventDefault(); void decide(true); }}>
+                    <p className={failing.length === 0 ? s.pass : s.fail}>
+                      {failing.length === 0
+                        ? `All ${rules.length} rules pass${r.expiresAt ? ` · decide before ${dateTime(r.expiresAt)}` : ''}.`
+                        : `${failing.length === 1 ? '1 rule fails' : `${failing.length} rules fail`}. Approving will be refused; reject with a reason.`}
+                    </p>
+                    <label className={s.srOnly} htmlFor="decision-note">Decision note (required when rejecting)</label>
+                    <textarea id="decision-note" className={s.noteInput} rows={2} value={note} onChange={(e) => setNote(e.target.value)}
+                      placeholder="Decision note · required when rejecting" disabled={busy} />
                     {error && <p className={s.error} role="alert">{error}</p>}
                     <div className={s.formActions}>
                       <Button variant="dangerGhost" disabled={busy} onClick={() => void decide(false)}>Reject request</Button>
