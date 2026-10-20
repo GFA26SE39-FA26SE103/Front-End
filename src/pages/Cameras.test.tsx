@@ -156,7 +156,7 @@ describe('Cameras registration', () => {
     await user.type(screen.getByLabelText('Stream URL'), 'rtsp://192.168.1.198:554/stream2');
     await user.click(screen.getByRole('button', { name: 'Save camera' }));
 
-    expect(await screen.findByText('CAM-PHONE')).toBeInTheDocument();
+    expect(await screen.findByRole('row', { name: /CAM-PHONE/ })).toBeInTheDocument();
     const connectionCall = fetchMock.mock.calls.find(([, init]) => init?.method === 'PUT');
     expect(connectionCall).toBeDefined();
     expect(JSON.parse(String(connectionCall?.[1]?.body)).protocol).toBe('RTSP');

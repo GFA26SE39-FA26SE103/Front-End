@@ -72,7 +72,7 @@ describe('Users & Roles account integration', () => {
     });
   });
 
-  it('loads backend accounts/roles, creates with a password, edits without resending it, and disables/enables', async () => {
+  it('loads backend accounts/roles, creates with a password, and edits without resending it', async () => {
     const user = userEvent.setup();
     show();
     await screen.findByRole('button', { name: 'Edit operator@example.test' });
@@ -98,6 +98,13 @@ describe('Users & Roles account integration', () => {
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
     await screen.findByText('Account changes saved.');
     expect(requests.find((request) => request.method === 'PATCH')).toMatchObject({ path: '/api/users/created', body: { fullName: 'New Manager', roleId: 'role-MANAGER' } });
+  });
+
+  it('disables and re-enables an account', async () => {
+    const user = userEvent.setup();
+    users = [...users, { ...account('created', 'MANAGER'), email: 'new@example.test', fullName: 'New Manager' }];
+    show();
+    await screen.findByRole('button', { name: 'Edit new@example.test' });
     await user.click(screen.getByRole('button', { name: 'Edit new@example.test' }));
     await user.click(screen.getByRole('button', { name: 'Disable account' }));
     await screen.findByText('Account disabled. Its existing tokens are rejected by the backend.');
