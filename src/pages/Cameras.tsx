@@ -27,6 +27,7 @@ import { Dialog } from '../components/Dialog';
 import { RecordedVideoUpload } from '../components/RecordedVideoUpload';
 import { Icon } from '../components/Icon';
 import { Button, Card, CardHeader, Chip, SearchBox, Segmented, Select } from '../components/ui';
+import { cameraWhepUrl } from '../config/webrtc';
 import { statusChip, type CameraDisplayStatus } from './cameraStatus';
 import s from './Cameras.module.css';
 
@@ -426,6 +427,7 @@ export default function Cameras() {
                 : <CameraLivePreview
                     key={`${camera.id}-live`}
                     cameraId={camera.id}
+                    whepUrl={cameraWhepUrl(camera.id, camera.code, connection?.cameraId === camera.id ? connection.protocol : undefined)}
                     enabled={previewState === 'starting' || previewState === 'running'}
                     onStateChange={(state, error) => liveViewChanged(camera, state, error)}
                   />}
