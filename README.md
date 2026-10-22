@@ -141,6 +141,20 @@ Set `VITE_API_URL` to the backend origin (default `http://localhost:5080`). Stor
 
 Camera creation/connection remains a separate flow. Placement saving does not test, enable, or start monitoring.
 
+### WebRTC live feed
+
+The Cameras **Live feed** uses MediaMTX WHEP for mapped RTSP cameras and keeps the authenticated JPEG endpoint as the fallback for recorded/unmapped sources. Configure the public MediaMTX origin and map a stable camera UUID (preferred) or camera code to its MediaMTX path:
+
+```env
+VITE_WEBRTC_BASE_URL=https://stream-dev.kitsuracloud.com
+VITE_WEBRTC_STREAM_PATHS={"CAM - IP 13 PROMAX":"iphone"}
+VITE_WEBRTC_USE_APP_TOKEN=false
+```
+
+The map contains public playback metadata only; never put an RTSP URL, camera credential or secret in a `VITE_` value. Starting preview first preserves the existing backend test/enable gate, then creates a WHEP session. Stopping preview, switching camera or leaving the component closes the peer and deletes the WHEP session.
+
+Production stream authorization requires MediaMTX HTTP/JWT authentication to validate the application's bearer token and authorize `read` for the requested path. Once that server-side validation is deployed, set `VITE_WEBRTC_USE_APP_TOKEN=true`; the WHEP client then sends the current application JWT in the `Authorization` header. Do not enable this flag while the MediaMTX endpoint remains anonymous, and do not treat an unguessable stream path as access control.
+
 Cloudinary timeout compatibility verification (2026-10-03): **29 focused tests in 3 files passed**, build/lint passed. A controlled fake-clock request verifies a slow floor-plan upload and explicit cancellation of a map download. Cloudinary credentials and provider configuration belong to the backend; the frontend continues to use authenticated map APIs and receives no secret or signed cloud URL. Actual cloud-account acceptance awaits backend credential setup.
 
 ## Notes
