@@ -228,6 +228,7 @@ describe('Cameras registration', () => {
       if (path === `/api/supermarkets/${storeId}/floors`) return json([{ floorId, supermarketId: storeId, floorNumber: 1, name: 'Ground floor' }]);
       if (path === `/api/floors/${floorId}/cameras`) return json([{ cameraId: existingCameraId, floorId, code: 'CAM-PENDING', name: 'Pending phone', manufacturer: null, model: null, serialNumber: null, installedAt: '2026-01-01T00:00:00Z', warrantyExpiresAt: '2027-01-01T00:00:00Z', status: 'ACTIVE', healthStatus: 'UNKNOWN', lastSeenAt: null }]);
       if (path === `/api/floors/${floorId}/zones` || path === `/api/cameras/${existingCameraId}/zones`) return json([]);
+      if (path === `/api/cameras/${existingCameraId}/connection` && (!init?.method || init.method === 'GET')) return json({ code: 'CAMERA_CONNECTION_NOT_FOUND' }, 404);
       if (path === `/api/cameras/${existingCameraId}/connection` && init?.method === 'PUT') {
         const body = JSON.parse(String(init.body));
         if (body.streamUri !== 'http://192.168.1.25:8080/video') return json({ code: 'BAD_CONNECTION_BODY' }, 400);
@@ -246,7 +247,7 @@ describe('Cameras registration', () => {
     await user.type(screen.getByLabelText('Stream URL'), 'http://192.168.1.25:8080/video');
     await user.click(screen.getByRole('button', { name: 'Save connection' }));
 
-    expect(await screen.findByText('Test passed')).toBeInTheDocument();
+    expect(await screen.findByText('Configured')).toBeInTheDocument();
     expect(screen.queryByRole('form', { name: 'Configure camera connection' })).not.toBeInTheDocument();
   });
 
@@ -410,7 +411,7 @@ describe('Cameras registration', () => {
     const user = userEvent.setup();
     render(<MemoryRouter><Cameras /></MemoryRouter>);
     await screen.findAllByText('CAM-RUNTIME-FAIL');
-    await screen.findByText('Test passed');
+    await screen.findByText('Configured');
 
     await user.click(screen.getByRole('button', { name: 'Start preview' }));
 
@@ -424,7 +425,7 @@ describe('Cameras registration', () => {
 
     expect(screen.getByText('Source unavailable')).toBeInTheDocument();
     expect(screen.getByText('STREAM_UNAVAILABLE')).toBeInTheDocument();
-    expect(screen.queryByText('Test passed')).not.toBeInTheDocument();
+    expect(screen.queryByText('Configured')).not.toBeInTheDocument();
   });
 
   it('tests and enables a newly saved connection without starting preview', async () => {
@@ -450,10 +451,71 @@ describe('Cameras registration', () => {
     await user.type(screen.getByLabelText('Stream URL'), 'http://camera/video');
     await user.click(screen.getByRole('button', { name: 'Save connection' }));
 
-    expect(await screen.findByText('Test passed')).toBeInTheDocument();
+    expect(await screen.findByText('Configured')).toBeInTheDocument();
     expect(calls).toContain(`POST /api/cameras/${cameraId}/connection/test`);
     expect(calls).toContain(`POST /api/cameras/${cameraId}/connection/enable`);
     expect(calls).not.toContain(`GET /api/cameras/${cameraId}/preview`);
     expect(screen.getByRole('button', { name: 'Start preview' })).toBeInTheDocument();
+  });
+
+  it('prefills existing connection details and preserves the stored password', async () => {
+    let savedBody: Record<string, unknown> | undefined;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      if (path === '/api/supermarkets') return json([{ supermarketId: storeId }]);
+      if (path === `/api/supermarkets/${storeId}/floors`) return json([{ floorId, floorNumber: 1, name: 'Ground floor' }]);
+      if (path === `/api/floors/${floorId}/cameras`) return json([{ cameraId, floorId, code: 'CAM-SECURE', name: 'Secure camera', manufacturer: null, model: null, serialNumber: null, installedAt: '2026-01-01T00:00:00Z', warrantyExpiresAt: '2027-01-01T00:00:00Z', status: 'ACTIVE', healthStatus: 'ONLINE', lastSeenAt: '2026-10-22T06:00:00Z' }]);
+      if (path === `/api/floors/${floorId}/zones` || path === `/api/cameras/${cameraId}/zones`) return json([]);
+      if (path === `/api/cameras/${cameraId}/connection` && (!init?.method || init.method === 'GET')) return json({ cameraId, sourceType: 'LIVE', protocol: 'RTSP', streamUri: 'rtsp://camera.local/stream', username: 'viewer', hasCredentials: true, isEnabled: true, lastTestResult: 'SUCCESS', lastTestMessage: 'FRAME_RECEIVED', lastTestedAt: '2026-10-20T09:30:00Z' });
+      if (path === `/api/cameras/${cameraId}/connection` && init?.method === 'PUT') {
+        savedBody = JSON.parse(String(init.body));
+        return json({ cameraId, ...savedBody, hasCredentials: true, isEnabled: false, lastTestResult: null, lastTestMessage: null, lastTestedAt: null });
+      }
+      if (path === `/api/cameras/${cameraId}/connection/test`) return json({ cameraId, protocol: 'RTSP', isEnabled: false, lastTestResult: 'SUCCESS', lastTestMessage: 'FRAME_RECEIVED', lastTestedAt: '2026-10-22T07:00:00Z' });
+      if (path === `/api/cameras/${cameraId}/connection/enable`) return json({ cameraId, protocol: 'RTSP', isEnabled: true, lastTestResult: 'SUCCESS', lastTestMessage: 'FRAME_RECEIVED', lastTestedAt: '2026-10-22T07:00:00Z' });
+      return json({ code: 'UNEXPECTED_REQUEST', path }, 500);
+    });
+    const user = userEvent.setup();
+    render(<MemoryRouter><Cameras /></MemoryRouter>);
+    await screen.findAllByText('CAM-SECURE');
+
+    await user.click(screen.getByRole('button', { name: 'Connection settings' }));
+    expect(await screen.findByDisplayValue('rtsp://camera.local/stream')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('viewer')).toBeInTheDocument();
+    expect(screen.getByText('Leave the new password blank to keep the stored password.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Save connection' }));
+
+    await waitFor(() => expect(savedBody).toMatchObject({
+      streamUri: 'rtsp://camera.local/stream',
+      username: 'viewer',
+      password: null,
+      preservePassword: true,
+    }));
+  });
+
+  it('offers an explicit source re-test without starting preview', async () => {
+    const calls: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      calls.push(`${init?.method ?? 'GET'} ${path}`);
+      if (path === '/api/supermarkets') return json([{ supermarketId: storeId }]);
+      if (path === `/api/supermarkets/${storeId}/floors`) return json([{ floorId, floorNumber: 1, name: 'Ground floor' }]);
+      if (path === `/api/floors/${floorId}/cameras`) return json([{ cameraId, floorId, code: 'CAM-RETEST', name: 'Retest camera', manufacturer: null, model: null, serialNumber: null, installedAt: '2026-01-01T00:00:00Z', warrantyExpiresAt: '2027-01-01T00:00:00Z', status: 'ACTIVE', healthStatus: 'OFFLINE', lastSeenAt: null }]);
+      if (path === `/api/floors/${floorId}/zones` || path === `/api/cameras/${cameraId}/zones`) return json([]);
+      if (path === `/api/cameras/${cameraId}/connection` && (!init?.method || init.method === 'GET')) return json({ cameraId, protocol: 'RTSP', isEnabled: true, lastTestResult: 'SUCCESS', lastTestMessage: 'FRAME_RECEIVED', lastTestedAt: '2026-10-20T09:30:00Z' });
+      if (path === `/api/cameras/${cameraId}/connection/test`) return json({ cameraId, protocol: 'RTSP', isEnabled: true, lastTestResult: 'FAILED', lastTestMessage: 'TIMEOUT', lastTestedAt: '2026-10-22T07:30:00Z' });
+      return json({ code: 'UNEXPECTED_REQUEST', path }, 500);
+    });
+    const user = userEvent.setup();
+    render(<MemoryRouter><Cameras /></MemoryRouter>);
+    await screen.findAllByText('CAM-RETEST');
+
+    await user.click(screen.getByRole('button', { name: 'More actions ⋯' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Re-test source' }));
+
+    expect(await screen.findByText('Source test failed')).toBeInTheDocument();
+    expect(screen.getByText('TIMEOUT')).toBeInTheDocument();
+    expect(calls).toContain(`POST /api/cameras/${cameraId}/connection/test`);
+    expect(calls).not.toContain(`GET /api/cameras/${cameraId}/preview`);
   });
 });

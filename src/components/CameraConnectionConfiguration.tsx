@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { configureCameraConnection } from '../api/cameras';
+import { useEffect, useState } from 'react';
+import { configureCameraConnection, getCameraConnection } from '../api/cameras';
 import { ApiError } from '../api/client';
 import { Dialog } from './Dialog';
 import { Button, Field, TextInput } from './ui';
@@ -15,8 +15,28 @@ export function CameraConnectionConfiguration({ cameraId, onCancel, onSaved }: P
   const [streamUrl, setStreamUrl] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [hasStoredPassword, setHasStoredPassword] = useState(false);
+  const [removeStoredPassword, setRemoveStoredPassword] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void getCameraConnection(cameraId, controller.signal)
+      .then((current) => {
+        if (controller.signal.aborted) return;
+        setStreamUrl(current.streamUri);
+        setUsername(current.username ?? '');
+        setHasStoredPassword(current.hasCredentials);
+      })
+      .catch((reason) => {
+        if (controller.signal.aborted || reason instanceof ApiError && reason.status === 404) return;
+        setError(reason instanceof Error ? reason.message : 'Could not load the current camera connection.');
+      })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [cameraId]);
 
   const submit = async () => {
     setError('');
@@ -39,7 +59,8 @@ export function CameraConnectionConfiguration({ cameraId, onCancel, onSaved }: P
         streamUri: parsed.toString(),
         snapshotUri: null,
         username: username.trim() || null,
-        password: password || null,
+        password: removeStoredPassword ? null : password || null,
+        preservePassword: hasStoredPassword && !removeStoredPassword && password.length === 0,
       });
       await onSaved();
     } catch (reason) {
@@ -50,18 +71,22 @@ export function CameraConnectionConfiguration({ cameraId, onCancel, onSaved }: P
   };
 
   return (
-    <Dialog title="Configure camera connection" busy={saving} onClose={onCancel}>
+    <Dialog title="Configure camera connection" busy={saving || loading} onClose={onCancel}>
       <form className={s.dialogForm} aria-label="Configure camera connection" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-        <p className={s.dialogIntro}>Use an HTTP/HTTPS or RTSP stream. Saving replaces the current stream details and credentials.</p>
+        <p className={s.dialogIntro}>Review the current HTTP/HTTPS or RTSP source. The saved password is never displayed.</p>
         <div className={s.grid}>
-          <Field label="Stream URL"><TextInput value={streamUrl} onChange={setStreamUrl} placeholder="rtsp://192.168.1.198:554/stream2" /></Field>
-          <Field label="Username (optional)"><TextInput value={username} onChange={setUsername} autoComplete="section-camera username" /></Field>
-          <Field label="Password (optional)"><TextInput value={password} onChange={setPassword} type="password" autoComplete="section-camera new-password" /></Field>
+          <Field label="Stream URL"><TextInput value={streamUrl} onChange={setStreamUrl} disabled={loading} placeholder="rtsp://192.168.1.198:554/stream2" /></Field>
+          <Field label="Username (optional)"><TextInput value={username} onChange={setUsername} disabled={loading} autoComplete="section-camera username" /></Field>
+          <Field label={hasStoredPassword ? 'New password (optional)' : 'Password (optional)'}><TextInput value={password} onChange={(value) => { setPassword(value); if (value) setRemoveStoredPassword(false); }} disabled={loading || removeStoredPassword} type="password" autoComplete="section-camera new-password" /></Field>
         </div>
+        {hasStoredPassword && <div className={s.credentialNote}>
+          <span>Leave the new password blank to keep the stored password.</span>
+          <label><input type="checkbox" checked={removeStoredPassword} disabled={saving} onChange={(event) => { setRemoveStoredPassword(event.target.checked); setPassword(''); }} /> Remove stored password</label>
+        </div>}
         {error && <p className={s.error} role="alert">{error}</p>}
         <div className={s.actions}>
           <Button variant="secondary" onClick={onCancel} disabled={saving}>Cancel</Button>
-          <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save connection'}</Button>
+          <Button type="submit" disabled={saving || loading}>{loading ? 'Loading…' : saving ? 'Saving…' : 'Save connection'}</Button>
         </div>
       </form>
     </Dialog>

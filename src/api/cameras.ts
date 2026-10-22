@@ -69,6 +69,7 @@ export type ConfigureConnectionRequest = {
   snapshotUri: string | null;
   username: string | null;
   password: string | null;
+  preservePassword?: boolean;
 };
 
 export type CameraConnection = {
@@ -76,6 +77,7 @@ export type CameraConnection = {
   sourceType: string;
   protocol: string;
   streamUri: string;
+  username: string | null;
   hasCredentials: boolean;
   isEnabled: boolean;
   lastTestedAt: string | null;
