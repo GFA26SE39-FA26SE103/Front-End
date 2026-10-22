@@ -478,7 +478,7 @@ export default function Cameras() {
           <dl className={s.streamInfo}>
             <KV k="Camera source" v={connection?.cameraId === camera.id ? connection.protocol ?? '—' : '—'} />
             <KV k="Last source test" v={connectionDetail(camera, connection)} />
-            <KV k="Last checked" v={connection?.cameraId === camera.id ? formatDateTime(connection.lastChecked) : '—'} />
+            <KV k="Last connection test" v={connection?.cameraId === camera.id ? formatDateTime(connection.lastChecked) : '—'} />
           </dl>
 
           {connectionEditorOpen && (
@@ -505,6 +505,7 @@ export default function Cameras() {
             <div className={s.moreActions}>
               <Button variant="secondary" size="lg" aria-haspopup="menu" aria-expanded={moreActionsOpen} onClick={() => setMoreActionsOpen((open) => !open)}>More actions ⋯</Button>
               {moreActionsOpen && <div className={s.actionsMenu} role="menu" aria-label="Camera actions">
+                <Button role="menuitem" variant="secondary" disabled={uploadBusy || camera.lifecycleStatus !== 'ACTIVE' || connection?.state === 'checking'} onClick={() => { setMoreActionsOpen(false); setPreviewState('stopped'); void prepareConnection(camera); }}>Re-test source</Button>
                 <Button role="menuitem" variant="secondary" disabled={uploadBusy || camera.lifecycleStatus !== 'ACTIVE'} onClick={() => { setMoreActionsOpen(false); setPreviewState('stopped'); setConnectionEditorOpen(false); setUploadOpen(true); }}>Upload video</Button>
                 <Button role="menuitem" variant="secondary" disabled={uploadBusy || lifecycleBusy} onClick={() => { setMoreActionsOpen(false); setLifecycleError(''); setEditorOpen(true); }}>Edit camera</Button>
                 {camera.lifecycleStatus === 'ACTIVE'
@@ -617,8 +618,12 @@ function connectionBadge(camera: CameraView, connection: ConnectionView | null, 
   if (preview === 'running') return { label: mode === 'live' ? 'LIVE FEED' : 'AI DETECTION', tone: 'success' as const };
   if (previewFailed) return { label: 'Source unavailable', tone: 'danger' as const };
   if (preview === 'connecting' || preview === 'starting' || connection?.cameraId !== camera.id || connection.state === 'checking') return { label: 'Connecting…', tone: 'warning' as const };
-  if (connection.state === 'ready') return { label: 'Test passed', tone: 'success' as const };
-  if (connection.state === 'failed') return { label: 'Source unavailable', tone: 'danger' as const };
+  if (connection.state === 'failed') return { label: 'Source test failed', tone: 'danger' as const };
+  if (connection.state === 'ready') {
+    if (camera.status === 'Offline') return { label: 'Offline', tone: 'danger' as const };
+    if (camera.status === 'Online') return { label: 'Online', tone: 'success' as const };
+    return { label: 'Configured', tone: 'neutral' as const };
+  }
   return { label: 'Not configured', tone: 'neutral' as const };
 }
 
