@@ -1,6 +1,12 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { prepareCameraPlayback } from '../api/cameras';
 import { CameraLivePreview } from './CameraLivePreview';
+
+vi.mock('../api/cameras', () => ({
+  getCameraPreview: vi.fn(),
+  prepareCameraPlayback: vi.fn(),
+}));
 
 class FakePeerConnection {
   iceGatheringState: RTCIceGatheringState = 'complete';
@@ -26,6 +32,7 @@ describe('CameraLivePreview WebRTC', () => {
   const fetchMock = vi.fn();
 
   beforeEach(() => {
+    vi.mocked(prepareCameraPlayback).mockReset();
     peer = new FakePeerConnection();
     function PeerConnectionMock() { return peer; }
     vi.stubGlobal('RTCPeerConnection', PeerConnectionMock);
@@ -51,6 +58,16 @@ describe('CameraLivePreview WebRTC', () => {
       body: 'offer-sdp',
     }));
     expect(onStateChange).toHaveBeenLastCalledWith('live', undefined);
+  });
+
+  it('gets the WHEP URL from the backend when no build-time mapping is present', async () => {
+    vi.mocked(prepareCameraPlayback).mockResolvedValue({ cameraId: 'camera-1', transport: 'WEBRTC', url: 'https://stream.example.test/cam-camera-1/whep' });
+
+    render(<CameraLivePreview cameraId="camera-1" enabled />);
+
+    expect(await screen.findByText('WEBRTC · LIVE')).toBeInTheDocument();
+    expect(prepareCameraPlayback).toHaveBeenCalledWith('camera-1', expect.any(AbortSignal));
+    expect(fetchMock).toHaveBeenCalledWith('https://stream.example.test/cam-camera-1/whep', expect.objectContaining({ method: 'POST' }));
   });
 
   it('closes both the peer and WHEP session when preview stops', async () => {

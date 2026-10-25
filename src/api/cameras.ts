@@ -85,6 +85,12 @@ export type CameraConnection = {
   lastTestMessage: string | null;
 };
 
+export type CameraPlayback = {
+  cameraId: string;
+  transport: string;
+  url: string;
+};
+
 export type AiPreviewState = 'STOPPED' | 'STARTING' | 'LIVE' | 'RECONNECTING' | 'ERROR' | 'COMPLETED';
 
 export const uploadRecordedVideo = (cameraId: string, file: File) => {
@@ -133,6 +139,9 @@ export const getCamera = (cameraId: string, signal?: AbortSignal) =>
 
 export const getCameraPreview = (cameraId: string, signal?: AbortSignal) =>
   apiFetch<Blob>(`/api/cameras/${cameraId}/preview`, { signal, responseType: 'blob' });
+
+export const prepareCameraPlayback = (cameraId: string, signal?: AbortSignal) =>
+  apiFetch<CameraPlayback>(`/api/cameras/${cameraId}/playback`, { method: 'POST', signal });
 
 export const listCameraMappings = (cameraId: string, signal?: AbortSignal) =>
   apiFetch<CameraZoneMapping[]>(`/api/cameras/${cameraId}/zones`, { signal });
