@@ -12,6 +12,7 @@ const labels: Record<TaskStatus, string> = { OFFERED: 'Offered', ACCEPTED: 'Acce
 const date = (value: string | null) => value ? new Date(value).toLocaleString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'medium', timeStyle: 'short' }) : '—';
 const source = (origin: string) => ({ OPERATIONAL_EVENT: 'Operational event', INCIDENT: 'Incident', STAFF_REPORT: 'Staff report', MANUAL: 'Manual' }[origin] ?? origin);
 const problem = (error: unknown) => error instanceof Error ? error.message : 'The request could not be completed.';
+const workload = (count: number) => count === 0 ? 'No active tasks' : `${count} active ${count === 1 ? 'task' : 'tasks'}`;
 function Status({ task }: { task: OperationalTask }) {
   return <Chip tone={task.status === 'VERIFIED' ? 'success' : task.status === 'IN_PROGRESS' ? 'primary' : task.status === 'SUBMITTED' ? 'purple' : 'neutral'}>{labels[task.status] ?? task.status}</Chip>;
 }
@@ -126,7 +127,7 @@ function AssignDialog({ task, onClose, onSaved, onConflict }: { task: Operationa
     <form className={s.form} onSubmit={event => void save(event)}>
       <p className={s.muted}>Checked-in, on-shift Staff below the workload limit. Assignment enters Accepted; Staff starts the work.</p>
       <label>Staff member<select value={userId} disabled={busy || !staff || conflict} onChange={event => setUserId(event.target.value)}><option value="">{staff ? 'Choose Staff…' : 'Loading Staff…'}</option>
-        {staff?.map(row => <option key={row.userId} value={row.userId}>{row.fullName} · {row.assignedToZone ? 'This Zone' : 'Other Zone'} · {row.activeTasks} active</option>)}</select></label>
+        {staff?.map(row => <option key={row.userId} value={row.userId}>{row.fullName} · {row.assignedToZone ? 'Assigned to this zone' : 'Assigned to another zone'} · {workload(row.activeTasks)}</option>)}</select></label>
       {staff?.length === 0 && <p className={s.info}>No eligible Staff available. Check shift, check-in and workload, then refresh candidates.</p>}
       {chosen && <p className={s.muted}>Shift ends {date(chosen.shiftEndsAt)}.{!chosen.assignedToZone && ' This Staff member is assigned outside the task Zone; record the reason.'}</p>}
       <label>Reason {reasonRequired ? '(required)' : '(optional)'}<textarea rows={3} maxLength={2000} value={reason} disabled={busy || conflict} onChange={event => setReason(event.target.value)} /></label>
