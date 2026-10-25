@@ -10,6 +10,7 @@ import SystemHealth from './pages/SystemHealth';
 import UsersRoles from './pages/UsersRoles';
 import OperatorCameraLive from './pages/operator/OperatorCameraLive';
 import OperatorFloorMap from './pages/operator/OperatorFloorMap';
+import OperatorTasks, { OperatorTaskDetail } from './pages/operator/OperatorTasks';
 import Login from './pages/auth/Login';
 import { ForgotPassword, PasswordUpdated, ResetLinkExpired, ResetLinkSent, SetNewPassword } from './pages/auth/Recovery';
 import { ProtectedRoute } from './auth/ProtectedRoute';
@@ -44,6 +45,8 @@ export default function App() {
       <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'OPERATOR']} />}>
         <Route path="/operator/dashboard" element={<Navigate to="/operator/floor-map" replace />} />
         <Route path="/operator/floor-map" element={<OperatorFloorMap />} />
+        <Route path="/operator/tasks" element={<OperatorTasks />} />
+        <Route path="/operator/tasks/:taskId" element={<OperatorTaskDetail />} />
         <Route path="/operator/cameras/:cameraId" element={<OperatorCameraLive />} />
       </Route>
       <Route element={<ProtectedRoute allowedRoles={['MANAGER']} />}>

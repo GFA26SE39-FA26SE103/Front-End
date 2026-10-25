@@ -20,6 +20,14 @@ npm run lint
 npm test -- --run
 ```
 
+## Operator Task Board — 25/10/2026
+
+`/operator/tasks` and `/operator/tasks/:taskId` use the authenticated Task APIs for list/filter/detail, assignee, source, priority and progress. The Operator can assign or reassign an OFFERED/ACCEPTED task using checked-in/on-shift candidates; Admin can inspect but cannot assign. Assignment sends the Task's `updatedAt` as `expectedUpdatedAt`; a conflict requires closing the dialog and reviewing fresh data. Reassignment/outside-Zone assignment requires a reason in both client and backend.
+
+The board polls every 4 seconds after successful reads, backs off on failures and pauses in hidden tabs; it keeps the last result with a stale warning instead of substituting demo data. Counts describe the filtered set, limited by the backend's latest-200 list. Event recovery does not mark accepted work complete. Evidence verification/policy authoring remain separate workstreams.
+
+Validation: **205 frontend tests passed** (12 new Task API/board/polling checks), production build and lint passed. Edge browser QA covered Board → detail → outside-Zone reason → assignment/Accepted using API fixtures; screenshots are local under `output/playwright/`. Actual local API/SQL read/auth checks passed separately; complete web/mobile acceptance and deployment are not claimed. Deploy the matching backend assignment contract before using the new version guard.
+
 ## Screens (Main flow 1 — Admin setup)
 
 | Route | Screen | Figma frame |
