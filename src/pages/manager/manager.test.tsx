@@ -147,6 +147,10 @@ describe('Manager console', () => {
 
     expect(await screen.findByText('Request summary')).toBeInTheDocument();
     expect(screen.getAllByText('Thảo').length).toBeGreaterThan(0);
+    const currentAssignments = screen.getByRole('region', { name: 'Current assignments' });
+    const afterApproval = screen.getByRole('region', { name: 'Assignments after approval' });
+    expect(within(currentAssignments).getAllByText(/Evening/)).toHaveLength(2);
+    expect(within(afterApproval).getAllByText(/Evening/)).toHaveLength(2);
     expect(screen.getByText(/Minh Đức would work 50 h/)).toBeInTheDocument();
     expect(screen.getByText(/1 rule fails/)).toBeInTheDocument();
 

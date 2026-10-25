@@ -47,6 +47,16 @@ function ShiftBox({ label, shift, after }: { label: string; shift: SwapShift; af
   );
 }
 
+function ShiftPlaceholder({ label, title, detail, after }: { label: string; title: string; detail: string; after?: boolean }) {
+  return (
+    <div className={`${s.shiftBox} ${after ? s.after : ''}`}>
+      <span className={s.boxLabel}>{label}</span>
+      <span className={s.boxMain}>{title}</span>
+      <span className={s.muted}>{detail}</span>
+    </div>
+  );
+}
+
 export function SwapRequests() {
   const [tab, setTab] = useState<string>(TABS[0].key);
   const [reload, setReload] = useState(0);
@@ -187,17 +197,31 @@ export function SwapRequestDetail() {
                   subtitle={r.type === 'COVER'
                     ? `${r.target?.fullName} takes ${r.requester.fullName}'s shift after approval.`
                     : 'Both assignments change together only after approval.'} />
-                <div className={s.exchange}>
-                  <div className={s.column}>
-                    <span className={s.boxLabel}>Before</span>
-                    <ShiftBox label={r.requester.fullName} shift={r.requesterShift} />
-                    {r.targetShift && <ShiftBox label={r.target?.fullName ?? ''} shift={r.targetShift} />}
-                  </div>
-                  <div className={s.column}>
-                    <span className={s.boxLabel}>After approval</span>
-                    {r.targetShift && <ShiftBox label={r.requester.fullName} shift={r.targetShift} after />}
-                    <ShiftBox label={r.target?.fullName ?? ''} shift={r.requesterShift} after />
-                  </div>
+                <div className={s.exchange} aria-label="Assignment comparison">
+                  <section className={s.exchangeStage} aria-label="Current assignments">
+                    <div className={s.exchangeStageHead}>
+                      <span className={s.exchangeStageTitle}>Current assignments</span>
+                      <span className={s.muted}>Before manager approval</span>
+                    </div>
+                    <div className={s.pair}>
+                      <ShiftBox label={r.requester.fullName} shift={r.requesterShift} />
+                      {r.targetShift
+                        ? <ShiftBox label={r.target?.fullName ?? ''} shift={r.targetShift} />
+                        : <ShiftPlaceholder label={r.target?.fullName ?? 'Covering staff'} title="No shift exchanged" detail="Will take the requested shift" />}
+                    </div>
+                  </section>
+                  <section className={`${s.exchangeStage} ${s.exchangeStageAfter}`} aria-label="Assignments after approval">
+                    <div className={s.exchangeStageHead}>
+                      <span className={s.exchangeStageTitle}>After approval</span>
+                      <span className={s.muted}>Both changes are applied together</span>
+                    </div>
+                    <div className={s.pair}>
+                      {r.targetShift
+                        ? <ShiftBox label={r.requester.fullName} shift={r.targetShift} after />
+                        : <ShiftPlaceholder label={r.requester.fullName} title="Shift covered" detail={`${r.target?.fullName ?? 'Covering staff'} takes this assignment`} after />}
+                      <ShiftBox label={r.target?.fullName ?? ''} shift={r.requesterShift} after />
+                    </div>
+                  </section>
                 </div>
               </Card>
               <Card>

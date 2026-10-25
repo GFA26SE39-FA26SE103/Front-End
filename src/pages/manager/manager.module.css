@@ -93,12 +93,24 @@
 .kv:first-of-type { border-top: 0; }
 .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; font-size: 13px; font-weight: 500; }
 .summary p:first-child { font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 4px; }
-.exchange { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.column { display: flex; flex-direction: column; gap: 10px; }
+.exchange { display: flex; flex-direction: column; gap: 12px; }
+.exchangeStage { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface-2); }
+.exchangeStageAfter { border-color: var(--color-primary); background: var(--color-primary-tint); }
+.exchangeStageHead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.exchangeStageTitle { font-size: 12px; font-weight: 700; color: var(--color-text); }
+.exchangeStageAfter .exchangeStageTitle { color: var(--color-primary); }
 .back { font-size: 12px; color: var(--color-primary); font-weight: 600; text-decoration: none; }
 
 @media (max-width: 1360px) {
   .stats, .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .row { flex-direction: column; }
+  .side { width: 100%; }
+  .pair, .stats, .summary { grid-template-columns: 1fr; }
+  .exchangeStageHead { align-items: flex-start; flex-direction: column; gap: 2px; }
+  .swapFoot { align-items: flex-start; flex-direction: column; }
 }
 
 /* Swap decision: rule chips with optional details, then the note and buttons. */
