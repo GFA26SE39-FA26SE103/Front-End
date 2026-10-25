@@ -31,11 +31,11 @@ export default function Leave() {
   }
 
   return (
-    <ManagerLayout title="Leave" subtitle="Staff who cannot be scheduled (BR-35)" actions={<Button onClick={() => setAdding(true)}>Add leave</Button>}>
+    <ManagerLayout title="Leave" subtitle="Manage staff availability" actions={<Button onClick={() => setAdding(true)}>Add leave</Button>}>
       <div className={s.page}>
         {notice && <p className={s.success} role="status">{notice}</p>}
         <Card>
-          <CardHeader title="Leave in this period" subtitle="Staff on leave cannot be assigned or receive swapped shifts. Leave that overlaps a planned shift is refused; move the shift first." />
+          <CardHeader title="Recorded leave" />
           <div className={s.actions}>
             <label className={s.note}>From <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
             <label className={s.note}>To <input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>

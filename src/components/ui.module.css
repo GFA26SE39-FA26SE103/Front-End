@@ -11,18 +11,18 @@
 }
 
 .cardTitle {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
 }
 
 .cardSubtitle {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--color-text-muted);
   margin-top: 2px;
 }
 
 .overline {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.8px;
   color: var(--color-text-dim);
@@ -38,7 +38,7 @@
   height: 32px;
   padding: 0 12px;
   border-radius: 8px;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
   transition: background-color 120ms ease, border-color 120ms ease;
@@ -93,7 +93,7 @@
   gap: 4px;
   padding: 3px 8px;
   border-radius: 10px;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -316,7 +316,7 @@
 }
 
 .statNote {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--color-text-muted);
 }
 

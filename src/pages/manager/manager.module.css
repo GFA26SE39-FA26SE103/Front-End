@@ -1,4 +1,4 @@
-.page { display: flex; flex-direction: column; gap: 20px; width: 100%; min-width: 0; }
+.page { display: flex; flex-direction: column; gap: 16px; width: 100%; min-width: 0; }
 /* The layout scrolls the page; cards keep their full height instead of shrinking into it. */
 .page > *, .side > * { flex-shrink: 0; }
 .row { display: flex; gap: 20px; align-items: flex-start; width: 100%; min-width: 0; }
@@ -8,8 +8,8 @@
 .actions { display: flex; align-items: center; gap: 8px; }
 .weekLabel { min-width: 150px; text-align: center; font-size: 12px; font-weight: 600; }
 
-.note { color: var(--color-text-muted); font-size: 12px; line-height: 1.6; }
-.error, .success, .info { padding: 12px; border-radius: 7px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.note { color: var(--color-text-muted); font-size: 13px; line-height: 1.5; }
+.error, .success, .info { padding: 12px; border-radius: 7px; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 .error { color: var(--color-danger); background: var(--color-danger-tint); }
 .success { color: var(--color-success); background: var(--color-success-tint); }
 .info { color: var(--color-text); background: var(--color-info-tint); }
@@ -17,32 +17,32 @@
 /* Weekly grid: one row per shift template, one column per day. */
 .gridWrap { overflow: auto; }
 .grid { width: 100%; min-width: 980px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
-.grid th { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--color-text-dim); padding: 8px; text-align: left; font-weight: 600; }
+.grid th { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--color-text-dim); padding: 8px; text-align: left; font-weight: 600; }
 .grid th.today { color: var(--color-primary); }
 .grid td { vertical-align: top; padding: 8px; border-top: 1px solid var(--color-border); border-left: 1px solid var(--color-grid); }
 .grid td:first-child { border-left: 0; }
 .shiftHead { width: 130px; }
-.shiftName { font-size: 12px; font-weight: 600; }
-.shiftTime { font-size: 11px; color: var(--color-text-muted); margin-top: 2px; }
+.shiftName { font-size: 13px; font-weight: 600; }
+.shiftTime { font-size: 12px; color: var(--color-text-muted); margin-top: 2px; }
 .cell { display: flex; flex-direction: column; gap: 6px; min-height: 64px; }
 .past { background: var(--color-surface-2); }
-.person { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-surface); text-align: left; font-size: 11px; }
+.person { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 7px 8px; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-surface); text-align: left; font-size: 12px; }
 .person:hover { border-color: var(--color-primary); }
-.person strong { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.person strong { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .person span { color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .draft { border-style: dashed; background: var(--color-surface-2); }
 .flag { color: var(--color-warning); font-weight: 600; }
 .coverage { display: flex; flex-wrap: wrap; gap: 4px; }
-.cov, .covGap { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 999px; }
+.cov, .covGap { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 999px; }
 .cov { background: var(--color-success-tint); color: var(--color-success); }
 .covGap { background: var(--color-danger-tint); color: var(--color-danger); }
-.add { align-self: flex-start; font-size: 11px; font-weight: 600; color: var(--color-primary); padding: 2px 0; }
+.add { align-self: flex-start; font-size: 12px; font-weight: 600; color: var(--color-primary); padding: 2px 0; }
 .add:hover { text-decoration: underline; }
-.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11px; color: var(--color-text-muted); }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--color-text-muted); }
 
 /* Dialog forms */
 .form { display: flex; flex-direction: column; gap: 16px; }
-.form label, .fieldset legend { font-size: 12px; font-weight: 500; }
+.form label, .fieldset legend { font-size: 13px; font-weight: 500; }
 .form label { display: flex; flex-direction: column; gap: 8px; }
 .form input, .form select, .form textarea { width: 100%; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); border-radius: 7px; padding: 10px 12px; font: inherit; font-weight: 400; }
 .form textarea { min-height: 72px; resize: vertical; }
@@ -54,24 +54,25 @@
 .option input { width: auto; margin-top: 2px; }
 .option.selected { border-color: var(--color-primary); background: var(--color-primary-tint); }
 .option.blocked { cursor: not-allowed; opacity: .7; }
-.optionName { font-size: 12px; font-weight: 600; }
-.optionNote { font-size: 11px; color: var(--color-text-muted); margin-top: 2px; }
-.optionProblem { font-size: 11px; color: var(--color-danger); margin-top: 2px; }
+.optionName { font-size: 13px; font-weight: 600; }
+.optionNote { font-size: 12px; color: var(--color-text-muted); margin-top: 2px; }
+.optionProblem { font-size: 12px; color: var(--color-danger); margin-top: 2px; }
 .formActions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 4px; }
 .split { display: flex; justify-content: space-between; gap: 10px; padding-top: 4px; }
-.facts { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; font-size: 12px; }
+.facts { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; font-size: 13px; }
 .facts dt { color: var(--color-text-muted); }
 .facts dd { margin: 0; font-weight: 500; }
 
 /* Tables */
 .tableWrap { overflow: auto; }
 .table { width: 100%; border-collapse: collapse; text-align: left; }
-.table th { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--color-text-dim); padding: 8px; }
-.table td { padding: 12px 8px; border-top: 1px solid var(--color-border); font-size: 12px; }
+.table th { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--color-text-dim); padding: 8px; }
+.table td { padding: 12px 8px; border-top: 1px solid var(--color-border); font-size: 13px; }
 .muted { color: var(--color-text-muted); }
 
 /* Swap requests */
 .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.tabsBar { padding: 12px 16px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); box-shadow: var(--shadow-card); }
 .list { display: flex; flex-direction: column; gap: 14px; }
 .swapCard { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface-2); }
 .swapHead { display: flex; align-items: flex-start; gap: 12px; }
@@ -89,37 +90,49 @@
 .fail { color: var(--color-danger); }
 .swapFoot { display: flex; align-items: center; gap: 12px; }
 .swapFoot p { flex: 1; }
-.kv { display: flex; justify-content: space-between; font-size: 12px; padding: 8px 0; border-top: 1px solid var(--color-border); }
-.kv:first-of-type { border-top: 0; }
-.summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; font-size: 13px; font-weight: 500; }
-.summary p:first-child { font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 4px; }
-.exchange { display: flex; flex-direction: column; gap: 12px; }
-.exchangeStage { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface-2); }
-.exchangeStageAfter { border-color: var(--color-primary); background: var(--color-primary-tint); }
-.exchangeStageHead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.exchangeStageTitle { font-size: 12px; font-weight: 700; color: var(--color-text); }
-.exchangeStageAfter .exchangeStageTitle { color: var(--color-primary); }
 .back { font-size: 12px; color: var(--color-primary); font-weight: 600; text-decoration: none; }
 
+/* Swap review: one continuous comparison surface with exception-first detail. */
+.reviewCard { padding: 0; overflow: hidden; }
+.reviewHead { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 22px 24px; border-bottom: 1px solid var(--color-border); }
+.reviewTitle { margin: 0; font-size: 20px; font-weight: 650; }
+.reviewMeta { margin-top: 5px; color: var(--color-text-muted); font-size: 13px; }
+.reviewStatus { display: flex; align-items: center; gap: 24px; flex-shrink: 0; }
+.deadline { display: flex; flex-direction: column; gap: 4px; padding-left: 24px; border-left: 1px solid var(--color-border); }
+.deadline span { color: var(--color-text-muted); font-size: 11px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; }
+.deadline strong { font-size: 15px; font-weight: 650; white-space: nowrap; }
+.comparisonWrap { overflow-x: auto; }
+.comparison { width: 100%; min-width: 760px; border-collapse: collapse; table-layout: fixed; text-align: left; }
+.comparison th, .comparison td { padding: 18px 24px; border-bottom: 1px solid var(--color-border); }
+.comparison thead th { padding-top: 12px; padding-bottom: 12px; color: var(--color-text-muted); font-size: 12px; font-weight: 600; }
+.comparison thead th:first-child { width: 28%; }
+.comparison tbody th { font-size: 14px; font-weight: 650; }
+.comparison td { border-left: 1px solid var(--color-border); }
+.comparison .afterCell { background: var(--color-primary-tint); }
+.shiftValue { display: flex; flex-direction: column; gap: 4px; }
+.shiftValue strong { font-size: 15px; font-weight: 650; }
+.shiftValue span { color: var(--color-text-muted); font-size: 13px; }
+.ruleSummary { display: flex; align-items: center; gap: 12px; margin: 20px 24px 0; padding: 12px 16px; border-radius: 9px; background: var(--color-success-tint); color: var(--color-success); font-size: 13px; }
+.ruleSummaryFail { background: var(--color-danger-tint); color: var(--color-danger); }
+.ruleToggle { margin-left: 8px; padding-left: 20px; border-left: 1px solid color-mix(in srgb, currentColor 30%, transparent); color: var(--color-primary); font-size: 12px; font-weight: 650; }
+
 @media (max-width: 1360px) {
-  .stats, .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 760px) {
   .row { flex-direction: column; }
   .side { width: 100%; }
-  .pair, .stats, .summary { grid-template-columns: 1fr; }
-  .exchangeStageHead { align-items: flex-start; flex-direction: column; gap: 2px; }
+  .pair, .stats { grid-template-columns: 1fr; }
   .swapFoot { align-items: flex-start; flex-direction: column; }
+  .reviewHead, .reviewStatus { align-items: flex-start; flex-direction: column; }
+  .reviewStatus { gap: 12px; }
+  .deadline { padding-left: 0; border-left: 0; }
 }
 
 /* Swap decision: rule chips with optional details, then the note and buttons. */
-.ruleChips { display: flex; flex-wrap: wrap; gap: 6px; }
-.rulePass, .ruleFail { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 999px; }
-.rulePass { background: var(--color-success-tint); color: var(--color-success); }
-.ruleFail { background: var(--color-danger-tint); color: var(--color-danger); }
-.ruleList { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; line-height: 1.5; }
+.ruleList { margin: 12px 24px 0; padding: 0 0 0 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; line-height: 1.5; }
 .ruleList b { font-weight: 600; }
-.decision { display: flex; flex-direction: column; gap: 12px; font-size: 12px; }
-.noteInput { width: 100%; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); border-radius: 7px; padding: 10px 12px; font: inherit; resize: vertical; }
+.decision { display: flex; flex-direction: column; gap: 12px; padding: 16px 24px 22px; font-size: 13px; }
+.noteInput { width: 100%; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); border-radius: 7px; padding: 12px 14px; font: inherit; resize: vertical; }
 .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }

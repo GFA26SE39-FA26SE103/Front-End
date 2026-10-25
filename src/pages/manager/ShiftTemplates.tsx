@@ -16,11 +16,11 @@ export default function ShiftTemplates() {
     async (signal) => [...await listShiftTemplates(signal)].sort((a, b) => a.startTime.localeCompare(b.startTime)));
 
   return (
-    <ManagerLayout title="Shift templates" subtitle="Shifts last 4, 6 or 8 hours (BR-33)" actions={<Button onClick={() => setEditing('new')}>New template</Button>}>
+    <ManagerLayout title="Shift templates" subtitle="Reusable 4, 6 or 8-hour shifts" actions={<Button onClick={() => setEditing('new')}>New template</Button>}>
       <div className={s.page}>
         {notice && <p className={s.success} role="status">{notice}</p>}
         <Card>
-          <CardHeader title="Templates" subtitle="The schedule shows one row per active template. Times are locked while someone is scheduled on the template." />
+          <CardHeader title="Templates" />
           {error ? <p className={s.error} role="alert">{error}</p>
             : !templates ? <p className={s.note} role="status">Loading templates…</p>
             : templates.length === 0 ? <p className={s.note}>No shift templates yet.</p>
