@@ -1,4 +1,4 @@
-import { apiFetch } from './client';
+import { ApiError, apiFetch } from './client';
 import type { MapPoint } from './floors';
 export { listFloors, listSupermarkets, listZones } from './floors';
 export type { FloorRecord, MapPoint, SupermarketRecord, ZoneRecord } from './floors';
@@ -110,6 +110,7 @@ export type AiPreviewStatus = {
   purpose?: 'PREVIEW' | 'MONITORING';
   configurationFingerprint?: string | null;
   annotationContext?: string | null;
+  viewerLeaseId?: string | null;
 };
 
 export const listCameras = (floorId: string, signal?: AbortSignal) =>
@@ -164,19 +165,32 @@ export const testCameraConnection = (cameraId: string, signal?: AbortSignal) =>
 export const enableCameraConnection = (cameraId: string, signal?: AbortSignal) =>
   apiFetch<CameraConnection>(`/api/cameras/${cameraId}/connection/enable`, { method: 'POST', signal });
 
-export const startAiPreview = (cameraId: string, signal?: AbortSignal, zoneId?: string) =>
-  apiFetch<AiPreviewStatus>(`/api/cameras/${cameraId}/ai-preview/start${zoneId ? '?zoneId=' + encodeURIComponent(zoneId) : ''}`, { method: 'POST', signal });
+export const startAiPreview = async (cameraId: string, signal?: AbortSignal, zoneId?: string) => {
+  const status = await apiFetch<AiPreviewStatus>(`/api/cameras/${cameraId}/ai-preview/start${zoneId ? '?zoneId=' + encodeURIComponent(zoneId) : ''}`, { method: 'POST', signal });
+  if (!status.viewerLeaseId) throw new ApiError(503, 'AI_SERVICE_INVALID_RESPONSE', 'AI preview did not return a viewer lease.');
+  return status;
+};
 
-export const getAiPreviewStatus = (cameraId: string, signal?: AbortSignal) =>
-  apiFetch<AiPreviewStatus>(`/api/cameras/${cameraId}/ai-preview/status`, { signal });
+export const getAiPreviewStatus = (cameraId: string, viewerLeaseId: string, signal?: AbortSignal) =>
+  apiFetch<AiPreviewStatus>(`/api/cameras/${cameraId}/ai-preview/status`, {
+    signal,
+    headers: { 'X-AI-Viewer-Lease': viewerLeaseId },
+  });
 
 export type SequencedAiFrame = { blob: Blob; frameSequence: number; sessionId: string };
 
-export const getAiPreviewFrame = async (cameraId: string, signal?: AbortSignal, afterSequence = 0, afterSessionId: string | null = null): Promise<SequencedAiFrame | null> => {
+export const getAiPreviewFrame = async (cameraId: string, viewerLeaseId: string, signal?: AbortSignal, afterSequence = 0, afterSessionId: string | null = null): Promise<SequencedAiFrame | null> => {
   const query = new URLSearchParams({ afterSequence: String(afterSequence) });
   if (afterSessionId) query.set('afterSessionId', afterSessionId);
-  return (await apiFetch<SequencedAiFrame | undefined>(`/api/cameras/${cameraId}/ai-preview/frame/next?${query}`, { signal, responseType: 'sequenced-frame' })) ?? null;
+  return (await apiFetch<SequencedAiFrame | undefined>(`/api/cameras/${cameraId}/ai-preview/frame/next?${query}`, {
+    signal,
+    responseType: 'sequenced-frame',
+    headers: { 'X-AI-Viewer-Lease': viewerLeaseId },
+  })) ?? null;
 };
 
-export const stopAiPreview = (cameraId: string) =>
-  apiFetch<AiPreviewStatus>(`/api/cameras/${cameraId}/ai-preview/stop`, { method: 'POST' });
+export const stopAiPreview = (cameraId: string, viewerLeaseId: string) =>
+  apiFetch<AiPreviewStatus>(`/api/cameras/${cameraId}/ai-preview/stop`, {
+    method: 'POST',
+    body: JSON.stringify({ viewerLeaseId }),
+  });

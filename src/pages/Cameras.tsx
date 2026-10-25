@@ -9,7 +9,6 @@ import {
   listFloors,
   listSupermarkets,
   listZones,
-  stopAiPreview,
   testCameraConnection,
   updateCamera,
   type CameraRecord,
@@ -324,13 +323,7 @@ export default function Cameras() {
     setPreviewState('stopped');
     setViewMode(next);
     if (!restart) return;
-    try {
-      if (viewMode === 'ai') await stopAiPreview(camera.id);
-      else await new Promise((resolve) => window.setTimeout(resolve, 0));
-    } catch (error) {
-      setLifecycleError(error instanceof Error ? error.message : 'Could not stop the previous preview.');
-      return;
-    }
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
     setPreviewState(next === 'live' ? 'starting' : 'running');
   };
 

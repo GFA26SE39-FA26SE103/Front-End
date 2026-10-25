@@ -323,6 +323,8 @@ describe('Cameras registration', () => {
 
   it('uses one preview control and prepares the connection before switching view modes', async () => {
     const calls: string[] = [];
+    const stopBodies: unknown[] = [];
+    const viewerLeaseId = '00000000-0000-0000-0000-000000000099';
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = new URL(String(input));
       const path = url.pathname;
@@ -335,9 +337,9 @@ describe('Cameras registration', () => {
       if (path === `/api/cameras/${cameraId}/connection/test`) return json({ cameraId, protocol: 'HTTP', isEnabled: false, lastTestResult: 'SUCCESS', lastTestMessage: 'FRAME_RECEIVED', lastTestedAt: '2026-10-20T09:30:00Z' });
       if (path === `/api/cameras/${cameraId}/connection/enable`) return json({ cameraId, protocol: 'HTTP', isEnabled: true, lastTestResult: 'SUCCESS', lastTestMessage: 'FRAME_RECEIVED', lastTestedAt: '2026-10-20T09:30:00Z' });
       if (path === `/api/cameras/${cameraId}/preview`) return new Response(new Blob(['frame'], { type: 'image/jpeg' }), { headers: { 'Content-Type': 'image/jpeg' } });
-      if (path === `/api/cameras/${cameraId}/ai-preview/start`) return json({ cameraId, state: 'STOPPED', startedAt: null, updatedAt: '2026-10-20T09:30:00Z', frameSequence: 0, errorCode: null, sessionId: 'session-1', purpose: 'PREVIEW' });
-      if (path === `/api/cameras/${cameraId}/ai-preview/status`) return json({ cameraId, state: 'STOPPED', startedAt: null, updatedAt: '2026-10-20T09:30:00Z', frameSequence: 0, errorCode: null, sessionId: 'session-1', purpose: 'PREVIEW' });
-      if (path === `/api/cameras/${cameraId}/ai-preview/stop`) return json({ cameraId, state: 'STOPPED', startedAt: null, updatedAt: '2026-10-20T09:30:00Z', frameSequence: 0, errorCode: null });
+      if (path === `/api/cameras/${cameraId}/ai-preview/start`) return json({ cameraId, state: 'STOPPED', startedAt: null, updatedAt: '2026-10-20T09:30:00Z', frameSequence: 0, errorCode: null, sessionId: 'session-1', purpose: 'PREVIEW', viewerLeaseId });
+      if (path === `/api/cameras/${cameraId}/ai-preview/status`) return json({ cameraId, state: 'STOPPED', startedAt: null, updatedAt: '2026-10-20T09:30:00Z', frameSequence: 0, errorCode: null, sessionId: 'session-1', purpose: 'PREVIEW', viewerLeaseId });
+      if (path === `/api/cameras/${cameraId}/ai-preview/stop`) { stopBodies.push(JSON.parse(String(init?.body))); return json({ cameraId, state: 'STOPPED', startedAt: null, updatedAt: '2026-10-20T09:30:00Z', frameSequence: 0, errorCode: null }); }
       return json({ code: 'UNEXPECTED_REQUEST', path }, 500);
     });
     const user = userEvent.setup();
@@ -362,9 +364,9 @@ describe('Cameras registration', () => {
     expect(screen.queryByAltText('Live camera preview')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Stop preview' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Stop preview' }));
-    expect(await screen.findByRole('button', { name: 'Start preview' })).toBeInTheDocument();
-    await waitFor(() => expect(calls).toContain(`POST /api/cameras/${cameraId}/ai-preview/stop`));
+    await user.click(screen.getByRole('tab', { name: 'Live feed' }));
+    await waitFor(() => expect(calls.filter((call) => call === `POST /api/cameras/${cameraId}/ai-preview/stop`)).toHaveLength(1));
+    expect(stopBodies).toEqual([{ viewerLeaseId }]);
   });
 
   it('shows the connection error code with retry and edit actions', async () => {

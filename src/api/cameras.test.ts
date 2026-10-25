@@ -2,10 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { saveSession } from '../auth/session';
 import {
   getAiPreviewFrame,
+  getAiPreviewStatus,
   getCameraPreview,
   prepareCameraPlayback,
   removeCameraMapping,
   saveCameraMapping,
+  startAiPreview,
+  stopAiPreview,
   updateCamera,
   uploadRecordedVideo,
   type CreateCameraRequest,
@@ -84,12 +87,13 @@ describe('camera API', () => {
 
   it('loads only a new tracked frame and handles no-content replies', async () => {
     const sessionId = '00000000-0000-0000-0000-000000000001';
+    const viewerLeaseId = '00000000-0000-0000-0000-000000000099';
     const fetchMock = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response('jpeg', { headers: { 'Content-Type': 'image/jpeg', 'X-Frame-Sequence': '12', 'X-Session-Id': sessionId } }))
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
 
-    const first = await getAiPreviewFrame('camera-1', undefined, 11, sessionId);
-    const unchanged = await getAiPreviewFrame('camera-1', undefined, 12, sessionId);
+    const first = await getAiPreviewFrame('camera-1', viewerLeaseId, undefined, 11, sessionId);
+    const unchanged = await getAiPreviewFrame('camera-1', viewerLeaseId, undefined, 12, sessionId);
 
     expect(first?.frameSequence).toBe(12);
     expect(first?.sessionId).toBe(sessionId);
@@ -97,6 +101,32 @@ describe('camera API', () => {
     expect(unchanged).toBeNull();
     expect(fetchMock.mock.calls[0][0]).toBe(`http://localhost:5080/api/cameras/camera-1/ai-preview/frame/next?afterSequence=11&afterSessionId=${sessionId}`);
     expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get('Authorization')).toBe('Bearer jwt-token');
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get('X-AI-Viewer-Lease')).toBe(viewerLeaseId);
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain(viewerLeaseId);
+  });
+
+  it('passes viewer leases through status and release contracts', async () => {
+    const viewerLeaseId = '00000000-0000-0000-0000-000000000099';
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response(JSON.stringify({ cameraId: 'camera-1', state: 'LIVE', viewerLeaseId }), { headers: { 'Content-Type': 'application/json' } }),
+    );
+
+    await getAiPreviewStatus('camera-1', viewerLeaseId);
+    await stopAiPreview('camera-1', viewerLeaseId);
+
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get('X-AI-Viewer-Lease')).toBe(viewerLeaseId);
+    expect(fetchMock.mock.calls[1][1]?.method).toBe('POST');
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({ viewerLeaseId });
+  });
+
+  it('rejects a successful start response without a viewer lease', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ cameraId: 'camera-1', state: 'LIVE' }), { headers: { 'Content-Type': 'application/json' } }),
+    );
+
+    await expect(startAiPreview('camera-1')).rejects.toMatchObject({
+      code: 'AI_SERVICE_INVALID_RESPONSE',
+    });
   });
 
   it('saves and removes a camera-zone ROI mapping', async () => {

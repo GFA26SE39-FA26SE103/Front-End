@@ -22,14 +22,17 @@ const frame = vi.mocked(getAiPreviewFrame);
 const stop = vi.mocked(stopAiPreview);
 const sessionA = '00000000-0000-0000-0000-000000000001';
 const sessionB = '00000000-0000-0000-0000-000000000002';
+const leaseA = '00000000-0000-0000-0000-0000000000a1';
+const leaseB = '00000000-0000-0000-0000-0000000000b2';
 
-const live = (cameraId = 'camera-a') => ({
+const live = (cameraId = 'camera-a', viewerLeaseId = leaseA) => ({
   cameraId,
   state: 'LIVE' as const,
   startedAt: '2026-10-01T00:00:00Z',
   updatedAt: '2026-10-01T00:00:01Z',
   frameSequence: 1,
   errorCode: null,
+  viewerLeaseId,
 });
 
 describe('AnnotatedPreview', () => {
@@ -78,8 +81,8 @@ describe('AnnotatedPreview', () => {
   it('requests the next sequence without redrawing a duplicate frame', async () => {
     render(<AnnotatedPreview cameraId="camera-a" enabled pollInterval={5} />);
     await waitFor(() => expect(frame.mock.calls.length).toBeGreaterThanOrEqual(2));
-    expect(frame.mock.calls[1][2]).toBe(1);
-    expect(frame.mock.calls[1][3]).toBe(sessionA);
+    expect(frame.mock.calls[1][3]).toBe(1);
+    expect(frame.mock.calls[1][4]).toBe(sessionA);
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
   });
 
@@ -139,7 +142,7 @@ describe('AnnotatedPreview', () => {
 
   it('aborts requests and revokes the final URL on unmount', async () => {
     let observedSignal: AbortSignal | undefined;
-    frame.mockImplementation(async (_cameraId, signal) => {
+    frame.mockImplementation(async (_cameraId, _viewerLeaseId, signal) => {
       observedSignal = signal;
       return { blob: new Blob(['jpeg'], { type: 'image/jpeg' }), frameSequence: 1, sessionId: sessionA };
     });
@@ -150,15 +153,15 @@ describe('AnnotatedPreview', () => {
 
     expect(observedSignal?.aborted).toBe(true);
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:frame-1');
-    await waitFor(() => expect(stop).toHaveBeenCalledWith('camera-a'));
+    await waitFor(() => expect(stop).toHaveBeenCalledWith('camera-a', leaseA));
   });
 
   it('stops the old camera before switching selection', async () => {
     const calls: string[] = [];
     let finishStop!: () => void;
     start.mockImplementation(async (id) => { calls.push(`start:${id}`); return live(id); });
-    stop.mockImplementation((id) => {
-      calls.push(`stop:${id}`);
+    stop.mockImplementation((id, lease) => {
+      calls.push(`stop:${id}:${lease}`);
       return new Promise((resolve) => {
         finishStop = () => resolve({ ...live(id), state: 'STOPPED' });
       });
@@ -167,12 +170,12 @@ describe('AnnotatedPreview', () => {
     await waitFor(() => expect(calls).toContain('start:camera-a'));
 
     view.rerender(<AnnotatedPreview cameraId="camera-b" enabled pollInterval={20} />);
-    await waitFor(() => expect(calls).toContain('stop:camera-a'));
+    await waitFor(() => expect(calls).toContain(`stop:camera-a:${leaseA}`));
     expect(calls).not.toContain('start:camera-b');
     finishStop();
     await waitFor(() => expect(calls).toContain('start:camera-b'));
 
-    expect(calls.indexOf('stop:camera-a')).toBeLessThan(calls.indexOf('start:camera-b'));
+    expect(calls.indexOf(`stop:camera-a:${leaseA}`)).toBeLessThan(calls.indexOf('start:camera-b'));
   });
 
   it('discards a frame that resolves after preview cleanup', async () => {
@@ -184,7 +187,7 @@ describe('AnnotatedPreview', () => {
     view.rerender(<AnnotatedPreview cameraId="camera-a" enabled={false} pollInterval={20} />);
     finishFrame({ blob: new Blob(['late-jpeg'], { type: 'image/jpeg' }), frameSequence: 1, sessionId: sessionA });
 
-    await waitFor(() => expect(stop).toHaveBeenCalledWith('camera-a'));
+    await waitFor(() => expect(stop).toHaveBeenCalledWith('camera-a', leaseA));
     expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
 
@@ -200,7 +203,44 @@ describe('AnnotatedPreview', () => {
     expect(stop).not.toHaveBeenCalled();
     finishStart();
 
-    await waitFor(() => expect(stop).toHaveBeenCalledWith('camera-a'));
+    await waitFor(() => expect(stop).toHaveBeenCalledWith('camera-a', leaseA));
+  });
+
+  it('isolates two viewers of the same camera and releases only the unmounted lease', async () => {
+    start.mockResolvedValueOnce(live('camera-a', leaseA)).mockResolvedValueOnce(live('camera-a', leaseB));
+    status.mockImplementation(async (_cameraId, viewerLeaseId) => live('camera-a', viewerLeaseId));
+    const first = render(<AnnotatedPreview cameraId="camera-a" enabled pollInterval={5} />);
+    render(<AnnotatedPreview cameraId="camera-a" enabled pollInterval={5} />);
+
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(status.mock.calls.some((call) => call[1] === leaseB)).toBe(true));
+    first.unmount();
+
+    await waitFor(() => expect(stop).toHaveBeenCalledWith('camera-a', leaseA));
+    expect(stop).not.toHaveBeenCalledWith('camera-a', leaseB);
+    await waitFor(() => expect(status.mock.calls.filter((call) => call[1] === leaseB).length).toBeGreaterThan(1));
+  });
+
+  it('reattaches once after viewer lease expiry and resets frame generation', async () => {
+    start.mockResolvedValueOnce(live('camera-a', leaseA)).mockResolvedValueOnce(live('camera-a', leaseB));
+    status.mockRejectedValueOnce(new ApiError(409, 'AI_VIEWER_LEASE_EXPIRED', 'Expired'))
+      .mockResolvedValue(live('camera-a', leaseB));
+
+    render(<AnnotatedPreview cameraId="camera-a" enabled pollInterval={5} />);
+
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(frame.mock.calls.some((call) => call[1] === leaseB && call[3] === 0 && call[4] === null)).toBe(true));
+  });
+
+  it('retries monitoring start pending without inventing a lease', async () => {
+    start.mockRejectedValueOnce(new ApiError(409, 'AI_MONITORING_START_PENDING', 'Pending'))
+      .mockResolvedValueOnce(live('camera-a', leaseA));
+
+    render(<AnnotatedPreview cameraId="camera-a" enabled pollInterval={5} />);
+
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('img', { name: /tracked preview/i })).toBeInTheDocument();
+    expect(stop).not.toHaveBeenCalledWith('camera-a', expect.anything());
   });
 
   it('renders unauthorized and no-frame states', async () => {
