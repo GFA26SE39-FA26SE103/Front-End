@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { approveSwap, getSwapRequest, listSwapRequests, rejectSwap, type SwapRequest, type SwapShift } from '../../api/planning';
+import { Icon } from '../../components/Icon';
 import { ManagerLayout } from '../../components/ManagerLayout';
 import { Badge, Button, Card, CardHeader } from '../../components/ui';
 import { dateTime, longDayLabel, problem, range } from './dates';
@@ -47,14 +48,17 @@ function ShiftBox({ label, shift, after }: { label: string; shift: SwapShift; af
   );
 }
 
-function ShiftPlaceholder({ label, title, detail, after }: { label: string; title: string; detail: string; after?: boolean }) {
+function ShiftValue({ shift }: { shift: SwapShift }) {
   return (
-    <div className={`${s.shiftBox} ${after ? s.after : ''}`}>
-      <span className={s.boxLabel}>{label}</span>
-      <span className={s.boxMain}>{title}</span>
-      <span className={s.muted}>{detail}</span>
+    <div className={s.shiftValue}>
+      <strong>{shiftLine(shift)}</strong>
+      <span>{range(shift.startsAt, shift.endsAt)} · {zonesOf(shift)}</span>
     </div>
   );
+}
+
+function EmptyShiftValue({ title, detail }: { title: string; detail: string }) {
+  return <div className={s.shiftValue}><strong>{title}</strong><span>{detail}</span></div>;
 }
 
 export function SwapRequests() {
@@ -66,11 +70,10 @@ export function SwapRequests() {
   const count = (key: string) => all.filter((r) => key.split(',').includes(r.status)).length;
 
   return (
-    <ManagerLayout title="Shift swap requests" subtitle="Colleague first, then you"
+    <ManagerLayout title="Shift swap requests" subtitle="Review and decide accepted requests"
       actions={<Button variant="secondary" onClick={() => setReload((n) => n + 1)}>Refresh</Button>}>
-      <div className={s.row}>
-        <div className={`${s.page} ${s.grow}`}>
-          <Card>
+      <div className={s.page}>
+          <div className={s.tabsBar}>
             <div className={s.tabs} role="tablist" aria-label="Request status">
               {TABS.map((t) => (
                 <Button key={t.key} role="tab" aria-selected={tab === t.key} variant={tab === t.key ? 'primary' : 'secondary'} onClick={() => setTab(t.key)}>
@@ -78,12 +81,12 @@ export function SwapRequests() {
                 </Button>
               ))}
             </div>
-          </Card>
+          </div>
           <Card>
             <CardHeader title={tab === 'PENDING_MANAGER' ? 'Pending review' : TABS.find((t) => t.key === tab)?.label ?? ''}
               subtitle={tab === 'PENDING_MANAGER'
-                ? 'Only requests the colleague has accepted appear here. The schedule changes only after you approve.'
-                : 'Decided, declined, cancelled and expired requests stay here for audit.'} />
+                ? undefined
+                : 'Decided and closed requests'} />
             {error ? <p className={s.error} role="alert">{error}</p>
               : !requests ? <p className={s.note} role="status">Loading requests…</p>
               : requests.length === 0 ? <p className={s.note}>{tab === 'PENDING_MANAGER' ? 'Nothing to approve right now.' : 'No requests here.'}</p>
@@ -93,9 +96,9 @@ export function SwapRequests() {
                     <article key={r.swapRequestId} className={s.swapCard} aria-label={title(r)}>
                       <div className={s.swapHead}>
                         <div className={s.grow}>
-                          <div className={s.swapTitle}>{title(r)}</div>
+                          <div className={s.swapTitle}>{r.requester.fullName} / {r.target?.fullName ?? 'Unassigned colleague'}</div>
                           <div className={s.muted}>
-                            {r.targetRespondedAt ? `${r.target?.fullName} accepted ${dateTime(r.targetRespondedAt)}` : `Sent ${dateTime(r.createdAt)}`}
+                            {r.targetRespondedAt ? `Accepted ${dateTime(r.targetRespondedAt)}` : `Sent ${dateTime(r.createdAt)}`}
                             {r.reasonCode ? ` · ${REASONS[r.reasonCode] ?? r.reasonCode}` : ''}
                           </div>
                         </div>
@@ -109,8 +112,8 @@ export function SwapRequests() {
                       </div>
                       <div className={s.swapFoot}>
                         <p className={s.muted}>
-                          {r.checks.length > 0 && (r.checks.every((c) => c.passed) ? 'All rule checks pass. ' : `${r.checks.filter((c) => !c.passed).length} rule check(s) fail. `)}
-                          {r.expiresAt && r.status === 'PENDING_MANAGER' ? `Expires ${dateTime(r.expiresAt)} if not decided.` : ''}
+                          {r.checks.length > 0 && (r.checks.every((c) => c.passed) ? `${new Set(r.checks.map((c) => c.code)).size}/${new Set(r.checks.map((c) => c.code)).size} checks passed` : `${r.checks.filter((c) => !c.passed).length} check(s) need attention`)}
+                          {r.expiresAt && r.status === 'PENDING_MANAGER' ? ` · Decide by ${dateTime(r.expiresAt)}` : ''}
                           {r.decidedAt ? `Decided ${dateTime(r.decidedAt)}${r.decidedBy ? ` by ${r.decidedBy.fullName}` : ''}.` : ''}
                         </p>
                         <Link to={`/manager/swaps/${r.swapRequestId}`} className={s.back}>{r.canDecide ? 'Review request' : 'View details'}</Link>
@@ -120,19 +123,6 @@ export function SwapRequests() {
                 </div>
               )}
           </Card>
-        </div>
-        <div className={s.side}>
-          <Card>
-            <CardHeader title="All requests" />
-            <div>
-              {TABS.map((t) => <div key={t.key} className={s.kv}><span className={s.muted}>{t.label}</span><b>{count(t.key)}</b></div>)}
-            </div>
-          </Card>
-          <p className={s.info}>
-            <b>Colleague first, then Manager.</b> Staff pick an eligible colleague, the colleague accepts, then you approve.
-            A request expires 24 hours before the earliest shift it touches; after that nothing changes.
-          </p>
-        </div>
       </div>
     </ManagerLayout>
   );
@@ -183,60 +173,50 @@ export function SwapRequestDetail() {
           : (
             <>
               {notice && <p className={s.success} role="status">{notice}</p>}
-              <Card>
-                <CardHeader title="Request summary"><Badge tone={statusOf(r).tone}>{statusOf(r).label}</Badge></CardHeader>
-                <div className={s.summary}>
-                  <div><p>Requested by</p><p>{r.requester.fullName}</p></div>
-                  <div><p>Submitted</p><p>{dateTime(r.createdAt)}</p></div>
-                  <div><p>Reason</p><p>{r.reasonCode ? REASONS[r.reasonCode] ?? r.reasonCode : '—'}{r.note ? ` · “${r.note}”` : ''}</p></div>
-                  <div><p>Decide before</p><p>{r.expiresAt ? dateTime(r.expiresAt) : '—'}</p></div>
+              <Card className={s.reviewCard}>
+                <div className={s.reviewHead}>
+                  <div>
+                    <h2 className={s.reviewTitle}>{r.requester.fullName} ↔ {r.target?.fullName ?? 'Covering staff'}</h2>
+                    <p className={s.reviewMeta}>
+                      {r.reasonCode ? REASONS[r.reasonCode] ?? r.reasonCode : 'No reason'} · Submitted {dateTime(r.createdAt)}
+                      {r.note ? ` · “${r.note}”` : ''}
+                    </p>
+                  </div>
+                  <div className={s.reviewStatus}>
+                    <Badge tone={statusOf(r).tone}>{statusOf(r).label}</Badge>
+                    <div className={s.deadline}><span>Decide before</span><strong>{r.expiresAt ? dateTime(r.expiresAt) : '—'}</strong></div>
+                  </div>
                 </div>
-              </Card>
-              <Card>
-                <CardHeader title={`${r.type === 'COVER' ? 'Cover' : 'Two-way exchange'} · ${r.targetRespondedAt ? `accepted by ${r.target?.fullName}` : 'not accepted yet'}`}
-                  subtitle={r.type === 'COVER'
-                    ? `${r.target?.fullName} takes ${r.requester.fullName}'s shift after approval.`
-                    : 'Both assignments change together only after approval.'} />
-                <div className={s.exchange} aria-label="Assignment comparison">
-                  <section className={s.exchangeStage} aria-label="Current assignments">
-                    <div className={s.exchangeStageHead}>
-                      <span className={s.exchangeStageTitle}>Current assignments</span>
-                      <span className={s.muted}>Before manager approval</span>
-                    </div>
-                    <div className={s.pair}>
-                      <ShiftBox label={r.requester.fullName} shift={r.requesterShift} />
-                      {r.targetShift
-                        ? <ShiftBox label={r.target?.fullName ?? ''} shift={r.targetShift} />
-                        : <ShiftPlaceholder label={r.target?.fullName ?? 'Covering staff'} title="No shift exchanged" detail="Will take the requested shift" />}
-                    </div>
-                  </section>
-                  <section className={`${s.exchangeStage} ${s.exchangeStageAfter}`} aria-label="Assignments after approval">
-                    <div className={s.exchangeStageHead}>
-                      <span className={s.exchangeStageTitle}>After approval</span>
-                      <span className={s.muted}>Both changes are applied together</span>
-                    </div>
-                    <div className={s.pair}>
-                      {r.targetShift
-                        ? <ShiftBox label={r.requester.fullName} shift={r.targetShift} after />
-                        : <ShiftPlaceholder label={r.requester.fullName} title="Shift covered" detail={`${r.target?.fullName ?? 'Covering staff'} takes this assignment`} after />}
-                      <ShiftBox label={r.target?.fullName ?? ''} shift={r.requesterShift} after />
-                    </div>
-                  </section>
+                <div className={s.comparisonWrap}>
+                  <table className={s.comparison} aria-label="Assignment comparison">
+                    <thead><tr><th>Staff</th><th>Current shift</th><th>After approval</th></tr></thead>
+                    <tbody>
+                      <tr>
+                        <th scope="row">{r.requester.fullName}</th>
+                        <td><ShiftValue shift={r.requesterShift} /></td>
+                        <td className={s.afterCell}>{r.targetShift
+                          ? <ShiftValue shift={r.targetShift} />
+                          : <EmptyShiftValue title="Shift covered" detail={`${r.target?.fullName ?? 'Covering staff'} takes this assignment`} />}</td>
+                      </tr>
+                      <tr>
+                        <th scope="row">{r.target?.fullName ?? 'Covering staff'}</th>
+                        <td>{r.targetShift
+                          ? <ShiftValue shift={r.targetShift} />
+                          : <EmptyShiftValue title="No exchanged shift" detail="Cover request" />}</td>
+                        <td className={s.afterCell}><ShiftValue shift={r.requesterShift} /></td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
-              </Card>
-              <Card>
-                <CardHeader title="Decision" subtitle={r.canDecide ? 'Rules are checked again when you approve.' : undefined}>
-                  {r.checks.length > 0 && (
-                    <Button variant="secondary" aria-expanded={showChecks} onClick={() => setShowChecks((v) => !v)}>
-                      {showChecks ? 'Hide rule details' : 'Show rule details'}
-                    </Button>
-                  )}
-                </CardHeader>
                 {rules.length > 0 && (
-                  <div className={s.ruleChips} aria-label="Business rule checks">
-                    {rules.map((rule) => (
-                      <span key={rule.code} className={rule.passed ? s.rulePass : s.ruleFail}>{rule.passed ? '✓' : '✕'} {CHECK_NAMES[rule.code] ?? rule.code}</span>
-                    ))}
+                  <div className={`${s.ruleSummary} ${failing.length > 0 ? s.ruleSummaryFail : ''}`} aria-label="Business rule checks">
+                    {failing.length === 0 && <Icon name="check-primary" size={18} />}
+                    <strong>{failing.length > 0
+                      ? `${failing.length} check${failing.length === 1 ? ' needs' : 's need'} attention`
+                      : `${rules.length}/${rules.length} checks passed`}</strong>
+                    <button type="button" className={s.ruleToggle} aria-expanded={showChecks} onClick={() => setShowChecks((v) => !v)}>
+                      {showChecks ? 'Hide checks' : 'View checks'}
+                    </button>
                   </div>
                 )}
                 {(showChecks || failing.length > 0) && r.checks.length > 0 && (
@@ -249,11 +229,6 @@ export function SwapRequestDetail() {
                 )}
                 {r.canDecide ? (
                   <form className={s.decision} onSubmit={(e) => { e.preventDefault(); void decide(true); }}>
-                    <p className={failing.length === 0 ? s.pass : s.fail}>
-                      {failing.length === 0
-                        ? `All ${rules.length} rules pass${r.expiresAt ? ` · decide before ${dateTime(r.expiresAt)}` : ''}.`
-                        : `${failing.length === 1 ? '1 rule fails' : `${failing.length} rules fail`}. Approving will be refused; reject with a reason.`}
-                    </p>
                     <label className={s.srOnly} htmlFor="decision-note">Decision note (required when rejecting)</label>
                     <textarea id="decision-note" className={s.noteInput} rows={2} value={note} onChange={(e) => setNote(e.target.value)}
                       placeholder="Decision note · required when rejecting" disabled={busy} />

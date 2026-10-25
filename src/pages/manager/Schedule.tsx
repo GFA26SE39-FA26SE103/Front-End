@@ -60,7 +60,7 @@ export default function Schedule() {
   );
 
   return (
-    <ManagerLayout title="Schedule" subtitle="Plan shifts by zone, then publish them to Staff" actions={actions}>
+    <ManagerLayout title="Schedule" subtitle="Plan and publish weekly shifts" actions={actions}>
       <div className={s.page}>
         {notice && <p className={s.success} role="status">{notice}</p>}
         {loadError ? (
@@ -79,7 +79,7 @@ export default function Schedule() {
               <p className={s.info}>{data.pendingSwaps === 1 ? '1 swap request waits' : `${data.pendingSwaps} swap requests wait`} for your decision. <Link className={s.back} to="/manager/swaps">Review swaps</Link></p>
             )}
             <Card>
-              <CardHeader title="Week plan" subtitle="Dashed cards are drafts. Publishing is blocked while a zone is below its minimum staff." />
+              <CardHeader title="Week plan" />
               {rows.length === 0 ? (
                 <p className={s.note}>No active shift templates. <Link className={s.back} to="/manager/shifts">Create shift templates</Link> first.</p>
               ) : (
@@ -140,8 +140,8 @@ export default function Schedule() {
                 </div>
               )}
               <div className={s.legend}>
-                <span>Zone chips: planned / minimum staff</span>
-                <span>Weekly limit 48 h (Mon–Sun) · no overlapping shifts · no shifts during leave</span>
+                <span>Dashed = draft</span>
+                <span>Zone chips = planned / minimum</span>
               </div>
             </Card>
           </>
