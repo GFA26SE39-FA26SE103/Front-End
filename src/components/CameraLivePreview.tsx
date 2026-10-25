@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiError } from '../api/client';
-import { getCameraPreview } from '../api/cameras';
+import { getCameraPreview, prepareCameraPlayback } from '../api/cameras';
 import { loadSession } from '../auth/session';
 import { appTokenEnabledForWebRtc } from '../config/webrtc';
 import s from './AnnotatedPreview.module.css';
@@ -17,8 +17,28 @@ export type CameraLivePreviewProps = {
 
 /** Uses WebRTC for configured RTSP cameras and preserves JPEG polling as a fallback. */
 export function CameraLivePreview(props: CameraLivePreviewProps) {
-  return props.whepUrl
-    ? <WebRtcLivePreview {...props} whepUrl={props.whepUrl} />
+  const [backendWhepUrl, setBackendWhepUrl] = useState<string | null | undefined>();
+
+  useEffect(() => {
+    if (!props.enabled || props.whepUrl) return;
+    const controller = new AbortController();
+    void prepareCameraPlayback(props.cameraId, controller.signal)
+      .then(playback => {
+        if (!controller.signal.aborted) setBackendWhepUrl(playback.transport === 'WEBRTC' ? playback.url : null);
+      })
+      .catch(() => {
+        // HTTP/FILE sources and older deployments keep the bounded JPEG fallback.
+        if (!controller.signal.aborted) setBackendWhepUrl(null);
+      });
+    return () => controller.abort();
+  }, [props.cameraId, props.enabled, props.whepUrl]);
+
+  const resolvedWhepUrl = props.whepUrl ?? backendWhepUrl;
+  if (props.enabled && resolvedWhepUrl === undefined) {
+    return <div className={s.preview} aria-live="polite"><div className={s.state}>Connecting to camera…</div></div>;
+  }
+  return resolvedWhepUrl
+    ? <WebRtcLivePreview {...props} whepUrl={resolvedWhepUrl} />
     : <PolledLivePreview {...props} />;
 }
 

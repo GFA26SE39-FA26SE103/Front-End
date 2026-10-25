@@ -3,6 +3,7 @@ import { saveSession } from '../auth/session';
 import {
   getAiPreviewFrame,
   getCameraPreview,
+  prepareCameraPlayback,
   removeCameraMapping,
   saveCameraMapping,
   updateCamera,
@@ -61,6 +62,24 @@ describe('camera API', () => {
 
     expect(frame).toMatchObject({ size: 5, type: 'image/jpeg' });
     expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:5080/api/cameras/camera-1/preview');
+  });
+
+  it('prepares dynamic WebRTC playback through the backend', async () => {
+    const playback = {
+      cameraId: 'camera-1',
+      transport: 'WEBRTC' as const,
+      url: 'https://stream.example.test/camera-1/whep',
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify(playback), { headers: { 'Content-Type': 'application/json' } }),
+    );
+
+    await expect(prepareCameraPlayback('camera-1')).resolves.toEqual(playback);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('http://localhost:5080/api/cameras/camera-1/playback');
+    expect(init?.method).toBe('POST');
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer jwt-token');
   });
 
   it('loads only a new tracked frame and handles no-content replies', async () => {
