@@ -62,7 +62,7 @@ Verification on 2026-10-03: `npm test -- --run` passed **100 tests in 16 files**
 | --- | --- | --- |
 | Floor / zone in the default store | Store Layout creates/edits floor name and number in a dialog; loads saved floors/zones, uploads floor plans and saves zone polygons, color and physical area; dashboard links select the target floor/camera | Store is a single seeded default, with no create/select flow |
 | Register & configure camera | Real registry, creation, live HTTP configuration and MP4 upload | Other live protocols are backend capabilities, not options in this form |
-| Test & preview | Real test/enable and annotated YOLO + ByteTrack frames in React | Preview is a controlled test, not monitoring activation |
+| Test & preview | Real test/enable and annotated YOLO + ByteTrack frames in React; each mounted viewer owns/releases its own lease | Preview is a controlled test, not monitoring activation |
 | Map camera to zone | Store Layout placement + camera-frame ROI drawing/editing/saving through same-floor N:M mapping API; links to configure the mapped zone | Cameras mini floor plan still uses sample geometry |
 | Configure monitoring rule | AI Config loads real zones/catalog; saves per-zone confidence, incident/rule thresholds/units/timing/enabled to SQL Draft | Incident Types admin screen is still mock; checkout counter/composite definition is pending |
 | Activate & health | AI Config has an explicit activation banner, reviews saved config/camera/source/ROI/rules and activates/deactivates via BE; DRAFT/INACTIVE deletion requires confirmation and saved version; Dashboard reads saved setup/readiness/health from the ADMIN overview API, links to the target configuration and supports an explicit health check | System Health screen is still mock; health-event Investigation/Resolve UI and continuous measurements/incident runtime (MF-02) remain separate work |
@@ -86,12 +86,14 @@ Start native AI, ASP.NET and React; see backend/AI-service READMEs. Backend need
 1. Ensure the default store is seeded, then use **Store Layout → Create floor** if no floor exists. Store Layout loads these records and saves floor plans, zone edits and camera placement through the APIs. **Edit floor** changes its name/number while retaining the current map, zones and cameras. Duplicate floor numbers show an error and retain the form; Cancel, close and Escape discard the input. Finish existing camera/zone/ROI edits before creating or editing floors.
 2. **Cameras → Add camera → Uploaded video (test source)**, fill floor/code/name/dates, then **Save camera**. No phone URL is required. Or select an existing ACTIVE camera → **Upload video**.
 3. Choose a non-empty MP4, maximum 200 MB → **Save video source**. Backend validates/decode-checks it and configures RECORDED/FILE. Old AI session is stopped; credentials/test/enabled flag are reset. Deactivate monitoring first if this camera is mapped to an ACTIVE configuration.
-4. **Test & enable → Start AI preview**. React displays person boxes and camera-local ByteTrack IDs. Only the newest annotated JPEG is polled; not every processed frame is displayed.
-5. At EOF, **Video completed** appears and the final frame remains. **Stop AI preview → Start AI preview** replays with a fresh tracker. Switching cameras/leaving stops the old preview.
+4. **Test & enable → Start AI preview**. React displays person boxes and camera-local ByteTrack IDs. Only the newest annotated JPEG is polled; not every processed frame is displayed. Multiple authenticated browser viewers may share the same camera worker; each viewer releases only its own lease, so closing one preview does not interrupt the others.
+5. At EOF, **Video completed** appears and the final frame remains. Releasing the final preview-only viewer allows a later Start to replay with a fresh tracker. Switching cameras/leaving releases only that mounted viewer.
 
 Upload replaces the source, not camera identity or zone mappings. Review the ROI if the scene changes. Restore live input with **Configure connection**, then test again. Upload is a controlled fallback/demo, not incident creation or full MF-01 completion.
 
 API: `POST /api/cameras/{cameraId}/recorded-video`, multipart `file`, ADMIN JWT. Browser sets the multipart boundary; React never calls Python or the phone directly.
+
+AI preview capacity is two concurrent camera workers, not two viewers. Each camera worker has independent YOLO + ByteTrack state. Track IDs are transient and camera/session-local; the UI must not correlate, deduplicate or persist a person across cameras. The Python lease registry is process-local and therefore runs with one Uvicorn worker. A stale lease triggers one controlled reattach generation; monitoring-start-pending uses bounded Start retries rather than a competing worker.
 
 ## Configure monitoring after AI preview
 
