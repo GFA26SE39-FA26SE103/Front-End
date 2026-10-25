@@ -145,14 +145,16 @@ describe('Manager console', () => {
     routes['POST /api/swap-requests/sw-1/reject'] = (call) => json({ ...request, status: 'REJECTED', canDecide: false, decisionNote: call.body!.note, decidedAt: '2026-10-20T05:00:00Z' });
     show('/manager/swaps/sw-1', <SwapRequestDetail />, '/manager/swaps/:swapRequestId');
 
-    expect(await screen.findByText('Request summary')).toBeInTheDocument();
-    expect(screen.getAllByText('Thảo').length).toBeGreaterThan(0);
-    const currentAssignments = screen.getByRole('region', { name: 'Current assignments' });
-    const afterApproval = screen.getByRole('region', { name: 'Assignments after approval' });
-    expect(within(currentAssignments).getAllByText(/Evening/)).toHaveLength(2);
-    expect(within(afterApproval).getAllByText(/Evening/)).toHaveLength(2);
+    expect(await screen.findByRole('heading', { name: 'Thảo ↔ Minh Đức' })).toBeInTheDocument();
+    const comparison = screen.getByRole('table', { name: 'Assignment comparison' });
+    const rows = within(comparison).getAllByRole('row');
+    expect(rows).toHaveLength(3);
+    expect(within(rows[1]).getByRole('rowheader', { name: 'Thảo' })).toBeInTheDocument();
+    expect(within(rows[1]).getAllByText(/Evening/)).toHaveLength(2);
+    expect(within(rows[2]).getByRole('rowheader', { name: 'Minh Đức' })).toBeInTheDocument();
+    expect(within(rows[2]).getAllByText(/Evening/)).toHaveLength(2);
     expect(screen.getByText(/Minh Đức would work 50 h/)).toBeInTheDocument();
-    expect(screen.getByText(/1 rule fails/)).toBeInTheDocument();
+    expect(screen.getByText('1 check needs attention')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Reject request' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Write a reason before rejecting');

@@ -176,7 +176,7 @@ export function SwapRequestDetail() {
               <Card className={s.reviewCard}>
                 <div className={s.reviewHead}>
                   <div>
-                    <h2 className={s.reviewTitle}>{r.requester.fullName} / {r.target?.fullName ?? 'Covering staff'}</h2>
+                    <h2 className={s.reviewTitle}>{r.requester.fullName} ↔ {r.target?.fullName ?? 'Covering staff'}</h2>
                     <p className={s.reviewMeta}>
                       {r.reasonCode ? REASONS[r.reasonCode] ?? r.reasonCode : 'No reason'} · Submitted {dateTime(r.createdAt)}
                       {r.note ? ` · “${r.note}”` : ''}
@@ -211,7 +211,9 @@ export function SwapRequestDetail() {
                 {rules.length > 0 && (
                   <div className={`${s.ruleSummary} ${failing.length > 0 ? s.ruleSummaryFail : ''}`} aria-label="Business rule checks">
                     {failing.length === 0 && <Icon name="check-primary" size={18} />}
-                    <strong>{failing.length > 0 ? `${failing.length} check${failing.length === 1 ? '' : 's'} need attention` : `${rules.length}/${rules.length} checks passed`}</strong>
+                    <strong>{failing.length > 0
+                      ? `${failing.length} check${failing.length === 1 ? ' needs' : 's need'} attention`
+                      : `${rules.length}/${rules.length} checks passed`}</strong>
                     <button type="button" className={s.ruleToggle} aria-expanded={showChecks} onClick={() => setShowChecks((v) => !v)}>
                       {showChecks ? 'Hide checks' : 'View checks'}
                     </button>
