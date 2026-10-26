@@ -192,13 +192,17 @@ describe('Manager console', () => {
     expect(screen.queryByRole('button', { name: 'Approve swap' })).not.toBeInTheDocument();
   });
 
-  it('only accepts 4, 6 or 8 hour shift templates', async () => {
+  it('uses shift setup language and only accepts 4, 6 or 8 hour shifts', async () => {
     routes['GET /api/shifts'] = () => json([morning]);
     routes['POST /api/shifts'] = (call) => json(template('t-new', String(call.body!.name), String(call.body!.startTime), String(call.body!.endTime)));
     show('/manager/shifts', <ShiftTemplates />);
 
-    await userEvent.click(await screen.findByRole('button', { name: 'New template' }));
+    expect(await screen.findByRole('heading', { name: 'Shift setup', level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Shift setup' })).toHaveAttribute('href', '/manager/shifts');
+    expect(screen.getByRole('heading', { name: 'Shifts', level: 2 })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'New shift' }));
     const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('heading', { name: 'New shift' })).toBeInTheDocument();
     await userEvent.type(within(dialog).getByLabelText('Name'), 'Night');
     const [start, end] = [within(dialog).getByLabelText('Start'), within(dialog).getByLabelText('End')];
     await userEvent.clear(start);
@@ -206,13 +210,13 @@ describe('Manager console', () => {
     await userEvent.clear(end);
     await userEvent.type(end, '03:00');
     expect(within(dialog).getByText(/5 hours, ends the next day/)).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Create template' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create shift' }));
     expect(within(dialog).getByRole('alert')).toHaveTextContent('A shift must last 4, 6 or 8 hours.');
     expect(calls.some((c) => c.method === 'POST')).toBe(false);
 
     await userEvent.clear(end);
     await userEvent.type(end, '06:00');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Create template' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create shift' }));
     await waitFor(() => expect(calls.at(-2)).toMatchObject({ method: 'POST', body: { name: 'Night', startTime: '22:00:00', endTime: '06:00:00' } }));
     expect(await screen.findByRole('status')).toHaveTextContent('Night created');
   });

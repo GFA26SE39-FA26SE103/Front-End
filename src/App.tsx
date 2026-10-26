@@ -19,6 +19,7 @@ import Leave from './pages/manager/Leave';
 import Schedule from './pages/manager/Schedule';
 import ShiftTemplates from './pages/manager/ShiftTemplates';
 import { SwapRequestDetail, SwapRequests } from './pages/manager/SwapRequests';
+import ZoneStaffing from './pages/manager/ZoneStaffing';
 
 export default function App() {
   return (
@@ -52,6 +53,7 @@ export default function App() {
       <Route element={<ProtectedRoute allowedRoles={['MANAGER']} />}>
         <Route path="/manager/dashboard" element={<Navigate to="/manager/schedule" replace />} />
         <Route path="/manager/schedule" element={<Schedule />} />
+        <Route path="/manager/staffing" element={<ZoneStaffing />} />
         <Route path="/manager/swaps" element={<SwapRequests />} />
         <Route path="/manager/swaps/:swapRequestId" element={<SwapRequestDetail />} />
         <Route path="/manager/leave" element={<Leave />} />

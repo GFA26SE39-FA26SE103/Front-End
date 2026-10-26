@@ -81,7 +81,7 @@ export default function Schedule() {
             <Card>
               <CardHeader title="Week plan" />
               {rows.length === 0 ? (
-                <p className={s.note}>No active shift templates. <Link className={s.back} to="/manager/shifts">Create shift templates</Link> first.</p>
+                <p className={s.note}>No active shifts. <Link className={s.back} to="/manager/shifts">Set up shifts</Link> first.</p>
               ) : (
                 <div className={s.gridWrap}>
                   <table className={s.grid}>

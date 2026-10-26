@@ -16,14 +16,14 @@ export default function ShiftTemplates() {
     async (signal) => [...await listShiftTemplates(signal)].sort((a, b) => a.startTime.localeCompare(b.startTime)));
 
   return (
-    <ManagerLayout title="Shift templates" subtitle="Reusable 4, 6 or 8-hour shifts" actions={<Button onClick={() => setEditing('new')}>New template</Button>}>
+    <ManagerLayout title="Shift setup" subtitle="Create and manage 4, 6 or 8-hour shifts" actions={<Button onClick={() => setEditing('new')}>New shift</Button>}>
       <div className={s.page}>
         {notice && <p className={s.success} role="status">{notice}</p>}
         <Card>
-          <CardHeader title="Templates" />
+          <CardHeader title="Shifts" />
           {error ? <p className={s.error} role="alert">{error}</p>
-            : !templates ? <p className={s.note} role="status">Loading templates…</p>
-            : templates.length === 0 ? <p className={s.note}>No shift templates yet.</p>
+            : !templates ? <p className={s.note} role="status">Loading shifts…</p>
+            : templates.length === 0 ? <p className={s.note}>No shifts have been set up yet.</p>
             : (
               <div className={s.tableWrap}>
                 <table className={s.table}>
@@ -66,7 +66,7 @@ function TemplateDialog({ template, onClose, onDone }: { template: ShiftTemplate
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (!name.trim()) return setError('Give the template a name, e.g. Morning.');
+    if (!name.trim()) return setError('Give the shift a name, e.g. Morning.');
     if (!lengthOk) return setError('A shift must last 4, 6 or 8 hours.');
     setBusy(true);
     setError('');
@@ -90,7 +90,7 @@ function TemplateDialog({ template, onClose, onDone }: { template: ShiftTemplate
   }
 
   return (
-    <Dialog title={template ? `Edit ${template.name}` : 'New shift template'} busy={busy} onClose={onClose}>
+    <Dialog title={template ? `Edit ${template.name}` : 'New shift'} busy={busy} onClose={onClose}>
       <form className={s.form} onSubmit={(e) => void save(e)}>
         <label>Name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="Morning" disabled={busy} /></label>
         <div className={s.actions}>
@@ -99,18 +99,18 @@ function TemplateDialog({ template, onClose, onDone }: { template: ShiftTemplate
         </div>
         <p className={lengthOk ? s.note : s.error}>
           {hours} hours{end <= start ? ', ends the next day' : ''}. {lengthOk ? '' : 'Choose 4, 6 or 8 hours.'}
-          {timesLocked ? ' Times are locked because Staff are scheduled on this template.' : ''}
+          {timesLocked ? ' Times are locked because Staff are scheduled on this shift.' : ''}
         </p>
         {template && (
           <label className={s.checkRow}>
             <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} disabled={busy} />
-            Active (inactive templates take no new assignments)
+            Active (inactive shifts take no new assignments)
           </label>
         )}
         {error && <p className={s.error} role="alert">{error}</p>}
         <div className={s.formActions}>
           <Button variant="secondary" disabled={busy} onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={busy}>{busy ? 'Saving…' : template ? 'Save' : 'Create template'}</Button>
+          <Button type="submit" disabled={busy}>{busy ? 'Saving…' : template ? 'Save' : 'Create shift'}</Button>
         </div>
       </form>
     </Dialog>
