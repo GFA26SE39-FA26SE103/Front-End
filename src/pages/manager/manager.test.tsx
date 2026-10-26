@@ -56,6 +56,7 @@ function storeRoutes() {
   routes['GET /api/supermarkets/store-1/floors'] = () => json([{ floorId: 'f-1' }]);
   routes['GET /api/floors/f-1/zones'] = () => json([
     { zoneId: 'z-b', floorId: 'f-1', code: 'B', name: 'Checkout', status: 'ACTIVE' },
+    { zoneId: 'z-c', floorId: 'f-1', code: 'C', name: 'Produce', status: 'ACTIVE' },
     { zoneId: 'z-x', floorId: 'f-1', code: 'X', name: 'Old storage', status: 'INACTIVE' },
   ]);
 }
@@ -112,16 +113,40 @@ describe('Manager console', () => {
     const blocked = await screen.findByRole('radio', { name: /Minh Đức/ });
     expect(blocked).toBeDisabled();
     expect(screen.getByText('Would work 52 h that week (limit 48 h).')).toBeInTheDocument();
-    // The only active zone is preselected; the inactive one is not offered.
-    expect(screen.getByRole('checkbox', { name: 'Checkout' })).toBeChecked();
+    const zone = screen.getByRole('combobox', { name: 'Zone' });
+    expect(zone).toHaveValue('');
+    expect(screen.getByRole('option', { name: 'Choose a zone' })).toBeDisabled();
+    expect(screen.queryByRole('checkbox', { name: 'Checkout' })).not.toBeInTheDocument();
     expect(screen.queryByText('Old storage')).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('radio', { name: /Hoàng Lan/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Add as draft' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose a Zone.');
+    await userEvent.selectOptions(zone, 'z-c');
+    await userEvent.click(screen.getByRole('button', { name: 'Add as draft' }));
     expect(await screen.findByRole('status')).toHaveTextContent('Hoàng Lan added as a draft');
     expect(calls.find((c) => c.method === 'POST')).toMatchObject({
-      path: '/api/schedule/assignments', body: { userId: 'u-lan', shiftId: morning.shiftId, workDate: day, zoneIds: ['z-b'] },
+      path: '/api/schedule/assignments', body: { userId: 'u-lan', shiftId: morning.shiftId, workDate: day, zoneIds: ['z-c'] },
     });
+  });
+
+  it('normalizes a legacy multi-zone assignment to the first Zone when it is saved', async () => {
+    storeRoutes();
+    const existing = { ...scheduleWith().assignments[0], zones: [{ zoneId: 'z-b', zoneName: 'Checkout' }, { zoneId: 'z-c', zoneName: 'Produce' }] };
+    routes['GET /api/schedule'] = () => json({ ...scheduleWith(), assignments: [existing] });
+    routes['GET /api/shifts'] = () => json([morning]);
+    routes['GET /api/swap-requests'] = () => json([]);
+    routes['GET /api/schedule/staff-options'] = () => json([{ userId: existing.userId, fullName: existing.fullName, eligible: true, weeklyHoursAfter: 8, problems: [] }]);
+    routes[`PATCH /api/schedule/assignments/${existing.shiftAssignmentId}`] = () => json({ ...existing, zones: [existing.zones[0]] });
+    show('/manager/schedule', <Schedule />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /Nguyễn An, Morning .*, draft/ }));
+    expect(await screen.findByRole('combobox', { name: 'Zone' })).toHaveValue('z-b');
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(calls.find((c) => c.method === 'PATCH')).toMatchObject({
+      path: `/api/schedule/assignments/${existing.shiftAssignmentId}`, body: { zoneIds: ['z-b'] },
+    }));
   });
 
   it('needs a reason to reject a swap, and shows the rule checks', async () => {

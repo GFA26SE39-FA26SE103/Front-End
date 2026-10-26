@@ -199,14 +199,14 @@ function PublishDialog({ from, to, drafts, gaps, onClose, onDone }: {
   );
 }
 
-/** Adds a Staff member to a shift, or changes the person or zones of an existing one. */
+/** Adds a Staff member to a shift, or changes the person or Zone of an existing one. */
 function AssignmentDialog({ shiftId, workDate, title, zones, assignment, onClose, onDone }: {
   shiftId: string; workDate: string; title: string; zones: StoreZone[];
   assignment?: ScheduledShift; onClose: () => void; onDone: (name: string) => void;
 }) {
   const [options, setOptions] = useState<StaffOption[] | null>(null);
   const [userId, setUserId] = useState(assignment?.userId ?? '');
-  const [zoneIds, setZoneIds] = useState<string[]>(assignment?.zones.map((z) => z.zoneId) ?? (zones.length === 1 ? [zones[0].zoneId] : []));
+  const [zoneId, setZoneId] = useState(assignment?.zones[0]?.zoneId ?? (zones.length === 1 ? zones[0].zoneId : ''));
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -227,13 +227,13 @@ function AssignmentDialog({ shiftId, workDate, title, zones, assignment, onClose
   async function save(event: FormEvent) {
     event.preventDefault();
     if (!userId) return setError('Choose a Staff member.');
-    if (!zoneIds.length) return setError('Choose at least one zone.');
+    if (!zoneId) return setError('Choose a Zone.');
     setBusy(true);
     setError('');
     try {
       const saved = assignment
-        ? await updateAssignment(assignment.shiftAssignmentId, { ...(userId !== assignment.userId ? { userId } : {}), zoneIds })
-        : await assignShift({ userId, shiftId, workDate, zoneIds });
+        ? await updateAssignment(assignment.shiftAssignmentId, { ...(userId !== assignment.userId ? { userId } : {}), zoneIds: [zoneId] })
+        : await assignShift({ userId, shiftId, workDate, zoneIds: [zoneId] });
       onDone(saved.fullName);
     } catch (reason) {
       setError(problem(reason));
@@ -295,17 +295,14 @@ function AssignmentDialog({ shiftId, workDate, title, zones, assignment, onClose
             ))}
           </div>
         </fieldset>
-        <fieldset className={s.fieldset}>
-          <legend>Zones</legend>
-          {zones.length === 0 && <p className={s.note}>No active zones. The Administrator sets them up in Store layout.</p>}
-          {zones.map((z) => (
-            <label key={z.zoneId} className={s.checkRow}>
-              <input type="checkbox" checked={zoneIds.includes(z.zoneId)} disabled={busy}
-                onChange={(e) => setZoneIds(e.target.checked ? [...zoneIds, z.zoneId] : zoneIds.filter((x) => x !== z.zoneId))} />
-              {z.name}
-            </label>
-          ))}
-        </fieldset>
+        <label>
+          Zone
+          <select value={zoneId} onChange={(e) => setZoneId(e.target.value)} disabled={busy || zones.length === 0}>
+            <option value="" disabled>Choose a zone</option>
+            {zones.map((z) => <option key={z.zoneId} value={z.zoneId}>{z.name}</option>)}
+          </select>
+          {zones.length === 0 && <span className={s.note}>No active zones. The Administrator sets them up in Store layout.</span>}
+        </label>
         {assignment && (
           <label>
             Reason if you remove this shift (optional)
