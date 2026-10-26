@@ -34,7 +34,7 @@ async function loadConfig(zoneId: string, signal?: AbortSignal) {
   catch (e) { if (e instanceof ApiError && e.status === 404) return null; throw e; }
 }
 const statusTone = (status: string | undefined): Tone => status === 'ACTIVE' ? 'success' : status === 'DRAFT' ? 'warning' : 'neutral';
-const ruleName = (rule: MonitoringRule, types: IncidentType[]) => rule.incidentName ?? types.find(t => t.incidentTypeId === rule.incidentTypeId)?.name ?? 'Unknown incident type';
+const ruleName = (rule: MonitoringRule, types: IncidentType[]) => rule.incidentName ?? types.find(t => t.incidentTypeId === rule.incidentTypeId)?.name ?? 'Unknown operational event type';
 const ruleMode = (rule: Pick<MonitoringRule, 'incidentTypeId' | 'incidentCode' | 'thresholdUnit' | 'parametersJson'>, types: IncidentType[]) => measurementMode({ ...rule, incidentCode: rule.incidentCode ?? types.find(t => t.incidentTypeId === rule.incidentTypeId)?.code });
 const formatTime = (value: string) => { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString(); };
 
@@ -120,7 +120,7 @@ function Overview({ floors, summaries, types, missingZone, floorId, onFloorChang
         return <button key={z.zoneId} type="button" className={s.zoneCard} aria-label={'Open AI configuration for ' + z.name} onClick={() => onOpen(z.zoneId)}>
           <div className={s.head}><span className={s.zoneCode}><i style={{ background: z.colorHex ?? 'var(--color-primary)' }} />{z.code}</span><Chip tone={summary === 'error' ? 'danger' : statusTone(saved?.status)}>{summary === 'error' ? 'Load failed' : saved?.status ?? 'Not configured'}</Chip></div>
           <h3>{z.name}</h3><p className={s.configName}>{saved?.name ?? (summary === 'error' ? 'Configuration unavailable' : 'No AI configuration yet')}</p>
-          {summary === 'error' ? <p className={s.error}>Could not load this configuration. Open its detail to retry.</p> : saved ? <><p className={s.help}>Confidence: {saved.confidenceThreshold} · {saved.rules.length} incident {saved.rules.length === 1 ? 'rule' : 'rules'}</p><div className={s.ruleTags}>{saved.rules.map(r => <span key={r.incidentTypeId}>{ruleName(r, types)}{!r.enabled ? ' · Disabled' : ''}</span>)}</div>{!saved.rules.length && <p className={s.help}>No incident rules saved. Edit to add one.</p>}</> : <p className={s.help}>Add incident rules to configure monitoring for this zone.</p>}
+          {summary === 'error' ? <p className={s.error}>Could not load this configuration. Open its detail to retry.</p> : saved ? <><p className={s.help}>Confidence: {saved.confidenceThreshold} · {saved.rules.length} operational event {saved.rules.length === 1 ? 'rule' : 'rules'}</p><div className={s.ruleTags}>{saved.rules.map(r => <span key={r.incidentTypeId}>{ruleName(r, types)}{!r.enabled ? ' · Disabled' : ''}</span>)}</div>{!saved.rules.length && <p className={s.help}>No operational event rules saved. Edit to add one.</p>}</> : <p className={s.help}>Add operational event rules to configure monitoring for this zone.</p>}
           <span className={s.cardLink}>View details →</span>
         </button>;
       })}</div>
@@ -273,9 +273,9 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
             {!active && <Button disabled={busy} onClick={() => { setReview(null); void operation(async () => { const result = await reviewMonitoring(zoneId); if (mounted.current) { apply(result.configuration); setReview(result); requestAnimationFrame(() => document.getElementById('configuration-review')?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })); } }); }}>Review &amp; activate</Button>}
             {active && <Button variant="secondary" disabled={busy} onClick={() => void changeActive(false)}>Deactivate configuration</Button>}
           </div>
-          <h3 className={s.section}>Incident rules</h3>
-          {config.rules.length ? <div className={s.ruleTable} role="table" aria-label="Incident rules">
-            <div role="row" className={s.ruleHeadRow}><span role="columnheader">Incident type</span><span role="columnheader">Warning ≥</span><span role="columnheader">Critical ≥</span><span role="columnheader">Sustain</span><span role="columnheader">Cooldown</span><span role="columnheader">State</span></div>
+          <h3 className={s.section}>Operational event rules</h3>
+          {config.rules.length ? <div className={s.ruleTable} role="table" aria-label="Operational event rules">
+            <div role="row" className={s.ruleHeadRow}><span role="columnheader">Operational event type</span><span role="columnheader">Warning ≥</span><span role="columnheader">Critical ≥</span><span role="columnheader">Sustain</span><span role="columnheader">Cooldown</span><span role="columnheader">State</span></div>
             {config.rules.map(r => <div role="row" key={r.incidentTypeId}>
               <span role="cell"><strong>{ruleName(r, types)}</strong><small>{modeLabel(ruleMode(r, types))}</small></span>
               <span role="cell">{r.warningThreshold} {unitName(r.thresholdUnit)}</span>
@@ -284,7 +284,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
               <span role="cell">{r.cooldownSec}s</span>
               <span role="cell"><Chip tone={r.enabled ? 'success' : 'neutral'}>{r.enabled ? 'Enabled' : 'Disabled'}</Chip></span>
             </div>)}
-          </div> : <p className={s.missingBox}>This configuration has no incident rules. Edit it and add at least one rule.</p>}
+          </div> : <p className={s.missingBox}>This configuration has no operational event rules. Edit it and add at least one rule.</p>}
           <div className={s.actions}>
             <Button disabled={busy || active} onClick={() => { fillForm(config); setReview(null); setPreviewCameraId(null); setError(''); setNotice(''); onOpen(true); }}>Edit configuration</Button>
             <Button variant="secondary" disabled={busy} onClick={reloadSaved}>Reload saved configuration</Button>
@@ -302,20 +302,20 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
           <label className={s.field}>Configuration name<input ref={nameInput} aria-label="Configuration name" maxLength={100} value={name} onChange={e => { setName(e.target.value); touch(); }} /></label>
           <label className={s.field}>Detection confidence<input aria-label="Detection confidence" type="number" min="0" max="1" step=".0001" value={confidence} onChange={e => { setConfidence(e.target.value); touch(); }} /></label>
         </fieldset>
-        <p className={s.help}>Confidence filters detection scores, not incident severity.</p>
+        <p className={s.help}>Confidence filters detection scores; rule thresholds determine operational event priority.</p>
 
-        <h3 className={s.section}>Incident rules <span className={s.required}>Required</span></h3>
+        <h3 className={s.section}>Operational event rules <span className={s.required}>Required</span></h3>
         <div className={`${s.addRule} ${rulesMissing ? s.addRuleMissing : ''}`}>
-          <label className={s.field}>Incident type<select ref={typeSelect} aria-label="Incident type" aria-invalid={rulesMissing || undefined} disabled={locked || !available.length} value={selectedType?.incidentTypeId ?? ''} onChange={e => setTypeId(e.target.value)}>
-            {!available.length && <option value="">No more incident types</option>}
+          <label className={s.field}>Operational event type<select ref={typeSelect} aria-label="Operational event type" aria-invalid={rulesMissing || undefined} disabled={locked || !available.length} value={selectedType?.incidentTypeId ?? ''} onChange={e => setTypeId(e.target.value)}>
+            {!available.length && <option value="">No more operational event types</option>}
             {available.map(t => <option key={t.incidentTypeId} value={t.incidentTypeId}>{t.name}{!t.supported ? t.measurementOptions?.some(o => o.supported) ? ' (choose measurement mode)' : ' (disabled Draft only)' : ''}</option>)}
           </select></label>
           <Button disabled={locked || !selectedType} onClick={addRule}>Add rule</Button>
         </div>
-        {!rules.length && <p className={rulesMissing ? s.error : s.help}>No incident rules yet. A configuration needs at least one rule before it can be saved.</p>}
+        {!rules.length && <p className={rulesMissing ? s.error : s.help}>No operational event rules yet. A configuration needs at least one rule before it can be saved.</p>}
         {rules.map(r => {
           const t = types.find(t => t.incidentTypeId === r.incidentTypeId);
-          const label = t?.name ?? r.incidentName ?? 'Unknown incident type';
+          const label = t?.name ?? r.incidentName ?? 'Unknown operational event type';
           const mode = ruleMode(r, types);
           const supported = mode === 'PEOPLE_COUNT' ? !!t?.measurementOptions?.some(o => o.mode === mode && o.supported) : !!t?.supported && mode === 'QUEUE_LENGTH';
           return <section key={r.incidentTypeId} className={s.rule}>
@@ -338,7 +338,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
             </fieldset>
           </section>;
         })}
-        <p className={s.help}>Warning &lt; critical. Sustain is continuous source-video time above threshold. Queue length counts people only after 5 seconds continuously in the ROI, then applies sustain. Cooldown starts after incident closure. Temporary people count needs no area; density runtime is deferred.</p>
+        <p className={s.help}>Warning &lt; critical. Sustain is continuous source-video time above threshold. Queue length counts people only after 5 seconds continuously in the ROI, then applies sustain. Cooldown starts after the operational event clears. Temporary people count needs no area; density runtime is deferred.</p>
         <div className={s.actions}>
           <Button type="submit" disabled={locked}>{busy ? 'Saving…' : 'Save configuration'}</Button>
           <Button variant="secondary" disabled={busy} onClick={() => {
@@ -374,7 +374,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
     </section>}
     {deleting && <Dialog title="Delete AI configuration?" busy={busy} onClose={() => { setDeleting(null); setError(''); }}>
       <p className={s.help}>Delete <strong>{deleting.name}</strong> for <strong>{zone.name}</strong> on {floorName}?</p>
-      <p className={s.help}>This permanently removes the configuration and its incident rules. The zone, cameras and ROI mappings are kept.</p>
+      <p className={s.help}>This permanently removes the configuration and its operational event rules. The zone, cameras and ROI mappings are kept.</p>
       {error && <p className={s.alertBox} role="alert">{error}</p>}
       <div className={s.actions}><Button variant="secondary" data-autofocus disabled={busy} onClick={() => { setDeleting(null); setError(''); }}>Cancel</Button><Button className={s.confirmDelete} disabled={busy} onClick={() => void removeConfiguration()}>{busy ? 'Deleting…' : 'Delete configuration'}</Button></div>
     </Dialog>}

@@ -177,7 +177,7 @@ describe('API-backed monitoring configuration', () => {
   it('requires adding an incident rule before saving and focuses the selector', async () => {
     await create(); fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Add at least one incident rule before saving');
-    expect(screen.getByLabelText('Incident type')).toHaveFocus(); expect(writes).toHaveLength(0);
+    expect(screen.getByLabelText('Operational event type')).toHaveFocus(); expect(writes).toHaveLength(0);
     fireEvent.click(screen.getByRole('button', { name: 'Add rule' }));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Save configuration' })); await screen.findByText('Configuration saved as Draft. Review it before activating.');
