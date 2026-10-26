@@ -11,6 +11,7 @@ import { clearSession, loadSession, saveSession, type AuthUser } from './session
 vi.mock('../api/auth', () => ({ getCurrentUser: vi.fn(), signIn: vi.fn(), MAX_FAILED_ATTEMPTS: 5, LOCK_SECONDS: 900 }));
 vi.mock('../pages/SetupHealth', () => ({ default: () => <AdminLayout title="Dashboard" subtitle="Setup"><p>Admin dashboard content</p></AdminLayout> }));
 vi.mock('../pages/UsersRoles', () => ({ default: () => <p>Account admin content</p> }));
+vi.mock('../pages/admin/ResponsePolicies', () => ({ default: () => <h1>Response policies screen</h1> }));
 vi.mock('../pages/operator/OperatorFloorMap', () => ({ default: () => <h1>Floor map screen</h1> }));
 vi.mock('../pages/operator/OperatorCameraLive', () => ({ default: () => <h1>Camera live screen</h1> }));
 
@@ -62,6 +63,14 @@ describe('role routing and authenticated access', () => {
     await screen.findByRole('heading', { name: 'Access denied' });
     expect(screen.queryByText('Account admin content')).not.toBeInTheDocument();
     expect(screen.getByTestId('location')).toHaveTextContent('/access-denied');
+  });
+
+  it('lets an Admin open a response policy by monitoring rule ID', async () => {
+    session(makeUser('ADMIN'));
+    vi.mocked(getCurrentUser).mockResolvedValue(makeUser('ADMIN'));
+    show('/admin/response-policies/rule-1');
+    await screen.findByRole('heading', { name: 'Response policies screen' });
+    expect(screen.getByTestId('location')).toHaveTextContent('/admin/response-policies/rule-1');
   });
 
   it.each([

@@ -8,6 +8,7 @@ import SetupHealth from './pages/SetupHealth';
 import StoreLayout from './pages/StoreLayout';
 import SystemHealth from './pages/SystemHealth';
 import UsersRoles from './pages/UsersRoles';
+import ResponsePolicies from './pages/admin/ResponsePolicies';
 import OperatorCameraLive from './pages/operator/OperatorCameraLive';
 import OperatorFloorMap from './pages/operator/OperatorFloorMap';
 import OperatorTasks, { OperatorTaskDetail } from './pages/operator/OperatorTasks';
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="/admin/ai-config" element={<AiConfig />} />
         <Route path="/admin/incident-types" element={<IncidentTypes />} />
         <Route path="/admin/routing" element={<Routing />} />
+        <Route path="/admin/response-policies/:ruleId" element={<ResponsePolicies />} />
         <Route path="/admin/users" element={<UsersRoles />} />
         <Route path="/admin/audit-logs" element={<AuditLog />} />
         <Route path="/admin/system-health" element={<SystemHealth />} />
