@@ -58,6 +58,7 @@ export default function ResponsePolicies() {
   const [drafts, setDrafts] = useState<Record<PolicyPriority, Draft>>({ WARNING: emptyDraft(), CRITICAL: emptyDraft() });
   const [loadedRuleId, setLoadedRuleId] = useState<string | null>(null);
   const [busy, setBusy] = useState<PolicyPriority | null>(null);
+  const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [reload, setReload] = useState(0);
@@ -73,10 +74,12 @@ export default function ResponsePolicies() {
       }
       setDrafts(next);
       setLoadedRuleId(ruleId);
+      setLoadError('');
       setError('');
     }).catch((reason: unknown) => {
       if (!controller.signal.aborted) {
-        setError(message(reason));
+        setLoadError(message(reason));
+        setError('');
         setLoadedRuleId(ruleId);
       }
     });
@@ -86,6 +89,7 @@ export default function ResponsePolicies() {
 
   function retry() {
     setLoadedRuleId(null);
+    setLoadError('');
     setError('');
     setReload((value) => value + 1);
   }
@@ -141,9 +145,10 @@ export default function ResponsePolicies() {
       </Card>
 
       {!ruleId && <div className={s.feedback} role="alert"><p>Open response policies from a monitoring rule.</p></div>}
-      {error && !loading && <div className={s.feedback} role="alert"><p>{error}</p><Button variant="secondary" onClick={retry}>Reload</Button></div>}
+      {loadError && !loading && <div className={s.feedback} role="alert"><p>{loadError}</p><Button variant="secondary" onClick={retry}>Reload</Button></div>}
+      {error && !loadError && <div className={s.feedback} role="alert"><p>{error}</p></div>}
       {notice && <p className={s.success} role="status">{notice}</p>}
-      {loading ? <p className={s.loading} role="status">Loading response policies…</p> : ruleId && <div className={s.grid}>
+      {loading ? <p className={s.loading} role="status">Loading response policies…</p> : ruleId && !loadError && <div className={s.grid}>
         {priorities.map((priority) => {
           const draft = drafts[priority];
           const working = busy === priority;

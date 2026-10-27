@@ -43,6 +43,23 @@ describe('Operator Task Board', () => {
     await user.click(screen.getByLabelText('Needs assignment only'));
     await waitFor(() => expect(listTasks).toHaveBeenLastCalledWith({ status: 'IN_PROGRESS', needsAssignment: true }, expect.any(AbortSignal)));
   });
+  it('shows offered, accepted, in-progress and needs-assignment states after refresh', async () => {
+    const user = userEvent.setup();
+    const accepted = { ...task, taskId: 'task-2', title: 'Accepted task', status: 'ACCEPTED' as const, assigneeUserId: 'staff-1', assigneeName: 'Linh', needsAssignment: false };
+    const inProgress = { ...task, taskId: 'task-3', title: 'In-progress task', status: 'IN_PROGRESS' as const, assigneeUserId: 'staff-2', assigneeName: 'Minh', needsAssignment: false };
+    vi.mocked(listTasks).mockResolvedValueOnce([]).mockResolvedValue([task, accepted, inProgress]);
+    page();
+    expect(await screen.findByText('No tasks match these filters.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Refresh tasks' }));
+    const offeredRow = await screen.findByRole('row', { name: new RegExp(task.title) });
+    const acceptedRow = screen.getByRole('row', { name: new RegExp(accepted.title) });
+    const inProgressRow = screen.getByRole('row', { name: new RegExp(inProgress.title) });
+    expect(within(offeredRow).getByText('Offered')).toBeInTheDocument();
+    expect(within(offeredRow).getByText('Needs assignment')).toBeInTheDocument();
+    expect(within(acceptedRow).getByText('Accepted')).toBeInTheDocument();
+    expect(within(inProgressRow).getByText('In progress')).toBeInTheDocument();
+  });
   it('shows a backend failure without substituting mock tasks', async () => {
     vi.mocked(listTasks).mockRejectedValue(new ApiError(503, 'TASK_SCHEMA_NOT_READY', 'Task schema is not ready.'));
     page();
@@ -91,6 +108,33 @@ describe('Operator Task Board', () => {
     expect(dialog.getByRole('button', { name: 'Confirm assignment' })).toBeDisabled();
     await user.click(dialog.getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(getTask).toHaveBeenCalledTimes(2));
+  });
+  it('keeps a non-conflict assignment failure retryable without refreshing the viewed Task', async () => {
+    const user = userEvent.setup();
+    vi.mocked(assignTask).mockRejectedValue(new ApiError(503, 'SERVICE_UNAVAILABLE', 'Assignment service is unavailable.'));
+    page('/operator/tasks/task-1');
+    await user.click(await screen.findByRole('button', { name: 'Assign task' }));
+    const dialog = within(screen.getByRole('dialog'));
+    await user.selectOptions(dialog.getByLabelText('Staff member'), 'staff-1');
+    await user.click(dialog.getByRole('button', { name: 'Confirm assignment' }));
+
+    expect(await dialog.findByRole('alert')).toHaveTextContent('Assignment service is unavailable.');
+    expect(dialog.getByRole('button', { name: 'Confirm assignment' })).toBeEnabled();
+    expect(dialog.getByRole('button', { name: 'Refresh candidates' })).toBeEnabled();
+    expect(getTask).toHaveBeenCalledTimes(1);
+  });
+  it('keeps a non-version 409 assignment failure retryable', async () => {
+    const user = userEvent.setup();
+    vi.mocked(assignTask).mockRejectedValue(new ApiError(409, 'WORKLOAD_LIMIT', 'The Staff member reached the workload limit.'));
+    page('/operator/tasks/task-1');
+    await user.click(await screen.findByRole('button', { name: 'Assign task' }));
+    const dialog = within(screen.getByRole('dialog'));
+    await user.selectOptions(dialog.getByLabelText('Staff member'), 'staff-1');
+    await user.click(dialog.getByRole('button', { name: 'Confirm assignment' }));
+
+    expect(await dialog.findByRole('alert')).toHaveTextContent('workload limit');
+    expect(dialog.getByRole('button', { name: 'Confirm assignment' })).toBeEnabled();
+    expect(getTask).toHaveBeenCalledTimes(1);
   });
   it('shows no eligible Staff without enabling confirmation', async () => {
     const user = userEvent.setup(); vi.mocked(listAssignableStaff).mockResolvedValue([]);

@@ -17,17 +17,30 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 
 describe('Response policy administration', () => {
   let requests: Array<{ path: string; method: string; body: unknown }>;
+  let policies: ResponsePolicy[];
+  let failFirstLoad: boolean;
+  let failSave: boolean;
+  let loadCount: number;
 
   beforeEach(() => {
     requests = [];
+    policies = [warning];
+    failFirstLoad = false;
+    failSave = false;
+    loadCount = 0;
     saveSession({ accessToken: 'admin-token', expiresAt: '2099-01-01T00:00:00Z', user: { userId: 'admin', email: 'admin@example.test', fullName: 'Admin', roleId: 'role-admin', role: 'ADMIN', status: 'ACTIVE' } }, true);
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const path = new URL(String(input)).pathname;
       const method = init?.method ?? 'GET';
       const body = init?.body ? JSON.parse(String(init.body)) : null;
       requests.push({ path, method, body });
-      if (method === 'GET') return json([warning]);
+      if (method === 'GET') {
+        loadCount += 1;
+        if (failFirstLoad && loadCount === 1) return json({ code: 'POLICY_LOAD_FAILED', detail: 'Response policies are temporarily unavailable.' }, 503);
+        return json(policies);
+      }
       if (method === 'PUT' && path.endsWith('/CRITICAL')) {
+        if (failSave) return json({ code: 'POLICY_SAVE_FAILED', detail: 'Response policy could not be saved.' }, 503);
         const request = body as { isEnabled: boolean; action: { isEnabled: boolean; title: string; instructions: string } };
         return json({ ...warning, policyId: 'critical-policy', eventPriority: 'CRITICAL', version: 1,
           isEnabled: request.isEnabled, action: { ...warning.action, actionId: 'critical-action', ...request.action } });
@@ -44,8 +57,7 @@ describe('Response policy administration', () => {
 
   it('loads both priority slots and saves a missing critical policy through the versioned contract', async () => {
     show();
-    expect(await screen.findByRole('heading', { name: 'Response policies' })).toBeInTheDocument();
-    const warningGroup = screen.getByRole('group', { name: 'WARNING policy' });
+    const warningGroup = await screen.findByRole('group', { name: 'WARNING policy' });
     expect(within(warningGroup).getByText('Ready for automatic task')).toBeInTheDocument();
     expect(within(warningGroup).getByLabelText('Task title')).toHaveValue('Check congestion');
 
@@ -60,5 +72,42 @@ describe('Response policy administration', () => {
       path: `/api/monitoring-rules/${ruleId}/response-policies/CRITICAL`, method: 'PUT',
       body: { isEnabled: true, expectedVersion: null, action: { isEnabled: true, title: 'Urgent congestion response', instructions: 'Open a safe route and assist customers.' } },
     }));
+  });
+
+  it('shows readiness issues returned by the backend', async () => {
+    policies = [{ ...warning, readyForAutomaticTask: false, issues: ['RULE_DISABLED', 'ACTION_NOT_AUTOMATIC'] }];
+    show();
+
+    const warningGroup = await screen.findByRole('group', { name: 'WARNING policy' });
+    expect(within(warningGroup).getByText('Needs attention')).toBeInTheDocument();
+    expect(within(warningGroup).getByText('The monitoring rule is disabled.')).toBeInTheDocument();
+    expect(within(warningGroup).getByText('The task action is not configured for automatic execution.')).toBeInTheDocument();
+  });
+
+  it('shows a backend load error and retries without substituting policy data', async () => {
+    failFirstLoad = true;
+    show();
+
+    const feedback = await screen.findByRole('alert');
+    expect(feedback).toHaveTextContent('Response policies are temporarily unavailable.');
+    expect(screen.queryByRole('group', { name: 'WARNING policy' })).not.toBeInTheDocument();
+    fireEvent.click(within(feedback).getByRole('button', { name: 'Reload' }));
+
+    expect(await screen.findByRole('group', { name: 'WARNING policy' })).toBeInTheDocument();
+    expect(loadCount).toBe(2);
+  });
+
+  it('keeps policy drafts visible and retryable when a save fails', async () => {
+    failSave = true;
+    show();
+    const critical = await screen.findByRole('group', { name: 'CRITICAL policy' });
+    fireEvent.change(within(critical).getByLabelText('Task title'), { target: { value: 'Keep this draft' } });
+    fireEvent.change(within(critical).getByLabelText('Staff instructions'), { target: { value: 'Retry these instructions.' } });
+    fireEvent.click(within(critical).getByRole('button', { name: 'Save CRITICAL policy' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Response policy could not be saved.');
+    expect(screen.getByRole('group', { name: 'WARNING policy' })).toBeInTheDocument();
+    expect(within(critical).getByLabelText('Task title')).toHaveValue('Keep this draft');
+    expect(within(critical).getByRole('button', { name: 'Save CRITICAL policy' })).toBeEnabled();
   });
 });

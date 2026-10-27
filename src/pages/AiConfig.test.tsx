@@ -9,7 +9,7 @@ mockNativeDialogs();
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const zone = { zoneId: 'zone-1', floorId: 'floor-1', code: 'QUEUE', name: 'Actual queue zone', zoneType: 'QUEUE', mapPolygon: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }], colorHex: '#123456', areaM2: 10, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z' };
 const type = { incidentTypeId: 'type-1', code: 'LONG_QUEUE', name: 'Long Queue', description: null, sourceType: 'AI_DETECTED', measurementType: 'QUEUE_LENGTH', status: 'ACTIVE', supported: true, thresholdUnit: 'PEOPLE', defaultWarningThreshold: 3, defaultCriticalThreshold: 5, unsupportedReason: null };
-const savedConfig = (status = 'DRAFT') => ({ configId: 'config-1', zoneId: 'zone-1', name: 'Queue monitoring', confidenceThreshold: .6, status, updatedAt: '2026-10-03T01:00:00Z', rules: [{ incidentTypeId: 'type-1', warningThreshold: 3, criticalThreshold: 5, thresholdUnit: 'PEOPLE', sustainSec: 30, cooldownSec: 300, enabled: true, parametersJson: '{}' }] });
+const savedConfig = (status = 'DRAFT') => ({ configId: 'config-1', zoneId: 'zone-1', name: 'Queue monitoring', confidenceThreshold: .6, status, updatedAt: '2026-10-03T01:00:00Z', rules: [{ ruleId: 'rule-1', incidentTypeId: 'type-1', warningThreshold: 3, criticalThreshold: 5, thresholdUnit: 'PEOPLE', sustainSec: 30, cooldownSec: 300, enabled: true, parametersJson: '{}' }] });
 let config: Record<string, unknown> | null;
 let writes: { path: string; method: string; body: Record<string, unknown>; bearer: string | null }[];
 let failSave: boolean;
@@ -62,6 +62,15 @@ describe('API-backed monitoring configuration', () => {
       }
       return json({ code: 'UNEXPECTED_REQUEST' }, 500);
     });
+  });
+
+  it('links each persisted monitoring rule to its response policy', async () => {
+    config = savedConfig();
+    show();
+
+    await screen.findByRole('table', { name: 'Operational event rules' }, { timeout: 3000 });
+    expect(screen.getByRole('link', { name: 'Manage response policy for Long Queue' }))
+      .toHaveAttribute('href', '/admin/response-policies/rule-1');
   });
 
   it('opens an overview grouped by real floors with saved rules and no edit form', async () => {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { ApiError } from '../../api/client';
 import { assignTask, getTask, listAssignableStaff, listTasks, taskStatuses, type AssignableStaff, type OperationalTask, type TaskStatus } from '../../api/tasks';
 import { loadSession } from '../../auth/session';
 import { Dialog } from '../../components/Dialog';
@@ -120,7 +121,10 @@ function AssignDialog({ task, onClose, onSaved, onConflict }: { task: Operationa
     try {
       onSaved(await assignTask(task.taskId, { staffUserId: userId, reason: reason.trim() || null, expectedUpdatedAt: task.updatedAt }));
     } catch (cause) {
-      setError(problem(cause)); setBusy(false); setConflict(true); onConflict();
+      setError(problem(cause)); setBusy(false);
+      if (cause instanceof ApiError && cause.code === 'TASK_CHANGED') {
+        setConflict(true); onConflict();
+      }
     }
   }
   return <Dialog title={task.assigneeUserId ? 'Reassign task' : 'Assign task'} busy={busy} onClose={onClose}>

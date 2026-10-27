@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { AdminLayout } from '../components/AdminLayout';
 import { AnnotatedPreview } from '../components/AnnotatedPreview';
 import { Dialog } from '../components/Dialog';
@@ -275,7 +275,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
           </div>
           <h3 className={s.section}>Operational event rules</h3>
           {config.rules.length ? <div className={s.ruleTable} role="table" aria-label="Operational event rules">
-            <div role="row" className={s.ruleHeadRow}><span role="columnheader">Operational event type</span><span role="columnheader">Warning ≥</span><span role="columnheader">Critical ≥</span><span role="columnheader">Sustain</span><span role="columnheader">Cooldown</span><span role="columnheader">State</span></div>
+            <div role="row" className={s.ruleHeadRow}><span role="columnheader">Operational event type</span><span role="columnheader">Warning ≥</span><span role="columnheader">Critical ≥</span><span role="columnheader">Sustain</span><span role="columnheader">Cooldown</span><span role="columnheader">State</span><span role="columnheader">Response</span></div>
             {config.rules.map(r => <div role="row" key={r.incidentTypeId}>
               <span role="cell"><strong>{ruleName(r, types)}</strong><small>{modeLabel(ruleMode(r, types))}</small></span>
               <span role="cell">{r.warningThreshold} {unitName(r.thresholdUnit)}</span>
@@ -283,6 +283,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
               <span role="cell">{r.sustainSec}s</span>
               <span role="cell">{r.cooldownSec}s</span>
               <span role="cell"><Chip tone={r.enabled ? 'success' : 'neutral'}>{r.enabled ? 'Enabled' : 'Disabled'}</Chip></span>
+              <span role="cell">{r.ruleId && <Link className={s.responsePolicyLink} to={`/admin/response-policies/${r.ruleId}`} aria-label={`Manage response policy for ${ruleName(r, types)}`}>Manage policy</Link>}</span>
             </div>)}
           </div> : <p className={s.missingBox}>This configuration has no operational event rules. Edit it and add at least one rule.</p>}
           <div className={s.actions}>
