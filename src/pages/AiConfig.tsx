@@ -243,6 +243,10 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
     setRules(all => [...all, inputRule({ incidentTypeId: selectedType.incidentTypeId, incidentCode: selectedType.code, warningThreshold: selectedType.defaultWarningThreshold ?? 0, criticalThreshold: selectedType.defaultCriticalThreshold ?? 1, thresholdUnit: selectedType.thresholdUnit ?? '', sustainSec: 30, cooldownSec: 300, enabled: selectedType.supported, parametersJson: null })]);
     touch(); setRulesMissing(false);
   }
+  const previewCamera = review?.cameras.find((camera) => camera.cameraId === previewCameraId);
+  const previewRegions = previewCamera && previewCamera.roiPolygon.length >= 3
+    ? [{ id: zoneId, label: zone.name, color: zone.colorHex ?? '#0d9494', points: previewCamera.roiPolygon }]
+    : [];
 
   return <>
     <button type="button" className={s.back} disabled={busy} onClick={() => { if (confirmDiscard('Discard unsaved changes and go back to all zones?')) onBack(); }}>‹ All zones</button>
@@ -366,12 +370,12 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
         <ul>{c.issues.map(i => <li key={i.code} className={s.error}>{i.message}</li>)}</ul>
         <Button variant="secondary" disabled={!c.ready || busy} onClick={() => setPreviewCameraId(id => id === c.cameraId ? null : c.cameraId)}>{previewCameraId === c.cameraId ? 'Stop zone preview: ' : 'Preview zone confidence: '}{c.code}</Button>
       </div>)}
-      {previewCameraId && <div className={s.zonePreview}><AnnotatedPreview cameraId={previewCameraId} zoneId={zoneId} enabled /></div>}
+      {previewCameraId && <div className={s.zonePreview}><AnnotatedPreview cameraId={previewCameraId} zoneId={zoneId} regions={previewRegions} enabled /></div>}
       <ul>{review.issues.map((i, n) => <li key={n} className={s.error}><strong>{i.code}: </strong><span>{i.message}</span></li>)}</ul>
       {review.warnings.map(w => <p key={w} className={s.help}>{w}</p>)}
       <p className={s.help}>A camera shared by multiple Zones cannot test Draft confidence while any mapped Zone still has active monitoring. Deactivate every active configuration using the camera, then retry. Boxes use an annotation context; ROI counts can differ between Zones with different confidence filters.</p>
       <Button disabled={busy || dirty || active || !review.canActivate} onClick={() => void changeActive(true)}>Activate configuration</Button>
-      <p className={s.help}>The backend rechecks source, mapping, ROI and rules at activation. The worker then measures active rules continuously, even with no viewer. Incidents created here remain DETECTED; dispatch is not implemented in this increment.</p>
+      <p className={s.help}>The backend rechecks the source, mapping, ROI and rules at activation, then measures active rules continuously. A ready Response Policy can automatically offer each new Operational Event Task to eligible Staff.</p>
     </section>}
     {deleting && <Dialog title="Delete AI configuration?" busy={busy} onClose={() => { setDeleting(null); setError(''); }}>
       <p className={s.help}>Delete <strong>{deleting.name}</strong> for <strong>{zone.name}</strong> on {floorName}?</p>

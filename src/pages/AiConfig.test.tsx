@@ -292,7 +292,12 @@ describe('API-backed monitoring configuration', () => {
 
   it('tests saved zone confidence in annotated preview without activating', async () => {
     await create(); await saveRule(); fireEvent.click(screen.getByRole('button', { name: 'Review & activate' })); await screen.findByText('CAM-01');
-    fireEvent.click(screen.getByRole('button', { name: 'Preview zone confidence: CAM-01' })); await screen.findByRole('img', { name: 'Tracked preview for camera' });
+    fireEvent.click(screen.getByRole('button', { name: 'Preview zone confidence: CAM-01' }));
+    const preview = await screen.findByRole('img', { name: 'Tracked preview for camera' });
+    Object.defineProperty(preview, 'naturalWidth', { configurable: true, value: 640 });
+    Object.defineProperty(preview, 'naturalHeight', { configurable: true, value: 360 });
+    fireEvent.load(preview);
+    expect(screen.getByTestId('roi-overlay')).toBeInTheDocument();
     expect(requests.some(url => url.endsWith('/ai-preview/start?zoneId=zone-1'))).toBe(true); expect(writes.some(r => r.path.endsWith('/activate'))).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'Stop zone preview: CAM-01' })); await waitFor(() => expect(writes.some(r => r.path.endsWith('/ai-preview/stop'))).toBe(true));
   });
