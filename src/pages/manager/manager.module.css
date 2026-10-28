@@ -38,10 +38,11 @@
 .draft { border-style: dashed; background: var(--color-surface-2); }
 .flag { color: var(--color-warning); font-weight: 600; }
 .coverage { display: flex; flex-wrap: wrap; gap: 4px; }
-.cov, .covGap, .covInactive { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 999px; }
+.cov, .covGap, .covInactive, .covUnset { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 999px; }
 .cov { background: var(--color-success-tint); color: var(--color-success); }
 .covGap { background: var(--color-danger-tint); color: var(--color-danger); }
 .covInactive { background: var(--color-warning-tint); color: var(--color-warning); }
+.covUnset { background: var(--color-surface-2); color: var(--color-text-muted); }
 .add { align-self: flex-start; font-size: 12px; font-weight: 600; color: var(--color-primary); padding: 2px 0; }
 .add:hover { text-decoration: underline; }
 .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--color-text-muted); }

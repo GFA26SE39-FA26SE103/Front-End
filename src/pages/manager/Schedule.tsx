@@ -133,9 +133,9 @@ export default function Schedule() {
                                   {coverage.length > 0 && (
                                     <div className={s.coverage}>
                                       {coverage.map((c) => (
-                                        <span key={c.zoneId} className={!activeZoneIds.has(c.zoneId) ? s.covInactive : c.belowMinimum ? s.covGap : s.cov}
-                                          title={`${c.zoneName}${activeZoneIds.has(c.zoneId) ? '' : ' (inactive)'}: ${c.planned} planned, ${c.published} published, minimum ${c.minStaff}`}>
-                                          {c.zoneName}{activeZoneIds.has(c.zoneId) ? '' : ' · inactive'} {c.planned}/{c.minStaff}
+                                        <span key={c.zoneId} className={!activeZoneIds.has(c.zoneId) ? s.covInactive : c.minStaff === 0 ? s.covUnset : c.belowMinimum ? s.covGap : s.cov}
+                                          title={`${c.zoneName}${activeZoneIds.has(c.zoneId) ? '' : ' (inactive)'}: ${c.planned} planned, ${c.published} published, ${c.minStaff === 0 ? 'no minimum configured' : `${c.minStaff} required`}`}>
+                                          {c.zoneName}{activeZoneIds.has(c.zoneId) ? '' : ' · inactive'} · {c.minStaff === 0 ? `${c.planned} staff` : `${c.planned} of ${c.minStaff}`}
                                         </span>
                                       ))}
                                     </div>
@@ -155,11 +155,8 @@ export default function Schedule() {
                 </div>
               )}
               <div className={s.legend}>
-                <span>Dashed = draft</span>
-                <span>Zone chips = planned / minimum</span>
-                <span>Inactive Zones remain only on existing schedule history</span>
-                <span>Assign is available only before an active shift starts</span>
-                <span>Inactive shifts remain visible only when this week already has an assignment</span>
+                <span>Dashed: draft</span>
+                <span>Red: below minimum</span>
               </div>
             </Card>
           </>

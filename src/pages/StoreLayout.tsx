@@ -327,6 +327,7 @@ export default function StoreLayout() {
       mapPolygon: draft.mapPolygon,
       colorHex: draft.colorHex,
       areaM2: draft.areaM2,
+      minStaff: draft.minStaff,
       status: existing?.status ?? 'ACTIVE',
     };
     setZoneSaving(true);

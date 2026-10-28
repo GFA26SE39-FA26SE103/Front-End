@@ -46,6 +46,7 @@ function scheduleWith(): ScheduleView {
     }],
     coverage: [
       { workDate: day, shiftId: morning.shiftId, shiftName: 'Morning', zoneId: 'z-b', zoneName: 'Checkout', minStaff: 1, planned: 1, published: 0, belowMinimum: false },
+      { workDate: day, shiftId: morning.shiftId, shiftName: 'Morning', zoneId: 'z-c', zoneName: 'Produce', minStaff: 0, planned: 1, published: 1, belowMinimum: false },
       { workDate: day, shiftId: evening.shiftId, shiftName: 'Evening', zoneId: 'z-b', zoneName: 'Checkout', minStaff: 1, planned: 0, published: 0, belowMinimum: true },
     ],
   };
@@ -87,7 +88,8 @@ describe('Manager console', () => {
     expect(calls.find((c) => c.path === '/api/schedule')!.query).toBe(`?from=${monday}&to=${addDays(monday, 6)}`);
     // Rows follow the start time, not the API order.
     expect(screen.getAllByRole('row')[1]).toHaveTextContent('Morning');
-    expect(screen.getByText('Checkout 0/1')).toBeInTheDocument();
+    expect(screen.getByText('Checkout · 0 of 1')).toBeInTheDocument();
+    expect(screen.getByText('Produce · 1 staff')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Publish week (1)' }));
     await userEvent.click(screen.getByRole('button', { name: 'Publish' }));
@@ -109,7 +111,7 @@ describe('Manager console', () => {
     expect(screen.getByText('Inactive')).toBeInTheDocument();
     expect(screen.queryByText('Old shift')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Assign staff to Morning/ })).not.toBeInTheDocument();
-    expect(screen.getByText(/Inactive shifts remain visible only when this week already has an assignment/)).toBeInTheDocument();
+    expect(screen.getByText('Dashed: draft')).toBeInTheDocument();
   });
 
   it('warns when published schedule history still references an inactive Zone', async () => {
@@ -132,7 +134,7 @@ describe('Manager console', () => {
 
     expect(await screen.findByText(/Published assignments in this week still reference inactive Zone: Old storage/)).toBeInTheDocument();
     expect(screen.getByText('Old storage (inactive)')).toBeInTheDocument();
-    expect(screen.getByText('Old storage · inactive 1/1')).toBeInTheDocument();
+    expect(screen.getByText('Old storage · inactive · 1 of 1')).toBeInTheDocument();
   });
 
   it('assigns an eligible Staff member as a draft; ineligible ones show why', async () => {

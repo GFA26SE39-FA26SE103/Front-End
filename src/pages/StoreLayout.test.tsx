@@ -84,7 +84,7 @@ describe('StoreLayout', () => {
     vi.mocked(createZone).mockResolvedValue({
       zoneId: 'zone-1', floorId: floor.floorId, code: 'PRODUCE', name: 'Produce', zoneType: null,
       mapPolygon: [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.1 }, { x: 0.5, y: 0.5 }, { x: 0.1, y: 0.5 }],
-      colorHex: '#22C55E', areaM2: null, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
+      colorHex: '#22C55E', areaM2: null, minStaff: 0, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
     });
     vi.mocked(updateZone).mockRejectedValue(new Error('Unexpected zone update'));
     URL.createObjectURL = vi.fn(() => 'blob:floor-map');
@@ -231,7 +231,7 @@ describe('StoreLayout', () => {
     vi.mocked(listZones).mockResolvedValueOnce([{
       zoneId: 'zone-1', floorId: floor.floorId, code: 'FROZEN', name: 'Frozen aisle', zoneType: 'AISLES',
       mapPolygon: [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.1 }, { x: 0.5, y: 0.5 }],
-      colorHex: '#3B82F6', areaM2: null, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
+      colorHex: '#3B82F6', areaM2: null, minStaff: 1, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
     }]);
     const user = userEvent.setup();
     renderPage();
@@ -378,6 +378,7 @@ describe('StoreLayout', () => {
 
     await waitFor(() => expect(createZone).toHaveBeenCalledWith('floor-1', {
       code: 'PRODUCE', name: 'Produce', zoneType: 'FRESH_FOOD', colorHex: '#22C55E', areaM2: null, status: 'ACTIVE',
+      minStaff: 0,
       mapPolygon: [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.1 }, { x: 0.5, y: 0.5 }, { x: 0.1, y: 0.5 }],
     }));
     expect(await screen.findByText('Zone saved.')).toBeInTheDocument();
