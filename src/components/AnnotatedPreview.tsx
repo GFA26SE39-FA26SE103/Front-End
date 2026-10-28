@@ -324,6 +324,6 @@ function stateLabel(state: ViewState): string {
   if (state === 'unauthorized') return 'Session expired';
   if (state === 'error') return 'AI preview stopped after a camera error';
   if (state === 'unavailable') return 'AI preview is unavailable';
-  if (state === 'monitoring-owned') return 'Deactivate monitoring before testing Draft confidence. Active monitoring has not been interrupted.';
+  if (state === 'monitoring-owned') return 'This camera is used by active monitoring in this or another Zone. Deactivate every active configuration using the camera, then retry.';
   return '';
 }

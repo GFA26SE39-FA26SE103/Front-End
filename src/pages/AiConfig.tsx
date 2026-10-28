@@ -369,7 +369,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       {previewCameraId && <div className={s.zonePreview}><AnnotatedPreview cameraId={previewCameraId} zoneId={zoneId} enabled /></div>}
       <ul>{review.issues.map((i, n) => <li key={n} className={s.error}><strong>{i.code}: </strong><span>{i.message}</span></li>)}</ul>
       {review.warnings.map(w => <p key={w} className={s.help}>{w}</p>)}
-      <p className={s.help}>Draft confidence preview is unavailable while this camera is owned by active monitoring. An active preview attaches without restarting monitoring. Boxes use an annotation context; ROI counts can differ between zones with different confidence filters.</p>
+      <p className={s.help}>A camera shared by multiple Zones cannot test Draft confidence while any mapped Zone still has active monitoring. Deactivate every active configuration using the camera, then retry. Boxes use an annotation context; ROI counts can differ between Zones with different confidence filters.</p>
       <Button disabled={busy || dirty || active || !review.canActivate} onClick={() => void changeActive(true)}>Activate configuration</Button>
       <p className={s.help}>The backend rechecks source, mapping, ROI and rules at activation. The worker then measures active rules continuously, even with no viewer. Incidents created here remain DETECTED; dispatch is not implemented in this increment.</p>
     </section>}

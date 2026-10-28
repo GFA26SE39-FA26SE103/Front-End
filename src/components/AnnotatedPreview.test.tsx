@@ -260,6 +260,6 @@ describe('AnnotatedPreview', () => {
   it('explains why a Draft preview cannot restart active monitoring', async () => {
     start.mockRejectedValue(new ApiError(409, 'AI_SESSION_MONITORING_OWNED', 'Deactivate monitoring first.'));
     render(<AnnotatedPreview cameraId="camera-a" zoneId="draft-zone" enabled />);
-    expect(await screen.findByText(/Deactivate monitoring before testing Draft confidence/)).toBeInTheDocument();
+    expect(await screen.findByText(/used by active monitoring in this or another Zone/)).toBeInTheDocument();
   });
 });
