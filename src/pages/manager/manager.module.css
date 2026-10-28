@@ -9,10 +9,11 @@
 .weekLabel { min-width: 150px; text-align: center; font-size: 12px; font-weight: 600; }
 
 .note { color: var(--color-text-muted); font-size: 13px; line-height: 1.5; }
-.error, .success, .info { padding: 12px; border-radius: 7px; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.error, .success, .info, .warning { padding: 12px; border-radius: 7px; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 .error { color: var(--color-danger); background: var(--color-danger-tint); }
 .success { color: var(--color-success); background: var(--color-success-tint); }
 .info { color: var(--color-text); background: var(--color-info-tint); }
+.warning { color: var(--color-warning); background: var(--color-warning-tint); }
 
 /* Weekly grid: one row per shift template, one column per day. */
 .gridWrap { overflow: auto; }
@@ -22,6 +23,7 @@
 .grid td { vertical-align: top; padding: 8px; border-top: 1px solid var(--color-border); border-left: 1px solid var(--color-grid); }
 .grid td:first-child { border-left: 0; }
 .shiftHead { width: 130px; }
+.shiftTitle { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .shiftName { font-size: 13px; font-weight: 600; }
 .shiftTime { font-size: 12px; color: var(--color-text-muted); margin-top: 2px; }
 .cell { display: flex; flex-direction: column; gap: 6px; min-height: 64px; }
@@ -33,9 +35,10 @@
 .draft { border-style: dashed; background: var(--color-surface-2); }
 .flag { color: var(--color-warning); font-weight: 600; }
 .coverage { display: flex; flex-wrap: wrap; gap: 4px; }
-.cov, .covGap { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 999px; }
+.cov, .covGap, .covInactive { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 999px; }
 .cov { background: var(--color-success-tint); color: var(--color-success); }
 .covGap { background: var(--color-danger-tint); color: var(--color-danger); }
+.covInactive { background: var(--color-warning-tint); color: var(--color-warning); }
 .add { align-self: flex-start; font-size: 12px; font-weight: 600; color: var(--color-primary); padding: 2px 0; }
 .add:hover { text-decoration: underline; }
 .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--color-text-muted); }
@@ -65,6 +68,7 @@
 
 /* Tables */
 .tableWrap { overflow: auto; }
+.filterControl { width: 220px; max-width: 45%; flex: 0 0 auto; }
 .table { width: 100%; border-collapse: collapse; text-align: left; }
 .table th { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--color-text-dim); padding: 8px; }
 .table td { padding: 12px 8px; border-top: 1px solid var(--color-border); font-size: 13px; }
@@ -128,6 +132,7 @@
   .reviewHead, .reviewStatus { align-items: flex-start; flex-direction: column; }
   .reviewStatus { gap: 12px; }
   .deadline { padding-left: 0; border-left: 0; }
+  .filterControl { width: 160px; max-width: 55%; }
 }
 
 /* Swap decision: rule chips with optional details, then the note and buttons. */

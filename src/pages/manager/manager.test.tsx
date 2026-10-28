@@ -6,7 +6,7 @@ import { saveSession } from '../../auth/session';
 import type { ScheduleView, ShiftTemplate, StaffOption, SwapRequest } from '../../api/planning';
 import { mockNativeDialogs } from '../../test/dialog';
 import { addDays, isoDate, weekStart } from './dates';
-import { shiftHours } from './planningData';
+import { shiftHasStarted, shiftHours } from './planningData';
 import Schedule from './Schedule';
 import ShiftTemplates from './ShiftTemplates';
 import { SwapRequestDetail } from './SwapRequests';
@@ -93,6 +93,46 @@ describe('Manager console', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Publish' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Checkout has 0 of 1 staff');
     expect(calls.at(-1)).toMatchObject({ method: 'POST', path: '/api/schedule/publish', body: { from: monday, to: addDays(monday, 6) } });
+  });
+
+  it('keeps an inactive shift visible only when the viewed week already uses it', async () => {
+    storeRoutes();
+    const inactiveMorning = { ...morning, status: 'INACTIVE' };
+    const unusedInactive = { ...template('t-old', 'Old shift', '10:00:00', '14:00:00'), status: 'INACTIVE' };
+    routes['GET /api/schedule'] = () => json(scheduleWith());
+    routes['GET /api/shifts'] = () => json([inactiveMorning, unusedInactive, evening]);
+    routes['GET /api/swap-requests'] = () => json([]);
+    show('/manager/schedule', <Schedule />);
+
+    const assigned = await screen.findByRole('button', { name: /Nguyễn An, Morning/ });
+    expect(assigned).toBeInTheDocument();
+    expect(screen.getByText('Inactive')).toBeInTheDocument();
+    expect(screen.queryByText('Old shift')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Assign staff to Morning/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/Inactive shifts remain visible only when this week already has an assignment/)).toBeInTheDocument();
+  });
+
+  it('warns when published schedule history still references an inactive Zone', async () => {
+    storeRoutes();
+    const withInactiveZone = {
+      ...scheduleWith(),
+      assignments: [{
+        ...scheduleWith().assignments[0],
+        zones: [{ zoneId: 'z-x', zoneName: 'Old storage' }],
+      }],
+      coverage: [{
+        workDate: day, shiftId: morning.shiftId, shiftName: 'Morning', zoneId: 'z-x', zoneName: 'Old storage',
+        minStaff: 1, planned: 1, published: 1, belowMinimum: false,
+      }],
+    };
+    routes['GET /api/schedule'] = () => json(withInactiveZone);
+    routes['GET /api/shifts'] = () => json([morning]);
+    routes['GET /api/swap-requests'] = () => json([]);
+    show('/manager/schedule', <Schedule />);
+
+    expect(await screen.findByText(/Published assignments in this week still reference inactive Zone: Old storage/)).toBeInTheDocument();
+    expect(screen.getByText('Old storage (inactive)')).toBeInTheDocument();
+    expect(screen.getByText('Old storage · inactive 1/1')).toBeInTheDocument();
   });
 
   it('assigns an eligible Staff member as a draft; ineligible ones show why', async () => {
@@ -221,9 +261,30 @@ describe('Manager console', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Night created');
   });
 
+  it('filters shift setup by active and inactive status', async () => {
+    const inactive = { ...template('t-test', 'Test', '08:00:00', '16:00:00'), status: 'INACTIVE', inUse: true };
+    routes['GET /api/shifts'] = () => json([morning, inactive, evening]);
+    show('/manager/shifts', <ShiftTemplates />);
+
+    const filter = await screen.findByRole('combobox', { name: 'Filter shifts by status' });
+    expect(screen.getByText('Morning')).toBeInTheDocument();
+    expect(screen.getByText('Test')).toBeInTheDocument();
+
+    await userEvent.selectOptions(filter, 'ACTIVE');
+    expect(screen.getByText('Morning')).toBeInTheDocument();
+    expect(screen.getByText('Evening')).toBeInTheDocument();
+    expect(screen.queryByText('Test')).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(filter, 'INACTIVE');
+    expect(screen.getByText('Test')).toBeInTheDocument();
+    expect(screen.queryByText('Morning')).not.toBeInTheDocument();
+  });
+
   it('formats dates as local store days', () => {
     expect(isoDate(new Date(2026, 9, 5))).toBe('2026-10-05');
     expect(weekStart(new Date(2026, 9, 25))).toBe('2026-10-19');
     expect(shiftHours('22:00', '06:00')).toBe(8);
+    expect(shiftHasStarted('2026-10-28', '06:00:00', new Date('2026-10-28T06:00:00+07:00'))).toBe(true);
+    expect(shiftHasStarted('2026-10-28', '14:00:00', new Date('2026-10-28T13:59:59+07:00'))).toBe(false);
   });
 });

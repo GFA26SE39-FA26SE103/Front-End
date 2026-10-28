@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { createShiftTemplate, listShiftTemplates, updateShiftTemplate, type ShiftTemplate } from '../../api/planning';
 import { Dialog } from '../../components/Dialog';
 import { ManagerLayout } from '../../components/ManagerLayout';
-import { Badge, Button, Card, CardHeader } from '../../components/ui';
+import { Badge, Button, Card, CardHeader, Select } from '../../components/ui';
 import { clock, problem } from './dates';
 import { ALLOWED_HOURS, shiftHours } from './planningData';
 import { useLoad } from './useLoad';
@@ -11,25 +11,37 @@ import s from './manager.module.css';
 export default function ShiftTemplates() {
   const [notice, setNotice] = useState('');
   const [editing, setEditing] = useState<ShiftTemplate | 'new' | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [reload, setReload] = useState(0);
   const { data: templates, error } = useLoad(String(reload),
     async (signal) => [...await listShiftTemplates(signal)].sort((a, b) => a.startTime.localeCompare(b.startTime)));
+  const visibleTemplates = templates?.filter((template) => statusFilter === 'ALL' || template.status === statusFilter);
+  const statusOptions = [
+    { value: 'ALL' as const, label: `All${templates ? ` (${templates.length})` : ''}` },
+    { value: 'ACTIVE' as const, label: `Active${templates ? ` (${templates.filter((template) => template.status === 'ACTIVE').length})` : ''}` },
+    { value: 'INACTIVE' as const, label: `Inactive${templates ? ` (${templates.filter((template) => template.status === 'INACTIVE').length})` : ''}` },
+  ];
 
   return (
     <ManagerLayout title="Shift setup" subtitle="Create and manage 4, 6 or 8-hour shifts" actions={<Button onClick={() => setEditing('new')}>New shift</Button>}>
       <div className={s.page}>
         {notice && <p className={s.success} role="status">{notice}</p>}
         <Card>
-          <CardHeader title="Shifts" />
+          <CardHeader title="Shifts">
+            <div className={s.filterControl}>
+              <Select value={statusFilter} options={statusOptions} onChange={setStatusFilter} ariaLabel="Filter shifts by status" height={34} />
+            </div>
+          </CardHeader>
           {error ? <p className={s.error} role="alert">{error}</p>
             : !templates ? <p className={s.note} role="status">Loading shifts…</p>
             : templates.length === 0 ? <p className={s.note}>No shifts have been set up yet.</p>
+            : visibleTemplates?.length === 0 ? <p className={s.note}>No {statusFilter.toLowerCase()} shifts.</p>
             : (
               <div className={s.tableWrap}>
                 <table className={s.table}>
                   <thead><tr><th>Name</th><th>Time</th><th>Length</th><th>Status</th><th>In use</th><th /></tr></thead>
                   <tbody>
-                    {templates.map((t) => (
+                    {visibleTemplates?.map((t) => (
                       <tr key={t.shiftId}>
                         <td><b>{t.name}</b></td>
                         <td>{clock(t.startTime)}–{clock(t.endTime)}</td>

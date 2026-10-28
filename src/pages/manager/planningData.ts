@@ -26,6 +26,12 @@ export async function listStaff(signal?: AbortSignal): Promise<Person[]> {
 /** BR-33: shift templates last 4, 6 or 8 hours. */
 export const ALLOWED_HOURS = [4, 6, 8];
 
+/** BR-35: Managers cannot add or change an assignment after the shift starts in the store timezone. */
+export function shiftHasStarted(workDate: string, startTime: string, now = new Date()): boolean {
+  const normalizedTime = startTime.length === 5 ? `${startTime}:00` : startTime;
+  return new Date(`${workDate}T${normalizedTime}+07:00`).getTime() <= now.getTime();
+}
+
 /** Length in hours of "HH:mm" times; an end at or before the start means the shift ends the next day. */
 export function shiftHours(start: string, end: string): number {
   const minutes = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));

@@ -6,9 +6,9 @@ import {
 } from '../../api/planning';
 import { Dialog } from '../../components/Dialog';
 import { ManagerLayout } from '../../components/ManagerLayout';
-import { Button, Card, CardHeader, StatCard } from '../../components/ui';
+import { Badge, Button, Card, CardHeader, StatCard } from '../../components/ui';
 import { addDays, clock, dayLabel, isoDate, longDayLabel, problem, range, weekStart } from './dates';
-import { listStoreZones, type StoreZone } from './planningData';
+import { listStoreZones, shiftHasStarted, type StoreZone } from './planningData';
 import { useLoad } from './useLoad';
 import s from './manager.module.css';
 
@@ -42,6 +42,11 @@ export default function Schedule() {
   };
 
   const assignments = data?.schedule.assignments.filter(live) ?? [];
+  const activeZoneIds = new Set(data?.zones.map((zone) => zone.zoneId) ?? []);
+  const inactiveZones = [...new Map(assignments
+    .flatMap((assignment) => assignment.zones)
+    .filter((zone) => !activeZoneIds.has(zone.zoneId))
+    .map((zone) => [zone.zoneId, zone])).values()];
   // Active templates, plus inactive ones still used this week, earliest first.
   const rows = (data?.templates ?? [])
     .filter((t) => t.status === 'ACTIVE' || assignments.some((a) => a.shiftId === t.shiftId))
@@ -78,6 +83,12 @@ export default function Schedule() {
             {data.pendingSwaps > 0 && (
               <p className={s.info}>{data.pendingSwaps === 1 ? '1 swap request waits' : `${data.pendingSwaps} swap requests wait`} for your decision. <Link className={s.back} to="/manager/swaps">Review swaps</Link></p>
             )}
+            {inactiveZones.length > 0 && (
+              <p className={s.warning} role="status">
+                Published assignments in this week still reference inactive {inactiveZones.length === 1 ? 'Zone' : 'Zones'}: {inactiveZones.map((zone) => zone.zoneName).join(', ')}.
+                {' '}They remain visible as schedule history, but cannot be selected for new assignments. Update or remove future assignments that still use them.
+              </p>
+            )}
             <Card>
               <CardHeader title="Week plan" />
               {rows.length === 0 ? (
@@ -95,7 +106,10 @@ export default function Schedule() {
                       {rows.map((shift) => (
                         <tr key={shift.shiftId}>
                           <td>
-                            <div className={s.shiftName}>{shift.name}</div>
+                            <div className={s.shiftTitle}>
+                              <span className={s.shiftName}>{shift.name}</span>
+                              {shift.status !== 'ACTIVE' && <Badge tone="neutral">Inactive</Badge>}
+                            </div>
                             <div className={s.shiftTime}>{clock(shift.startTime)}–{clock(shift.endTime)} · {shift.hours} h</div>
                           </td>
                           {days.map((day) => {
@@ -110,7 +124,7 @@ export default function Schedule() {
                                       onClick={() => setEditing({ kind: 'edit', assignment: a })}
                                       aria-label={`${a.fullName}, ${shift.name} ${dayLabel(day)}, ${a.status === 'DRAFT' ? 'draft' : 'published'}`}>
                                       <strong>{a.fullName}</strong>
-                                      <span>{a.zones.map((z) => z.zoneName).join(', ') || 'No zone'}</span>
+                                      <span>{a.zones.map((z) => `${z.zoneName}${activeZoneIds.has(z.zoneId) ? '' : ' (inactive)'}`).join(', ') || 'No zone'}</span>
                                       {a.status === 'DRAFT' && <span>Draft</span>}
                                       {a.pendingSwapRequestId && <span className={s.flag}>Swap pending</span>}
                                       {a.checkInAt && <span>Checked in</span>}
@@ -119,13 +133,14 @@ export default function Schedule() {
                                   {coverage.length > 0 && (
                                     <div className={s.coverage}>
                                       {coverage.map((c) => (
-                                        <span key={c.zoneId} className={c.belowMinimum ? s.covGap : s.cov} title={`${c.zoneName}: ${c.planned} planned, ${c.published} published, minimum ${c.minStaff}`}>
-                                          {c.zoneName} {c.planned}/{c.minStaff}
+                                        <span key={c.zoneId} className={!activeZoneIds.has(c.zoneId) ? s.covInactive : c.belowMinimum ? s.covGap : s.cov}
+                                          title={`${c.zoneName}${activeZoneIds.has(c.zoneId) ? '' : ' (inactive)'}: ${c.planned} planned, ${c.published} published, minimum ${c.minStaff}`}>
+                                          {c.zoneName}{activeZoneIds.has(c.zoneId) ? '' : ' · inactive'} {c.planned}/{c.minStaff}
                                         </span>
                                       ))}
                                     </div>
                                   )}
-                                  {!past && shift.status === 'ACTIVE' && (
+                                  {!shiftHasStarted(day, shift.startTime) && shift.status === 'ACTIVE' && (
                                     <button type="button" className={s.add} onClick={() => setEditing({ kind: 'assign', shift, workDate: day })}
                                       aria-label={`Assign staff to ${shift.name} on ${dayLabel(day)}`}>+ Assign</button>
                                   )}
@@ -142,6 +157,9 @@ export default function Schedule() {
               <div className={s.legend}>
                 <span>Dashed = draft</span>
                 <span>Zone chips = planned / minimum</span>
+                <span>Inactive Zones remain only on existing schedule history</span>
+                <span>Assign is available only before an active shift starts</span>
+                <span>Inactive shifts remain visible only when this week already has an assignment</span>
               </div>
             </Card>
           </>
