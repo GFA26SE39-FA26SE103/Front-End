@@ -47,8 +47,10 @@ export default function App() {
         <Route path="/admin/audit-logs" element={<AuditLog />} />
         <Route path="/admin/system-health" element={<SystemHealth />} />
         <Route path="/admin/settings" element={<GlobalSettings />} />
+        <Route path="/admin/live-floor-map" element={<OperatorFloorMap workspace="admin" />} />
+        <Route path="/admin/live-cameras/:cameraId" element={<OperatorCameraLive workspace="admin" />} />
       </Route>
-      <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'OPERATOR']} />}>
+      <Route element={<ProtectedRoute allowedRoles={['OPERATOR']} />}>
         <Route path="/operator/dashboard" element={<Navigate to="/operator/floor-map" replace />} />
         <Route path="/operator/floor-map" element={<OperatorFloorMap />} />
         <Route path="/operator/tasks" element={<OperatorTasks />} />

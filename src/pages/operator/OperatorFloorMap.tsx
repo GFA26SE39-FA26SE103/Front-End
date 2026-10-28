@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getCameraPreview, listCameras, type CameraRecord } from '../../api/cameras';
 import type { FloorRecord, ZoneRecord } from '../../api/floors';
+import { AdminLayout } from '../../components/AdminLayout';
 import { FloorPlanView } from '../../components/FloorPlanView';
 import { OperatorLayout } from '../../components/OperatorLayout';
 import { Button, Chip, Overline } from '../../components/ui';
@@ -24,7 +25,9 @@ const HEALTH_REFRESH_MS = 30_000;
 const SNAPSHOT_REFRESH_MS = 10_000;
 const emptyDetails: FloorDetails = { zones: [], cameras: [], mappings: [] };
 
-export default function OperatorFloorMap() {
+type LiveWorkspace = 'operator' | 'admin';
+
+export default function OperatorFloorMap({ workspace = 'operator' }: { workspace?: LiveWorkspace }) {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [storeName, setStoreName] = useState('');
@@ -105,13 +108,16 @@ export default function OperatorFloorMap() {
   const unplaced = details.cameras.filter((camera) => camera.mapX === null || camera.mapY === null).length;
   const online = details.cameras.filter((camera) => healthTone(camera) === 'success').length;
   const liveCameras = details.cameras.filter((camera) => healthTone(camera) === 'success');
+  const cameraPath = (cameraId: string) => workspace === 'admin'
+    ? `/admin/live-cameras/${cameraId}`
+    : `/operator/cameras/${cameraId}`;
 
   const subtitle = selectedFloor
     ? `${storeName ? `${storeName} · ` : ''}${selectedFloor.name || `Floor ${selectedFloor.floorNumber}`} · ${online}/${details.cameras.length} cameras online`
     : 'Live store overview';
 
-  return (
-    <OperatorLayout title="Floor map" subtitle={subtitle}>
+  const content = (
+    <>
       <aside className={s.left}>
         <Overline>FLOORS</Overline>
         <div className={s.floorList}>
@@ -168,7 +174,7 @@ export default function OperatorFloorMap() {
                 <CameraPopup
                   camera={selectedCamera}
                   zones={zonesForCamera(selectedCamera.cameraId, details.zones, details.mappings)}
-                  onOpenLive={() => navigate(`/operator/cameras/${selectedCamera.cameraId}`)}
+                  onOpenLive={() => navigate(cameraPath(selectedCamera.cameraId))}
                   onClose={() => setSelectedCameraId(null)}
                 />
               )}
@@ -191,7 +197,7 @@ export default function OperatorFloorMap() {
           <div className={s.liveList}>
             {liveCameras.map((camera) => {
               const cameraZones = zonesForCamera(camera.cameraId, details.zones, details.mappings);
-              return <button key={camera.cameraId} className={s.liveCamera} aria-label={`Open ${camera.code} live`} onClick={() => navigate(`/operator/cameras/${camera.cameraId}`)}>
+              return <button key={camera.cameraId} className={s.liveCamera} aria-label={`Open ${camera.code} live`} onClick={() => navigate(cameraPath(camera.cameraId))}>
                 <span><strong>{camera.code}</strong><small>{cameraZones.map((zone) => zone.name).join(', ') || 'No mapped Zone'}</small></span>
                 <span className={s.liveAction}>View live →</span>
               </button>;
@@ -235,8 +241,18 @@ export default function OperatorFloorMap() {
           <p>AI-detected and staff-reported incidents appear here once MF-02 monitoring is connected.</p>
         </div>
       </aside>
-    </OperatorLayout>
+    </>
   );
+
+  if (workspace === 'admin') {
+    return (
+      <AdminLayout title="Live floor map" subtitle={subtitle}>
+        <div className={s.adminWorkspace}>{content}</div>
+      </AdminLayout>
+    );
+  }
+
+  return <OperatorLayout title="Floor map" subtitle={subtitle}>{content}</OperatorLayout>;
 }
 
 function CameraPopup({ camera, zones, onOpenLive, onClose }: { camera: CameraRecord; zones: ZoneRecord[]; onOpenLive: () => void; onClose: () => void }) {

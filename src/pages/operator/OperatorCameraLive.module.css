@@ -1,3 +1,12 @@
+.adminWorkspace {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  margin: -24px;
+  overflow: hidden;
+}
+
 .stage {
   flex: 1;
   min-width: 0;

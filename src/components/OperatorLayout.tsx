@@ -1,13 +1,10 @@
 import type { ReactNode } from 'react';
 import { Link, NavLink } from 'react-router-dom';
-import { loadSession } from '../auth/session';
 import { Icon } from './Icon';
 import { AccountMenu } from './AccountMenu';
 import s from './OperatorLayout.module.css';
 
 export function OperatorLayout({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
-  const isAdmin = loadSession()?.user.role === 'ADMIN';
-
   return (
     <div className={s.shell}>
       <header className={s.header}>
@@ -25,7 +22,6 @@ export function OperatorLayout({ title, subtitle, children }: { title: string; s
           <NavLink to="/operator/floor-map" className={({ isActive }) => `${s.navLink} ${isActive ? s.active : ''}`}>Floor map</NavLink>
           <NavLink to="/operator/tasks" className={({ isActive }) => `${s.navLink} ${isActive ? s.active : ''}`}>Tasks</NavLink>
           <NavLink to="/operator/notifications" className={({ isActive }) => `${s.navLink} ${isActive ? s.active : ''}`}>Notifications</NavLink>
-          {isAdmin && <Link to="/admin/store-layout" className={s.navLink}>Admin setup</Link>}
         </nav>
         <AccountMenu />
       </header>

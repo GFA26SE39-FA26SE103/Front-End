@@ -16,7 +16,7 @@ const NAV = [
   { to: '/admin/audit-logs', label: 'Audit Logs', icon: 'nav-file' },
   { to: '/admin/system-health', label: 'System Health', icon: 'nav-activity' },
   { to: '/admin/settings', label: 'Global settings', icon: 'nav-sliders' },
-  { to: '/operator/floor-map', label: 'Live floor map', icon: 'layers' },
+  { to: '/admin/live-floor-map', label: 'Live floor map', icon: 'layers' },
 ];
 
 export function AdminLayout({ title, subtitle, actions, children }: { title: string; subtitle: string; actions?: ReactNode; children: ReactNode }) {

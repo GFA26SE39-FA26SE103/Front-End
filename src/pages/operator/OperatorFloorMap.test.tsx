@@ -71,6 +71,15 @@ const renderPage = () => render(
   </MemoryRouter>,
 );
 
+const renderAdminPage = () => render(
+  <MemoryRouter initialEntries={['/admin/live-floor-map']}>
+    <Routes>
+      <Route path="/admin/live-floor-map" element={<OperatorFloorMap workspace="admin" />} />
+      <Route path="/admin/live-cameras/:cameraId" element={<p>Admin live page</p>} />
+    </Routes>
+  </MemoryRouter>,
+);
+
 describe('OperatorFloorMap', () => {
   beforeEach(() => {
     vi.mocked(listSupermarkets).mockResolvedValue([{ supermarketId: 'store-1', code: 'STORE', name: 'Central store', address: null, status: 'ACTIVE' }]);
@@ -122,6 +131,16 @@ describe('OperatorFloorMap', () => {
     expect(within(liveSection).queryByRole('button', { name: 'Open CAM-02 live' })).not.toBeInTheDocument();
     await user.click(await within(liveSection).findByRole('button', { name: 'Open CAM-01 live' }));
     expect(screen.getByText('Live page')).toBeInTheDocument();
+  });
+
+  it('keeps the Admin sidebar and uses Admin live camera routes', async () => {
+    const user = userEvent.setup();
+    renderAdminPage();
+
+    expect(await screen.findByRole('navigation', { name: 'Admin' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Live floor map' })).toHaveAttribute('href', '/admin/live-floor-map');
+    await user.click(await screen.findByRole('button', { name: 'Open CAM-01 live' }));
+    expect(screen.getByText('Admin live page')).toBeInTheDocument();
   });
 
   it('explains when the floor has no uploaded plan', async () => {

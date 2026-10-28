@@ -12,8 +12,12 @@ vi.mock('../api/auth', () => ({ getCurrentUser: vi.fn(), signIn: vi.fn(), MAX_FA
 vi.mock('../pages/SetupHealth', () => ({ default: () => <AdminLayout title="Dashboard" subtitle="Setup"><p>Admin dashboard content</p></AdminLayout> }));
 vi.mock('../pages/UsersRoles', () => ({ default: () => <p>Account admin content</p> }));
 vi.mock('../pages/admin/ResponsePolicies', () => ({ default: () => <h1>Response policies screen</h1> }));
-vi.mock('../pages/operator/OperatorFloorMap', () => ({ default: () => <h1>Floor map screen</h1> }));
-vi.mock('../pages/operator/OperatorCameraLive', () => ({ default: () => <h1>Camera live screen</h1> }));
+vi.mock('../pages/operator/OperatorFloorMap', () => ({
+  default: ({ workspace = 'operator' }: { workspace?: string }) => <h1>{workspace === 'admin' ? 'Admin live floor map screen' : 'Floor map screen'}</h1>,
+}));
+vi.mock('../pages/operator/OperatorCameraLive', () => ({
+  default: ({ workspace = 'operator' }: { workspace?: string }) => <h1>{workspace === 'admin' ? 'Admin live camera screen' : 'Camera live screen'}</h1>,
+}));
 
 const makeUser = (role = 'ADMIN', status = 'ACTIVE'): AuthUser => ({
   userId: 'user-1', email: 'account@example.test', fullName: 'Test Account', roleId: `role-${role}`, role, status,
@@ -74,7 +78,18 @@ describe('role routing and authenticated access', () => {
   });
 
   it.each([
+    ['/admin/live-floor-map', 'Admin live floor map screen'],
+    ['/admin/live-cameras/camera-1', 'Admin live camera screen'],
+  ])('lets ADMIN open the read-only live view at %s', async (path, heading) => {
+    session(makeUser('ADMIN'));
+    vi.mocked(getCurrentUser).mockResolvedValue(makeUser('ADMIN'));
+    show(path);
+    await screen.findByRole('heading', { name: heading });
+  });
+
+  it.each([
     ['ADMIN', '/manager/dashboard'], ['MANAGER', '/staff/dashboard'],
+    ['ADMIN', '/operator/floor-map'], ['ADMIN', '/operator/cameras/camera-1'],
     ['STAFF', '/operator/dashboard'], ['STAFF', '/operator/floor-map'],
     ['MANAGER', '/operator/floor-map'], ['MANAGER', '/operator/cameras/camera-1'],
   ])('blocks %s from %s when the route requires another role', async (role, path) => {
@@ -207,11 +222,11 @@ describe('role routing and authenticated access', () => {
     await screen.findByText('Session expired');
   });
 
-  it('allows Admin preview access and clears the token on Admin sign-out', async () => {
+  it('allows Admin live preview access and clears the token on Admin sign-out', async () => {
     const user = userEvent.setup();
     session(makeUser());
-    const rendered = show('/operator/floor-map');
-    await screen.findByRole('heading', { name: 'Floor map screen' });
+    const rendered = show('/admin/live-floor-map');
+    await screen.findByRole('heading', { name: 'Admin live floor map screen' });
     rendered.unmount();
     show('/admin/dashboard');
     await screen.findByRole('heading', { name: 'Dashboard' });

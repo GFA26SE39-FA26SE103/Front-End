@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getCamera, type CameraRecord } from '../../api/cameras';
 import type { FloorRecord, ZoneRecord } from '../../api/floors';
+import { AdminLayout } from '../../components/AdminLayout';
 import { AnnotatedPreview, type PreviewRegion } from '../../components/AnnotatedPreview';
 import { FloorPlanView } from '../../components/FloorPlanView';
 import { OperatorLayout } from '../../components/OperatorLayout';
@@ -26,13 +27,15 @@ import { CameraMonitoringPanel } from './CameraMonitoringPanel';
 // Same fallback colour as the Admin ROI editor, so a zone looks the same in both places.
 const ROI_COLOR = '#3B82F6';
 
-export default function OperatorCameraLive() {
+type LiveWorkspace = 'operator' | 'admin';
+
+export default function OperatorCameraLive({ workspace = 'operator' }: { workspace?: LiveWorkspace }) {
   const { cameraId = '' } = useParams();
   // Keyed so all page state resets when the operator opens a different camera.
-  return <CameraLiveView key={cameraId} cameraId={cameraId} />;
+  return <CameraLiveView key={cameraId} cameraId={cameraId} workspace={workspace} />;
 }
 
-function CameraLiveView({ cameraId }: { cameraId: string }) {
+function CameraLiveView({ cameraId, workspace }: { cameraId: string; workspace: LiveWorkspace }) {
   const [camera, setCamera] = useState<CameraRecord | null>(null);
   const [floor, setFloor] = useState<FloorRecord | null>(null);
   const [details, setDetails] = useState<FloorDetails | null>(null);
@@ -74,23 +77,31 @@ function CameraLiveView({ cameraId }: { cameraId: string }) {
     });
   }, [cameraId, details]);
   const zoneTone = (zone: ZoneRecord) => (details ? COVERAGE[zoneCoverage(zone, details.cameras, details.mappings).status].tone : 'neutral');
-  const floorLink = `/operator/floor-map${floor ? `?floor=${floor.floorId}` : ''}`;
+  const floorBase = workspace === 'admin' ? '/admin/live-floor-map' : '/operator/floor-map';
+  const cameraBase = workspace === 'admin' ? '/admin/live-cameras' : '/operator/cameras';
+  const floorLink = `${floorBase}${floor ? `?floor=${floor.floorId}` : ''}`;
 
   if (error) {
+    const message = (
+      <div className={s.message}>
+        <p role="alert">{error}</p>
+        <Link to={floorBase}>Back to floor map</Link>
+      </div>
+    );
+    if (workspace === 'admin') {
+      return <AdminLayout title="Live camera" subtitle="Camera unavailable">{message}</AdminLayout>;
+    }
     return (
       <OperatorLayout title="Camera live" subtitle="Camera unavailable">
-        <div className={s.message}>
-          <p role="alert">{error}</p>
-          <Link to="/operator/floor-map">Back to floor map</Link>
-        </div>
+        {message}
       </OperatorLayout>
     );
   }
 
   const title = camera ? `${camera.code}${zones.length ? ` · ${zones.map((zone) => zone.name).join(', ')}` : ''}` : 'Camera live';
 
-  return (
-    <OperatorLayout title={title} subtitle={camera ? `${camera.name} · live` : 'Loading camera…'}>
+  const content = (
+    <>
       <section className={s.stage}>
         <div className={s.video}>
           <AnnotatedPreview cameraId={cameraId} enabled={live && Boolean(camera)} regions={regions} />
@@ -166,7 +177,7 @@ function CameraLiveView({ cameraId }: { cameraId: string }) {
             return (
               <Link
                 key={item.cameraId}
-                to={`/operator/cameras/${item.cameraId}`}
+                to={`${cameraBase}/${item.cameraId}`}
                 className={`${s.switchRow} ${current ? s.switchCurrent : ''}`}
                 aria-current={current ? 'page' : undefined}
               >
@@ -181,6 +192,17 @@ function CameraLiveView({ cameraId }: { cameraId: string }) {
           })}
         </nav>
       </aside>
-    </OperatorLayout>
+    </>
   );
+
+  const subtitle = camera ? `${camera.name} · live` : 'Loading camera…';
+  if (workspace === 'admin') {
+    return (
+      <AdminLayout title={title} subtitle={subtitle}>
+        <div className={s.adminWorkspace}>{content}</div>
+      </AdminLayout>
+    );
+  }
+
+  return <OperatorLayout title={title} subtitle={subtitle}>{content}</OperatorLayout>;
 }
