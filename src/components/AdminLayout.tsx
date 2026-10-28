@@ -15,6 +15,7 @@ const NAV = [
   { to: '/admin/users', label: 'Users & Roles', icon: 'nav-users', activeIcon: 'nav-users-active' },
   { to: '/admin/audit-logs', label: 'Audit Logs', icon: 'nav-file' },
   { to: '/admin/system-health', label: 'System Health', icon: 'nav-activity' },
+  { to: '/admin/settings', label: 'Global settings', icon: 'nav-sliders' },
   { to: '/operator/floor-map', label: 'Live floor map', icon: 'layers' },
 ];
 

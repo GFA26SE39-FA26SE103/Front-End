@@ -125,10 +125,10 @@ export function Segmented<T extends string>({ value, options, onChange }: {
   );
 }
 
-export function Toggle({ on, onChange, label, size = 'sm' }: { on: boolean; onChange: (v: boolean) => void; label: string; size?: 'sm' | 'md' }) {
+export function Toggle({ on, onChange, label, size = 'sm', disabled = false }: { on: boolean; onChange: (v: boolean) => void; label: string; size?: 'sm' | 'md'; disabled?: boolean }) {
   const md = size === 'md';
   return (
-    <button role="switch" aria-checked={on} aria-label={label} className={cx(s.toggle, md && s.toggleMd, !on && s.toggleOff)} onClick={() => onChange(!on)}>
+    <button role="switch" aria-checked={on} aria-label={label} disabled={disabled} className={cx(s.toggle, md && s.toggleMd, !on && s.toggleOff)} onClick={() => onChange(!on)}>
       {on && (md ? <Icon name="toggle-on-md" size={20} width={34} /> : <Icon name="toggle-on" size={17} width={30} />)}
     </button>
   );

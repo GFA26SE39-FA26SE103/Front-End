@@ -1,0 +1,35 @@
+.settingsPage { max-width: 760px; margin: 0 auto; }
+.settingsBody { display: grid; gap: 16px; margin-top: 20px; }
+.categoryGroup { display: grid; border: 1px solid var(--color-border); border-radius: 10px; overflow: hidden; }
+.settingRow { min-height: 72px; display: flex; align-items: center; gap: 24px; justify-content: space-between; padding: 16px; border-bottom: 1px solid var(--color-border); }
+.categoryGroup .settingRow:last-child { border-bottom: 0; }
+.settingRow h3 { margin: 0 0 5px; font-size: 13px; }
+.settingRow p { color: var(--color-text-muted); line-height: 1.5; }
+.actions, .inboxActions { display: flex; justify-content: flex-end; gap: 8px; }
+.error, .success { border-radius: 8px; padding: 10px 12px; }
+.error { background: var(--color-danger-tint); color: var(--color-danger); }
+.success { background: var(--color-success-tint); color: var(--color-success); }
+.state { min-height: 120px; display: grid; place-items: center; gap: 12px; color: var(--color-text-muted); text-align: center; }
+.inbox { max-width: 900px; margin: 0 auto; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; box-shadow: var(--shadow-card); overflow: hidden; }
+.inboxHeader { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 20px; border-bottom: 1px solid var(--color-border); }
+.inboxHeader h2 { margin: 0 0 4px; font-size: 16px; }
+.inboxHeader p { color: var(--color-text-muted); }
+.list { list-style: none; padding: 0; margin: 0; }
+.notification { border-bottom: 1px solid var(--color-border); }
+.notification:last-child { border-bottom: 0; }
+.notification a { min-height: 86px; display: grid; grid-template-columns: 8px 1fr auto; gap: 12px; align-items: center; padding: 14px 20px; color: inherit; text-decoration: none; }
+.notification a:hover { background: var(--color-surface-2); }
+.indicator { width: 7px; height: 7px; border-radius: 50%; background: transparent; }
+.unread .indicator { background: var(--color-primary); }
+.notificationContent { min-width: 0; display: grid; gap: 4px; }
+.notificationContent strong { font-size: 13px; }
+.notificationContent > span { color: var(--color-text-muted); }
+.notificationContent time { color: var(--color-text-dim); font-size: 11px; }
+.open { color: var(--color-primary); font-weight: 600; }
+@media (max-width: 720px) {
+  .settingRow, .inboxHeader { align-items: flex-start; }
+  .inboxHeader { flex-direction: column; }
+  .inboxActions { width: 100%; justify-content: flex-start; }
+  .notification a { grid-template-columns: 8px 1fr; padding: 14px; }
+  .open { display: none; }
+}

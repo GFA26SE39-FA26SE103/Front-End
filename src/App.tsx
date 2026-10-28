@@ -21,6 +21,8 @@ import Schedule from './pages/manager/Schedule';
 import WorkShifts from './pages/manager/WorkShifts';
 import { SwapRequestDetail, SwapRequests } from './pages/manager/SwapRequests';
 import ZoneStaffing from './pages/manager/ZoneStaffing';
+import GlobalSettings from './pages/GlobalSettings';
+import { ManagerNotifications, OperatorNotifications } from './pages/NotificationInbox';
 
 export default function App() {
   return (
@@ -44,6 +46,7 @@ export default function App() {
         <Route path="/admin/users" element={<UsersRoles />} />
         <Route path="/admin/audit-logs" element={<AuditLog />} />
         <Route path="/admin/system-health" element={<SystemHealth />} />
+        <Route path="/admin/settings" element={<GlobalSettings />} />
       </Route>
       <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'OPERATOR']} />}>
         <Route path="/operator/dashboard" element={<Navigate to="/operator/floor-map" replace />} />
@@ -51,6 +54,7 @@ export default function App() {
         <Route path="/operator/tasks" element={<OperatorTasks />} />
         <Route path="/operator/tasks/:taskId" element={<OperatorTaskDetail />} />
         <Route path="/operator/cameras/:cameraId" element={<OperatorCameraLive />} />
+        <Route path="/operator/notifications" element={<OperatorNotifications />} />
       </Route>
       <Route element={<ProtectedRoute allowedRoles={['MANAGER']} />}>
         <Route path="/manager/dashboard" element={<Navigate to="/manager/schedule" replace />} />
@@ -60,6 +64,7 @@ export default function App() {
         <Route path="/manager/swaps/:swapRequestId" element={<SwapRequestDetail />} />
         <Route path="/manager/leave" element={<Leave />} />
         <Route path="/manager/shifts" element={<WorkShifts />} />
+        <Route path="/manager/notifications" element={<ManagerNotifications />} />
       </Route>
       <Route element={<ProtectedRoute allowedRoles={['STAFF']} />}>
         <Route path="/staff/dashboard" element={<RoleWorkspace />} />

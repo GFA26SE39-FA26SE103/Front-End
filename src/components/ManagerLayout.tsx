@@ -10,6 +10,7 @@ const NAV = [
   { to: '/manager/swaps', label: 'Swap requests', icon: 'nav-users', activeIcon: 'nav-users-active' },
   { to: '/manager/leave', label: 'Leave', icon: 'nav-file' },
   { to: '/manager/shifts', label: 'Work Shifts', icon: 'rule-clock' },
+  { to: '/manager/notifications', label: 'Notifications', icon: 'nav-bell', activeIcon: 'nav-bell-active' },
 ];
 
 /** The Manager console: same shell as the Admin console, with the MF-04 planning pages. */
