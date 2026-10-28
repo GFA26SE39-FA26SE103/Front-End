@@ -1,6 +1,6 @@
 import { listFloors, listSupermarkets, listZones } from '../../api/floors';
-import { getStaffOptions, listShiftTemplates } from '../../api/planning';
-import { isoDate } from './dates';
+import { getStaffOptions, listWorkShifts } from '../../api/planning';
+import { isoDate, weekStart } from './dates';
 
 export type StoreZone = { zoneId: string; name: string };
 export type Person = { userId: string; fullName: string };
@@ -16,14 +16,15 @@ export async function listStoreZones(signal?: AbortSignal): Promise<StoreZone[]>
 
 /** Active Staff accounts. The planning API lists every one of them as a staff option for any shift. */
 export async function listStaff(signal?: AbortSignal): Promise<Person[]> {
-  const templates = await listShiftTemplates(signal);
-  const any = templates.find((t) => t.status === 'ACTIVE') ?? templates[0];
+  const today = new Date();
+  const workShifts = await listWorkShifts(weekStart(today), signal);
+  const any = workShifts.find((shift) => shift.status === 'ACTIVE') ?? workShifts[0];
   if (!any) return [];
   const options = await getStaffOptions(any.shiftId, isoDate(new Date()), undefined, signal);
   return options.map(({ userId, fullName }) => ({ userId, fullName })).sort((a, b) => a.fullName.localeCompare(b.fullName));
 }
 
-/** BR-33: shift templates last 4, 6 or 8 hours. */
+/** BR-33: Work Shifts last 4, 6 or 8 hours. */
 export const ALLOWED_HOURS = [4, 6, 8];
 
 /** BR-35: Managers cannot add or change an assignment after the shift starts in the store timezone. */

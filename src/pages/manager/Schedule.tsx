@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  assignShift, cancelAssignment, getSchedule, getStaffOptions, listShiftTemplates, listSwapRequests, publishSchedule, updateAssignment,
-  type ScheduleView, type ScheduledShift, type ShiftTemplate, type StaffOption,
+  assignShift, cancelAssignment, getSchedule, getStaffOptions, listWorkShifts, listSwapRequests, publishSchedule, updateAssignment,
+  type ScheduleView, type ScheduledShift, type WorkShift, type StaffOption,
 } from '../../api/planning';
 import { Dialog } from '../../components/Dialog';
 import { ManagerLayout } from '../../components/ManagerLayout';
@@ -12,8 +12,8 @@ import { listStoreZones, shiftHasStarted, type StoreZone } from './planningData'
 import { useLoad } from './useLoad';
 import s from './manager.module.css';
 
-type Loaded = { schedule: ScheduleView; templates: ShiftTemplate[]; zones: StoreZone[]; pendingSwaps: number };
-type Editing = { kind: 'assign'; shift: ShiftTemplate; workDate: string } | { kind: 'edit'; assignment: ScheduledShift } | { kind: 'publish' };
+type Loaded = { schedule: ScheduleView; workShifts: WorkShift[]; zones: StoreZone[]; pendingSwaps: number };
+type Editing = { kind: 'assign'; shift: WorkShift; workDate: string } | { kind: 'edit'; assignment: ScheduledShift } | { kind: 'publish' };
 
 const live = (a: ScheduledShift) => a.status !== 'CANCELLED';
 
@@ -26,13 +26,13 @@ export default function Schedule() {
   const to = addDays(week, 6);
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(week, i)), [week]);
   const { data, error: loadError } = useLoad<Loaded>(`${week}|${reload}`, async (signal) => {
-    const [schedule, templates, zones, pendingSwaps] = await Promise.all([
+    const [schedule, workShifts, zones, pendingSwaps] = await Promise.all([
       getSchedule(week, to, signal),
-      listShiftTemplates(signal),
+      listWorkShifts(week, signal),
       listStoreZones(signal),
       listSwapRequests(undefined, signal).then((r) => r.length, () => 0),
     ]);
-    return { schedule, templates, zones, pendingSwaps };
+    return { schedule, workShifts, zones, pendingSwaps };
   });
 
   const refresh = (message = '') => {
@@ -47,8 +47,8 @@ export default function Schedule() {
     .flatMap((assignment) => assignment.zones)
     .filter((zone) => !activeZoneIds.has(zone.zoneId))
     .map((zone) => [zone.zoneId, zone])).values()];
-  // Active templates, plus inactive ones still used this week, earliest first.
-  const rows = (data?.templates ?? [])
+  // Active Work Shifts, plus inactive ones still used this week, earliest first.
+  const rows = (data?.workShifts ?? [])
     .filter((t) => t.status === 'ACTIVE' || assignments.some((a) => a.shiftId === t.shiftId))
     .sort((a, b) => a.startTime.localeCompare(b.startTime));
 
@@ -92,13 +92,13 @@ export default function Schedule() {
             <Card>
               <CardHeader title="Week plan" />
               {rows.length === 0 ? (
-                <p className={s.note}>No active shifts. <Link className={s.back} to="/manager/shifts">Set up shifts</Link> first.</p>
+                <p className={s.note}>No Work Shifts are configured for this week. <Link className={s.back} to="/manager/shifts">Configure or copy Work Shifts</Link> first.</p>
               ) : (
                 <div className={s.gridWrap}>
                   <table className={s.grid}>
                     <thead>
                       <tr>
-                        <th className={s.shiftHead}>Shift</th>
+                        <th className={s.shiftHead}>Work Shift</th>
                         {days.map((d) => <th key={d} className={d === today ? s.today : undefined}>{dayLabel(d)}{d === today ? ' · today' : ''}</th>)}
                       </tr>
                     </thead>

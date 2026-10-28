@@ -18,7 +18,7 @@ import { ProtectedRoute } from './auth/ProtectedRoute';
 import RoleWorkspace, { RoleRedirect } from './pages/RoleWorkspace';
 import Leave from './pages/manager/Leave';
 import Schedule from './pages/manager/Schedule';
-import ShiftTemplates from './pages/manager/ShiftTemplates';
+import WorkShifts from './pages/manager/WorkShifts';
 import { SwapRequestDetail, SwapRequests } from './pages/manager/SwapRequests';
 import ZoneStaffing from './pages/manager/ZoneStaffing';
 
@@ -59,7 +59,7 @@ export default function App() {
         <Route path="/manager/swaps" element={<SwapRequests />} />
         <Route path="/manager/swaps/:swapRequestId" element={<SwapRequestDetail />} />
         <Route path="/manager/leave" element={<Leave />} />
-        <Route path="/manager/shifts" element={<ShiftTemplates />} />
+        <Route path="/manager/shifts" element={<WorkShifts />} />
       </Route>
       <Route element={<ProtectedRoute allowedRoles={['STAFF']} />}>
         <Route path="/staff/dashboard" element={<RoleWorkspace />} />

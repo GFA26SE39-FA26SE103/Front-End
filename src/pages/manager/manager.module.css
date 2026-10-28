@@ -7,6 +7,9 @@
 .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
 .actions { display: flex; align-items: center; gap: 8px; }
 .weekLabel { min-width: 150px; text-align: center; font-size: 12px; font-weight: 600; }
+.empty { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 28px 18px; color: var(--color-text-muted); }
+.empty h2 { margin: 0; color: var(--color-text); font-size: 16px; }
+.empty p { margin: 0; font-size: 13px; line-height: 1.5; }
 
 .note { color: var(--color-text-muted); font-size: 13px; line-height: 1.5; }
 .error, .success, .info, .warning { padding: 12px; border-radius: 7px; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
@@ -15,7 +18,7 @@
 .info { color: var(--color-text); background: var(--color-info-tint); }
 .warning { color: var(--color-warning); background: var(--color-warning-tint); }
 
-/* Weekly grid: one row per shift template, one column per day. */
+/* Weekly grid: one row per weekly Work Shift, one column per day. */
 .gridWrap { overflow: auto; }
 .grid { width: 100%; min-width: 980px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
 .grid th { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--color-text-dim); padding: 8px; text-align: left; font-weight: 600; }
