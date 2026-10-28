@@ -96,6 +96,7 @@ describe('floor API', () => {
       mapPolygon: [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.1 }, { x: 0.5, y: 0.5 }, { x: 0.1, y: 0.5 }],
       colorHex: '#22C55E',
       areaM2: 125.5,
+      minStaff: 2,
       status: 'ACTIVE',
     };
 

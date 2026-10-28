@@ -39,6 +39,7 @@ const zone = (zoneId: string, name: string, x: number) => ({
   mapPolygon: [{ x, y: 0.1 }, { x: x + 0.2, y: 0.1 }, { x: x + 0.2, y: 0.4 }],
   colorHex: null,
   areaM2: 40,
+  minStaff: 1,
   status: 'ACTIVE',
   updatedAt: '2026-10-03T00:00:00Z',
 });

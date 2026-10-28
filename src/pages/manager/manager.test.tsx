@@ -87,7 +87,7 @@ describe('Manager console', () => {
     expect(calls.find((c) => c.path === '/api/schedule')!.query).toBe(`?from=${monday}&to=${addDays(monday, 6)}`);
     // Rows follow the start time, not the API order.
     expect(screen.getAllByRole('row')[1]).toHaveTextContent('Morning');
-    expect(screen.getByText('Checkout 0/1')).toBeInTheDocument();
+    expect(screen.getByText('Checkout · 0 planned · minimum 1')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Publish week (1)' }));
     await userEvent.click(screen.getByRole('button', { name: 'Publish' }));
@@ -132,7 +132,7 @@ describe('Manager console', () => {
 
     expect(await screen.findByText(/Published assignments in this week still reference inactive Zone: Old storage/)).toBeInTheDocument();
     expect(screen.getByText('Old storage (inactive)')).toBeInTheDocument();
-    expect(screen.getByText('Old storage · inactive 1/1')).toBeInTheDocument();
+    expect(screen.getByText('Old storage · inactive · 1 planned · minimum 1')).toBeInTheDocument();
   });
 
   it('assigns an eligible Staff member as a draft; ineligible ones show why', async () => {

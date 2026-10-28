@@ -217,6 +217,12 @@
   cursor: pointer;
 }
 
+.hint {
+  color: var(--color-text-dim);
+  font-size: 9px;
+  font-weight: 400;
+}
+
 .error {
   margin: 0;
   color: var(--color-danger);

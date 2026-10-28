@@ -26,12 +26,12 @@ const zones = [
   {
     zoneId: 'zone-frozen', floorId: 'floor-1', code: 'FROZEN', name: 'Frozen aisle', zoneType: 'AISLES',
     mapPolygon: [{ x: 0.1, y: 0.1 }, { x: 0.4, y: 0.1 }, { x: 0.4, y: 0.4 }],
-    colorHex: '#3B82F6', areaM2: null, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
+    colorHex: '#3B82F6', areaM2: null, minStaff: 0, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
   },
   {
     zoneId: 'zone-checkout', floorId: 'floor-1', code: 'CHECKOUT', name: 'Checkout area', zoneType: 'CHECKOUT',
     mapPolygon: [{ x: 0.5, y: 0.5 }, { x: 0.8, y: 0.5 }, { x: 0.8, y: 0.8 }],
-    colorHex: '#F97316', areaM2: null, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
+    colorHex: '#F97316', areaM2: null, minStaff: 1, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
   },
 ];
 
