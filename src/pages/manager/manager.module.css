@@ -35,6 +35,7 @@
 .person:hover { border-color: var(--color-primary); }
 .person strong { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .person span { color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.person .checkedIn { align-self: flex-start; padding: 1px 5px; border-radius: 999px; background: var(--color-success-tint); color: var(--color-success); font-weight: 600; }
 .draft { border-style: dashed; background: var(--color-surface-2); }
 .flag { color: var(--color-warning); font-weight: 600; }
 .coverage { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -42,7 +43,7 @@
 .cov { background: var(--color-success-tint); color: var(--color-success); }
 .covGap { background: var(--color-danger-tint); color: var(--color-danger); }
 .covInactive { background: var(--color-warning-tint); color: var(--color-warning); }
-.covUnset { background: var(--color-surface-2); color: var(--color-text-muted); }
+.covUnset { border: 1px solid var(--color-primary); background: var(--color-primary-tint); color: var(--color-primary); }
 .add { align-self: flex-start; font-size: 12px; font-weight: 600; color: var(--color-primary); padding: 2px 0; }
 .add:hover { text-decoration: underline; }
 .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--color-text-muted); }

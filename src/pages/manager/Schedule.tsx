@@ -127,7 +127,7 @@ export default function Schedule() {
                                       <span>{a.zones.map((z) => `${z.zoneName}${activeZoneIds.has(z.zoneId) ? '' : ' (inactive)'}`).join(', ') || 'No zone'}</span>
                                       {a.status === 'DRAFT' && <span>Draft</span>}
                                       {a.pendingSwapRequestId && <span className={s.flag}>Swap pending</span>}
-                                      {a.checkInAt && <span>Checked in</span>}
+                                      {a.checkInAt && <span className={s.checkedIn}>Checked in</span>}
                                     </button>
                                   ))}
                                   {coverage.length > 0 && (
