@@ -5,9 +5,9 @@ import { apiFetch } from './client';
 
 export type ShiftZone = { zoneId: string; zoneName: string };
 
-export type ShiftTemplate = { shiftId: string; name: string; startTime: string; endTime: string; hours: number; status: 'ACTIVE' | 'INACTIVE' | string; inUse: boolean };
-export type ShiftTemplateRequest = { name: string; startTime: string; endTime: string };
-export type ShiftTemplateUpdate = Partial<ShiftTemplateRequest> & { status?: string };
+export type WorkShift = { shiftId: string; weekStart: string; name: string; startTime: string; endTime: string; hours: number; status: 'ACTIVE' | 'INACTIVE' | string; inUse: boolean };
+export type CreateWorkShiftRequest = { weekStart: string; name: string; startTime: string; endTime: string };
+export type UpdateWorkShiftRequest = Partial<Omit<CreateWorkShiftRequest, 'weekStart'>> & { status?: string };
 
 export type AssignmentStatus = 'DRAFT' | 'SCHEDULED' | 'CANCELLED';
 export type ScheduledShift = {
@@ -42,10 +42,13 @@ export type SwapRequest = {
 const id = encodeURIComponent;
 const post = <T>(path: string, body: unknown) => apiFetch<T>(path, { method: 'POST', body: JSON.stringify(body) });
 
-export const listShiftTemplates = (signal?: AbortSignal) => apiFetch<ShiftTemplate[]>('/api/shifts', { signal });
-export const createShiftTemplate = (request: ShiftTemplateRequest) => post<ShiftTemplate>('/api/shifts', request);
-export const updateShiftTemplate = (shiftId: string, request: ShiftTemplateUpdate) =>
-  apiFetch<ShiftTemplate>(`/api/shifts/${id(shiftId)}`, { method: 'PATCH', body: JSON.stringify(request) });
+export const listWorkShifts = (weekStart: string, signal?: AbortSignal) =>
+  apiFetch<WorkShift[]>(`/api/shifts?weekStart=${weekStart}`, { signal });
+export const createWorkShift = (request: CreateWorkShiftRequest) => post<WorkShift>('/api/shifts', request);
+export const updateWorkShift = (shiftId: string, request: UpdateWorkShiftRequest) =>
+  apiFetch<WorkShift>(`/api/shifts/${id(shiftId)}`, { method: 'PATCH', body: JSON.stringify(request) });
+export const copyWorkShiftWeek = (sourceWeekStart: string, targetWeekStart: string) =>
+  post<WorkShift[]>('/api/shifts/copy-week', { sourceWeekStart, targetWeekStart });
 
 export const getSchedule = (from: string, to: string, signal?: AbortSignal) =>
   apiFetch<ScheduleView>(`/api/schedule?from=${from}&to=${to}`, { signal });

@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getSchedule, listShiftTemplates, type ScheduleView, type ShiftTemplate } from '../../api/planning';
+import { getSchedule, listWorkShifts, type ScheduleView, type WorkShift } from '../../api/planning';
 import { ManagerLayout } from '../../components/ManagerLayout';
 import { Button, StatCard } from '../../components/ui';
-import { clock, isoDate } from './dates';
+import { clock, isoDate, parseDate, weekStart } from './dates';
 import { buildStaffingOverview, loadStaffingFloors, type StaffingFloor, type StaffingState } from './zoneStaffingData';
 import { useLoad } from './useLoad';
 import s from './ZoneStaffing.module.css';
 
-type Loaded = { floors: StaffingFloor[]; templates: ShiftTemplate[]; schedule: ScheduleView };
+type Loaded = { floors: StaffingFloor[]; workShifts: WorkShift[]; schedule: ScheduleView };
 
 const stateClass: Record<StaffingState, string> = {
   'Checked in': s.checkedIn,
@@ -20,7 +20,7 @@ const minutes = (time: string) => {
   return hours * 60 + mins;
 };
 
-function isRunningNow(shift: ShiftTemplate, now: Date) {
+function isRunningNow(shift: WorkShift, now: Date) {
   const current = now.getHours() * 60 + now.getMinutes();
   const start = minutes(shift.startTime);
   const end = minutes(shift.endTime);
@@ -34,17 +34,17 @@ export default function ZoneStaffing() {
   const [reload, setReload] = useState(0);
   const today = isoDate(new Date());
   const { data, error } = useLoad<Loaded>(`${date}|${reload}`, async (signal) => {
-    const [floors, templates, schedule] = await Promise.all([
+    const [floors, workShifts, schedule] = await Promise.all([
       loadStaffingFloors(signal),
-      listShiftTemplates(signal),
+      listWorkShifts(weekStart(parseDate(date)), signal),
       getSchedule(date, date, signal),
     ]);
-    return { floors, templates, schedule };
+    return { floors, workShifts, schedule };
   });
 
   const shifts = useMemo(() => {
     if (!data) return [];
-    return data.templates
+    return data.workShifts
       .filter((shift) => shift.status === 'ACTIVE' || data.schedule.assignments.some((assignment) => assignment.status !== 'CANCELLED' && assignment.shiftId === shift.shiftId))
       .sort((a, b) => a.startTime.localeCompare(b.startTime));
   }, [data]);
@@ -95,7 +95,7 @@ export default function ZoneStaffing() {
         ) : !data ? (
           <p className={s.note} role="status">Loading Zone staffing…</p>
         ) : shifts.length === 0 ? (
-          <div className={s.empty}><h2>No shifts available</h2><p>Create or activate a shift in Shift setup before reviewing Zone staffing.</p></div>
+          <div className={s.empty}><h2>No Work Shifts available</h2><p>Create or copy a Work Shift for this week before reviewing Zone staffing.</p></div>
         ) : overview ? (
           <>
             <div className={s.stats}>

@@ -3,12 +3,12 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { saveSession } from '../../auth/session';
-import type { ScheduleView, ShiftTemplate, StaffOption, SwapRequest } from '../../api/planning';
+import type { ScheduleView, WorkShift, StaffOption, SwapRequest } from '../../api/planning';
 import { mockNativeDialogs } from '../../test/dialog';
 import { addDays, isoDate, weekStart } from './dates';
 import { shiftHasStarted, shiftHours } from './planningData';
 import Schedule from './Schedule';
-import ShiftTemplates from './ShiftTemplates';
+import WorkShifts from './WorkShifts';
 import { SwapRequestDetail } from './SwapRequests';
 
 const manager = { userId: 'mgr', email: 'mgr@store.test', fullName: 'Trần Minh', roleId: 'role-MANAGER', role: 'MANAGER', status: 'ACTIVE' };
@@ -31,8 +31,8 @@ function serve() {
 
 const monday = weekStart(new Date());
 const day = addDays(monday, 6);
-const template = (shiftId: string, name: string, startTime: string, endTime: string): ShiftTemplate =>
-  ({ shiftId, name, startTime, endTime, hours: shiftHours(startTime, endTime), status: 'ACTIVE', inUse: false });
+const template = (shiftId: string, name: string, startTime: string, endTime: string): WorkShift =>
+  ({ shiftId, weekStart: monday, name, startTime, endTime, hours: shiftHours(startTime, endTime), status: 'ACTIVE', inUse: false });
 const morning = template('t-morning', 'Morning', '06:00:00', '14:00:00');
 const evening = template('t-evening', 'Evening', '14:00:00', '22:00:00');
 
@@ -232,17 +232,17 @@ describe('Manager console', () => {
     expect(screen.queryByRole('button', { name: 'Approve swap' })).not.toBeInTheDocument();
   });
 
-  it('uses shift setup language and only accepts 4, 6 or 8 hour shifts', async () => {
+  it('uses weekly Work Shift language and only accepts 4, 6 or 8 hour shifts', async () => {
     routes['GET /api/shifts'] = () => json([morning]);
     routes['POST /api/shifts'] = (call) => json(template('t-new', String(call.body!.name), String(call.body!.startTime), String(call.body!.endTime)));
-    show('/manager/shifts', <ShiftTemplates />);
+    show('/manager/shifts', <WorkShifts />);
 
-    expect(await screen.findByRole('heading', { name: 'Shift setup', level: 1 })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Shift setup' })).toHaveAttribute('href', '/manager/shifts');
-    expect(screen.getByRole('heading', { name: 'Shifts', level: 2 })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'New shift' }));
+    expect(await screen.findByRole('heading', { name: 'Work Shifts', level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Work Shifts' })).toHaveAttribute('href', '/manager/shifts');
+    expect(screen.getByRole('heading', { name: /Work Shifts ·/, level: 2 })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'New Work Shift' }));
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByRole('heading', { name: 'New shift' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('heading', { name: 'New Work Shift' })).toBeInTheDocument();
     await userEvent.type(within(dialog).getByLabelText('Name'), 'Night');
     const [start, end] = [within(dialog).getByLabelText('Start'), within(dialog).getByLabelText('End')];
     await userEvent.clear(start);
@@ -250,23 +250,23 @@ describe('Manager console', () => {
     await userEvent.clear(end);
     await userEvent.type(end, '03:00');
     expect(within(dialog).getByText(/5 hours, ends the next day/)).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Create shift' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create Work Shift' }));
     expect(within(dialog).getByRole('alert')).toHaveTextContent('A shift must last 4, 6 or 8 hours.');
     expect(calls.some((c) => c.method === 'POST')).toBe(false);
 
     await userEvent.clear(end);
     await userEvent.type(end, '06:00');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Create shift' }));
-    await waitFor(() => expect(calls.at(-2)).toMatchObject({ method: 'POST', body: { name: 'Night', startTime: '22:00:00', endTime: '06:00:00' } }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create Work Shift' }));
+    await waitFor(() => expect(calls.find((call) => call.method === 'POST')).toMatchObject({ method: 'POST', body: { weekStart: monday, name: 'Night', startTime: '22:00:00', endTime: '06:00:00' } }));
     expect(await screen.findByRole('status')).toHaveTextContent('Night created');
   });
 
-  it('filters shift setup by active and inactive status', async () => {
+  it('filters weekly Work Shifts by active and inactive status', async () => {
     const inactive = { ...template('t-test', 'Test', '08:00:00', '16:00:00'), status: 'INACTIVE', inUse: true };
     routes['GET /api/shifts'] = () => json([morning, inactive, evening]);
-    show('/manager/shifts', <ShiftTemplates />);
+    show('/manager/shifts', <WorkShifts />);
 
-    const filter = await screen.findByRole('combobox', { name: 'Filter shifts by status' });
+    const filter = await screen.findByRole('combobox', { name: 'Filter Work Shifts by status' });
     expect(screen.getByText('Morning')).toBeInTheDocument();
     expect(screen.getByText('Test')).toBeInTheDocument();
 

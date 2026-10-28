@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ScheduleView, ShiftTemplate } from '../../api/planning';
+import type { ScheduleView, WorkShift } from '../../api/planning';
 import { saveSession } from '../../auth/session';
 import { addDays, isoDate } from './dates';
 import ZoneStaffing from './ZoneStaffing';
@@ -28,8 +28,8 @@ const floors: StaffingFloor[] = [
   },
 ];
 
-const shift: ShiftTemplate = {
-  shiftId: 'shift-morning', name: 'Morning', startTime: '06:00:00', endTime: '14:00:00', hours: 8, status: 'ACTIVE', inUse: true,
+const shift: WorkShift = {
+  shiftId: 'shift-morning', weekStart: '2026-10-26', name: 'Morning', startTime: '06:00:00', endTime: '14:00:00', hours: 8, status: 'ACTIVE', inUse: true,
 };
 
 const assignment = (overrides: Record<string, unknown>) => ({
