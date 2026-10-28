@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import {
   deleteResponsePolicy,
@@ -55,6 +55,8 @@ function message(reason: unknown): string {
 
 export default function ResponsePolicies() {
   const { ruleId = '' } = useParams<{ ruleId: string }>();
+  const location = useLocation();
+  const returnTo = (location.state as { returnTo?: string } | null)?.returnTo ?? '/admin/ai-config';
   const [drafts, setDrafts] = useState<Record<PolicyPriority, Draft>>({ WARNING: emptyDraft(), CRITICAL: emptyDraft() });
   const [loadedRuleId, setLoadedRuleId] = useState<string | null>(null);
   const [busy, setBusy] = useState<PolicyPriority | null>(null);
@@ -138,9 +140,10 @@ export default function ResponsePolicies() {
 
   return <AdminLayout title="Response policies" subtitle="Choose when monitoring events should create operational tasks.">
     <div className={s.page}>
+      <Link className={s.back} to={returnTo}>← Back to AI configuration</Link>
       <Card className={s.intro}>
         <h2>Automatic task response</h2>
-        <p>Configure the task Staff receive when this monitoring rule raises a warning or critical event. Existing open events are not backfilled.</p>
+        <p>Admin configures the response template. New events automatically offer the task to eligible checked-in Staff; Operator monitors live operations and assigns manually when needed. Existing open events are not backfilled.</p>
         <p className={s.rule}>Rule <code>{ruleId || 'Not selected'}</code></p>
       </Card>
 
@@ -157,11 +160,11 @@ export default function ResponsePolicies() {
               <div className={s.heading}>
                 <div><legend>{priority === 'WARNING' ? 'Warning response' : 'Critical response'}</legend><p>{priority === 'WARNING' ? 'Early intervention before conditions worsen.' : 'Urgent response at the critical threshold.'}</p></div>
                 {draft.policyId === null ? <Chip tone="neutral">Not configured</Chip>
-                  : draft.ready ? <Chip tone="success">Ready for automatic task</Chip> : <Chip tone="warning">Needs attention</Chip>}
+                  : draft.ready ? <Chip tone="success">Automatic offer ready</Chip> : <Chip tone="warning">Needs attention</Chip>}
               </div>
 
-              <label className={s.toggle}><input type="checkbox" checked={draft.policyEnabled} onChange={(event) => update(priority, { policyEnabled: event.target.checked })} />Enable policy</label>
-              <label className={s.toggle}><input type="checkbox" checked={draft.actionEnabled} onChange={(event) => update(priority, { actionEnabled: event.target.checked })} />Enable automatic task</label>
+              <label className={s.toggle}><input type="checkbox" checked={draft.policyEnabled} onChange={(event) => update(priority, { policyEnabled: event.target.checked })} />Enable response policy</label>
+              <label className={s.toggle}><input type="checkbox" checked={draft.actionEnabled} onChange={(event) => update(priority, { actionEnabled: event.target.checked })} />Automatically offer task to eligible Staff</label>
               <label>Task title (optional)<input aria-label="Task title (optional)" maxLength={200} value={draft.title} placeholder="Default: Event type — Zone" onChange={(event) => update(priority, { title: event.target.value })} /></label>
               <label>Staff instructions (optional)<textarea aria-label="Staff instructions (optional)" maxLength={4000} rows={5} value={draft.instructions} placeholder="No instructions if left blank." onChange={(event) => update(priority, { instructions: event.target.value })} /></label>
 

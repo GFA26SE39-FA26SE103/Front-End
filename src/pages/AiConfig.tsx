@@ -283,7 +283,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
               <span role="cell">{r.sustainSec}s</span>
               <span role="cell">{r.cooldownSec}s</span>
               <span role="cell"><Chip tone={r.enabled && active ? 'success' : 'neutral'}>{r.enabled ? active ? 'Enabled' : 'Enabled when active' : 'Disabled'}</Chip></span>
-              <span role="cell">{r.ruleId && <Link className={s.responsePolicyLink} to={`/admin/response-policies/${r.ruleId}`} aria-label={`Manage response policy for ${ruleName(r, types)}`}>Manage policy</Link>}</span>
+              <span role="cell">{r.ruleId && <Link className={s.responsePolicyLink} to={`/admin/response-policies/${r.ruleId}`} state={{ returnTo: `/admin/ai-config?zoneId=${encodeURIComponent(zoneId)}` }} aria-label={`Manage response policy for ${ruleName(r, types)}`}>Manage policy</Link>}</span>
             </div>)}
           </div> : <p className={s.missingBox}>This configuration has no operational event rules. Edit it and add at least one rule.</p>}
           <div className={s.actions}>

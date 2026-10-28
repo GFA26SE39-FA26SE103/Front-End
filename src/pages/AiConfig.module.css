@@ -71,10 +71,10 @@
 .sub { font-size: 13px; color: var(--color-text-muted); margin-top: 8px; }
 .section { display: flex; align-items: center; gap: 8px; margin: 24px 0 12px; font-size: 15px; font-weight: 600; }
 .ruleTable { display: flex; flex-direction: column; border: 1px solid var(--color-border); border-radius: 8px; overflow-x: auto; margin-bottom: 20px; }
-.ruleTable > div { display: grid; grid-template-columns: minmax(160px, 1.5fr) repeat(4, minmax(120px, 1fr)) 100px 110px; gap: 12px; align-items: center; min-width: 970px; padding: 14px; font-size: 13px; }
+.ruleTable > div { display: grid; grid-template-columns: minmax(190px, 1.5fr) repeat(4, minmax(100px, 1fr)) minmax(150px, .9fr) minmax(115px, .7fr); gap: 12px; align-items: center; min-width: 1050px; padding: 14px; font-size: 13px; }
 .ruleTable > div + div { border-top: 1px solid var(--color-border); }
 .ruleTable > .ruleHeadRow { background: var(--color-surface-2); font-size: 12px; color: var(--color-text-muted); }
-.responsePolicyLink { color: var(--color-primary); font-weight: 600; }
+.responsePolicyLink { color: var(--color-primary); font-weight: 600; white-space: nowrap; }
 .missingBox { padding: 14px; border: 1px dashed var(--color-warning); border-radius: 8px; color: var(--color-warning); font-size: 13px; }
 .empty { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; color: var(--color-text-muted); }
 .addRule { display: flex; align-items: flex-end; gap: 10px; padding: 14px; border: 1px solid var(--color-border); border-radius: 8px; }

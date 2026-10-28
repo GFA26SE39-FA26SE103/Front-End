@@ -1,4 +1,6 @@
 .page { display: grid; gap: 1rem; }
+.back { width: fit-content; color: var(--color-primary); font-size: .875rem; font-weight: 600; text-decoration: none; }
+.back:hover { text-decoration: underline; }
 .intro { display: grid; gap: .4rem; }
 .intro h2, .intro p { margin: 0; }
 .intro p { color: var(--color-text-muted, #5f6b7a); line-height: 1.5; }

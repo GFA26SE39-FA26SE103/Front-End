@@ -58,7 +58,8 @@ describe('Response policy administration', () => {
   it('loads both priority slots and saves a missing critical policy through the versioned contract', async () => {
     show();
     const warningGroup = await screen.findByRole('group', { name: 'WARNING policy' });
-    expect(within(warningGroup).getByText('Ready for automatic task')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Back to AI configuration/ })).toHaveAttribute('href', '/admin/ai-config');
+    expect(within(warningGroup).getByText('Automatic offer ready')).toBeInTheDocument();
     expect(within(warningGroup).getByLabelText('Task title (optional)')).toHaveValue('Check congestion');
 
     const critical = screen.getByRole('group', { name: 'CRITICAL policy' });
