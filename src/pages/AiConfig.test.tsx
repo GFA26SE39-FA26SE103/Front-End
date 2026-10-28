@@ -69,6 +69,7 @@ describe('API-backed monitoring configuration', () => {
     show();
 
     await screen.findByRole('table', { name: 'Operational event rules' }, { timeout: 3000 });
+    expect(screen.getByText('Enabled when active')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Manage response policy for Long Queue' }))
       .toHaveAttribute('href', '/admin/response-policies/rule-1');
   });

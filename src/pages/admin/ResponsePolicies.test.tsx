@@ -59,12 +59,12 @@ describe('Response policy administration', () => {
     show();
     const warningGroup = await screen.findByRole('group', { name: 'WARNING policy' });
     expect(within(warningGroup).getByText('Ready for automatic task')).toBeInTheDocument();
-    expect(within(warningGroup).getByLabelText('Task title')).toHaveValue('Check congestion');
+    expect(within(warningGroup).getByLabelText('Task title (optional)')).toHaveValue('Check congestion');
 
     const critical = screen.getByRole('group', { name: 'CRITICAL policy' });
     expect(within(critical).getByText('Not configured')).toBeInTheDocument();
-    fireEvent.change(within(critical).getByLabelText('Task title'), { target: { value: 'Urgent congestion response' } });
-    fireEvent.change(within(critical).getByLabelText('Staff instructions'), { target: { value: 'Open a safe route and assist customers.' } });
+    fireEvent.change(within(critical).getByLabelText('Task title (optional)'), { target: { value: 'Urgent congestion response' } });
+    fireEvent.change(within(critical).getByLabelText('Staff instructions (optional)'), { target: { value: 'Open a safe route and assist customers.' } });
     fireEvent.click(within(critical).getByRole('button', { name: 'Save CRITICAL policy' }));
 
     expect(await screen.findByText('CRITICAL policy saved.')).toBeInTheDocument();
@@ -101,13 +101,13 @@ describe('Response policy administration', () => {
     failSave = true;
     show();
     const critical = await screen.findByRole('group', { name: 'CRITICAL policy' });
-    fireEvent.change(within(critical).getByLabelText('Task title'), { target: { value: 'Keep this draft' } });
-    fireEvent.change(within(critical).getByLabelText('Staff instructions'), { target: { value: 'Retry these instructions.' } });
+    fireEvent.change(within(critical).getByLabelText('Task title (optional)'), { target: { value: 'Keep this draft' } });
+    fireEvent.change(within(critical).getByLabelText('Staff instructions (optional)'), { target: { value: 'Retry these instructions.' } });
     fireEvent.click(within(critical).getByRole('button', { name: 'Save CRITICAL policy' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Response policy could not be saved.');
     expect(screen.getByRole('group', { name: 'WARNING policy' })).toBeInTheDocument();
-    expect(within(critical).getByLabelText('Task title')).toHaveValue('Keep this draft');
+    expect(within(critical).getByLabelText('Task title (optional)')).toHaveValue('Keep this draft');
     expect(within(critical).getByRole('button', { name: 'Save CRITICAL policy' })).toBeEnabled();
   });
 });

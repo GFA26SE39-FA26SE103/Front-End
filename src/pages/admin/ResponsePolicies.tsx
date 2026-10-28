@@ -162,8 +162,8 @@ export default function ResponsePolicies() {
 
               <label className={s.toggle}><input type="checkbox" checked={draft.policyEnabled} onChange={(event) => update(priority, { policyEnabled: event.target.checked })} />Enable policy</label>
               <label className={s.toggle}><input type="checkbox" checked={draft.actionEnabled} onChange={(event) => update(priority, { actionEnabled: event.target.checked })} />Enable automatic task</label>
-              <label>Task title<input maxLength={200} value={draft.title} placeholder={priority === 'WARNING' ? 'Check congestion' : 'Respond to critical congestion'} onChange={(event) => update(priority, { title: event.target.value })} /></label>
-              <label>Staff instructions<textarea maxLength={4000} rows={5} value={draft.instructions} placeholder="Describe the safe operational response." onChange={(event) => update(priority, { instructions: event.target.value })} /></label>
+              <label>Task title (optional)<input aria-label="Task title (optional)" maxLength={200} value={draft.title} placeholder="Default: Event type — Zone" onChange={(event) => update(priority, { title: event.target.value })} /></label>
+              <label>Staff instructions (optional)<textarea aria-label="Staff instructions (optional)" maxLength={4000} rows={5} value={draft.instructions} placeholder="No instructions if left blank." onChange={(event) => update(priority, { instructions: event.target.value })} /></label>
 
               {draft.issues.length > 0 && <ul className={s.issues}>{draft.issues.map((issue) => <li key={issue}>{issueLabels[issue] ?? 'This policy needs administrator review.'}</li>)}</ul>}
               <div className={s.actions}>
