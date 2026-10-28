@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  assignShift, cancelAssignment, getSchedule, getStaffOptions, listWorkShifts, listSwapRequests, publishSchedule, updateAssignment,
+  assignShift, cancelAssignment, directShiftChange, getSchedule, getStaffOptions, listWorkShifts, listSwapRequests, publishSchedule, updateAssignment,
   type ScheduleView, type ScheduledShift, type WorkShift, type StaffOption,
 } from '../../api/planning';
 import { Dialog } from '../../components/Dialog';
@@ -78,7 +78,7 @@ export default function Schedule() {
               <StatCard label="Assigned shifts" value={String(assignments.length)} note={`${assignments.length - data.schedule.draftCount} published`} tone="primary" />
               <StatCard label="Drafts" value={String(data.schedule.draftCount)} note="Staff cannot see drafts yet" tone={data.schedule.draftCount ? 'warning' : 'success'} />
               <StatCard label="Coverage gaps" value={String(data.schedule.gapCount)} note="Zones below minimum staff" tone={data.schedule.gapCount ? 'danger' : 'success'} />
-              <StatCard label="Swaps to approve" value={String(data.pendingSwaps)} note="Accepted by a colleague" tone={data.pendingSwaps ? 'warning' : 'success'} />
+              <StatCard label="Swap actions" value={String(data.pendingSwaps)} note="Need Manager action" tone={data.pendingSwaps ? 'warning' : 'success'} />
             </div>
             {data.pendingSwaps > 0 && (
               <p className={s.info}>{data.pendingSwaps === 1 ? '1 swap request waits' : `${data.pendingSwaps} swap requests wait`} for your decision. <Link className={s.back} to="/manager/swaps">Review swaps</Link></p>
@@ -175,7 +175,7 @@ export default function Schedule() {
       {editing?.kind === 'edit' && data && (
         <AssignmentDialog shiftId={editing.assignment.shiftId} assignment={editing.assignment}
           title={`${editing.assignment.shiftName} · ${longDayLabel(editing.assignment.workDate)}`}
-          workDate={editing.assignment.workDate} zones={data.zones} onClose={() => setEditing(null)}
+          workDate={editing.assignment.workDate} zones={data.zones} assignments={assignments} onClose={() => setEditing(null)}
           onDone={(name) => refresh(`${name}'s shift was updated.`)} />
       )}
     </ManagerLayout>
@@ -215,14 +215,16 @@ function PublishDialog({ from, to, drafts, gaps, onClose, onDone }: {
 }
 
 /** Adds a Staff member to a shift, or changes the person or Zone of an existing one. */
-function AssignmentDialog({ shiftId, workDate, title, zones, assignment, onClose, onDone }: {
+function AssignmentDialog({ shiftId, workDate, title, zones, assignment, assignments = [], onClose, onDone }: {
   shiftId: string; workDate: string; title: string; zones: StoreZone[];
-  assignment?: ScheduledShift; onClose: () => void; onDone: (name: string) => void;
+  assignment?: ScheduledShift; assignments?: ScheduledShift[]; onClose: () => void; onDone: (name: string) => void;
 }) {
   const [options, setOptions] = useState<StaffOption[] | null>(null);
   const [userId, setUserId] = useState(assignment?.userId ?? '');
   const [zoneId, setZoneId] = useState(assignment?.zones[0]?.zoneId ?? (zones.length === 1 ? zones[0].zoneId : ''));
   const [reason, setReason] = useState('');
+  const [directType, setDirectType] = useState<'COVER' | 'SWAP'>('COVER');
+  const [targetAssignmentId, setTargetAssignmentId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const locked = assignment && !assignment.editable;
@@ -238,18 +240,35 @@ function AssignmentDialog({ shiftId, workDate, title, zones, assignment, onClose
 
   const sorted = [...(options ?? [])].sort((a, b) => Number(b.eligible) - Number(a.eligible) || a.fullName.localeCompare(b.fullName));
   const chosen = options?.find((o) => o.userId === userId);
+  const swapTargets = assignments.filter((candidate) => candidate.shiftAssignmentId !== assignment?.shiftAssignmentId
+    && candidate.userId !== assignment?.userId && candidate.editable && !candidate.checkInAt);
+  const targetAssignment = swapTargets.find((candidate) => candidate.shiftAssignmentId === targetAssignmentId);
 
   async function save(event: FormEvent) {
     event.preventDefault();
     if (!userId) return setError('Choose a Staff member.');
     if (!zoneId) return setError('Choose a Zone.');
+    const directPublishedChange = assignment?.status === 'SCHEDULED'
+      && (directType === 'SWAP' || userId !== assignment.userId);
+    if (directPublishedChange && !reason.trim()) return setError('Write the reason for this Manager-directed change.');
+    if (assignment?.status === 'SCHEDULED' && directType === 'SWAP' && !targetAssignment) return setError('Choose the second shift to swap.');
     setBusy(true);
     setError('');
     try {
-      const saved = assignment
-        ? await updateAssignment(assignment.shiftAssignmentId, { ...(userId !== assignment.userId ? { userId } : {}), zoneIds: [zoneId] })
-        : await assignShift({ userId, shiftId, workDate, zoneIds: [zoneId] });
-      onDone(saved.fullName);
+      if (assignment?.status === 'SCHEDULED' && directType === 'SWAP' && targetAssignment) {
+        await directShiftChange({ type: 'SWAP', requesterShiftAssignmentId: assignment.shiftAssignmentId,
+          targetUserId: targetAssignment.userId, targetShiftAssignmentId: targetAssignment.shiftAssignmentId, note: reason.trim() });
+        onDone(`${assignment.fullName} and ${targetAssignment.fullName}`);
+      } else if (assignment?.status === 'SCHEDULED' && userId !== assignment.userId) {
+        await directShiftChange({ type: 'COVER', requesterShiftAssignmentId: assignment.shiftAssignmentId,
+          targetUserId: userId, targetShiftAssignmentId: null, note: reason.trim() });
+        onDone(chosen?.fullName ?? 'Staff');
+      } else {
+        const saved = assignment
+          ? await updateAssignment(assignment.shiftAssignmentId, { ...(userId !== assignment.userId ? { userId } : {}), zoneIds: [zoneId] })
+          : await assignShift({ userId, shiftId, workDate, zoneIds: [zoneId] });
+        onDone(saved.fullName);
+      }
     } catch (reason) {
       setError(problem(reason));
       setBusy(false);
@@ -292,6 +311,29 @@ function AssignmentDialog({ shiftId, workDate, title, zones, assignment, onClose
   return (
     <Dialog title={title} busy={busy} onClose={onClose}>
       <form className={s.form} onSubmit={(e) => void save(e)}>
+        {assignment?.status === 'SCHEDULED' && (
+          <label>
+            Manager action
+            <select value={directType} onChange={(event) => setDirectType(event.target.value as 'COVER' | 'SWAP')} disabled={busy}>
+              <option value="COVER">Assign replacement / cover</option>
+              <option value="SWAP">Swap with another Staff shift</option>
+            </select>
+          </label>
+        )}
+        {assignment?.status === 'SCHEDULED' && directType === 'SWAP' ? (
+          <fieldset className={s.fieldset}>
+            <legend>Shift to exchange</legend>
+            <select value={targetAssignmentId} onChange={(event) => setTargetAssignmentId(event.target.value)} disabled={busy}>
+              <option value="" disabled>Choose another future shift</option>
+              {swapTargets.map((candidate) => (
+                <option key={candidate.shiftAssignmentId} value={candidate.shiftAssignmentId}>
+                  {candidate.fullName} · {candidate.shiftName} · {longDayLabel(candidate.workDate)} · {range(candidate.startsAt, candidate.endsAt)}
+                </option>
+              ))}
+            </select>
+            {swapTargets.length === 0 && <p className={s.note}>No other editable Staff shift is available in this week.</p>}
+          </fieldset>
+        ) : (
         <fieldset className={s.fieldset}>
           <legend>Staff member</legend>
           {!options && !error && <p className={s.note} role="status">Checking who can work this shift…</p>}
@@ -303,13 +345,14 @@ function AssignmentDialog({ shiftId, workDate, title, zones, assignment, onClose
                   onChange={() => setUserId(o.userId)} />
                 <span>
                   <span className={s.optionName}>{o.fullName}</span>
-                  <span className={s.optionNote}> · {o.weeklyHoursAfter} / 48 h that week</span>
+                  <span className={s.optionNote}> · {o.weeklyHoursAfter} / 48 h · {o.weeklyHoursAfter <= 40 ? 'recommended' : 'high workload'}</span>
                   {o.problems.map((p) => <span key={p} className={s.optionProblem} style={{ display: 'block' }}>{p}</span>)}
                 </span>
               </label>
             ))}
           </div>
         </fieldset>
+        )}
         <label>
           Zone
           <select value={zoneId} onChange={(e) => setZoneId(e.target.value)} disabled={busy || zones.length === 0}>
@@ -320,8 +363,10 @@ function AssignmentDialog({ shiftId, workDate, title, zones, assignment, onClose
         </label>
         {assignment && (
           <label>
-            Reason if you remove this shift (optional)
-            <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Store event" disabled={busy} />
+            {assignment.status === 'SCHEDULED' && (directType === 'SWAP' || userId !== assignment.userId)
+              ? 'Manager assignment reason (required)'
+              : 'Reason if you remove this shift (optional)'}
+            <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Emergency coverage adjustment" disabled={busy} />
           </label>
         )}
         {error && <p className={s.error} role="alert">{error}</p>}
@@ -329,7 +374,10 @@ function AssignmentDialog({ shiftId, workDate, title, zones, assignment, onClose
           {assignment && <Button variant="dangerGhost" disabled={busy} onClick={() => void cancel()}>Remove from shift</Button>}
           <div className={s.actions}>
             <Button variant="secondary" disabled={busy} onClick={onClose}>Close</Button>
-            <Button type="submit" disabled={busy || !chosen?.eligible}>{busy ? 'Saving…' : assignment ? 'Save changes' : 'Add as draft'}</Button>
+            <Button type="submit" disabled={busy || (directType === 'COVER' && !chosen?.eligible) || (directType === 'SWAP' && !targetAssignment)}>
+              {busy ? 'Saving…' : assignment?.status === 'SCHEDULED' && directType === 'SWAP' ? 'Apply direct swap'
+                : assignment?.status === 'SCHEDULED' && userId !== assignment.userId ? 'Assign cover' : assignment ? 'Save changes' : 'Add as draft'}
+            </Button>
           </div>
         </div>
       </form>

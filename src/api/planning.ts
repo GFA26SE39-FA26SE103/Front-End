@@ -39,6 +39,8 @@ export type SwapRequest = {
   cancelledBy: SwapPerson | null; cancelledAt: string | null; cancellationReason: string | null;
   viewerRole: string; canCancel: boolean; canRespond: boolean; canDecide: boolean; checks: SwapCheck[]; updatedAt: string;
 };
+export type SwapCandidate = { colleague: SwapPerson; shift: SwapShift | null; weeklyHoursAfter: number; recommended: boolean };
+export type SwapCandidates = { shiftAssignmentId: string; type: string; deadline: string; candidates: SwapCandidate[]; hiddenCount: number };
 
 const id = encodeURIComponent;
 const post = <T>(path: string, body: unknown) => apiFetch<T>(path, { method: 'POST', body: JSON.stringify(body) });
@@ -79,3 +81,10 @@ export const listSwapRequests = (status?: string, signal?: AbortSignal) =>
 export const getSwapRequest = (swapRequestId: string, signal?: AbortSignal) => apiFetch<SwapRequest>(`/api/swap-requests/${id(swapRequestId)}`, { signal });
 export const approveSwap = (swapRequestId: string, note: string | null) => post<SwapRequest>(`/api/swap-requests/${id(swapRequestId)}/approve`, { note });
 export const rejectSwap = (swapRequestId: string, note: string) => post<SwapRequest>(`/api/swap-requests/${id(swapRequestId)}/reject`, { note });
+export const getManagerCoverCandidates = (swapRequestId: string, signal?: AbortSignal) =>
+  apiFetch<SwapCandidates>(`/api/swap-requests/${id(swapRequestId)}/manager-candidates`, { signal });
+export const assignManagerCover = (swapRequestId: string, targetUserId: string, note: string) =>
+  post<SwapRequest>(`/api/swap-requests/${id(swapRequestId)}/assign-cover`, { targetUserId, note });
+export const directShiftChange = (request: {
+  type: 'COVER' | 'SWAP'; requesterShiftAssignmentId: string; targetUserId: string; targetShiftAssignmentId: string | null; note: string;
+}) => post<SwapRequest>('/api/swap-requests/manager-direct', request);

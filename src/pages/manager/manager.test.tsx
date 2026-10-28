@@ -234,6 +234,39 @@ describe('Manager console', () => {
     expect(screen.queryByRole('button', { name: 'Approve swap' })).not.toBeInTheDocument();
   });
 
+  it('lets the Manager select cover when Staff asks for assistance', async () => {
+    const shift = {
+      shiftAssignmentId: 'a-help', userId: 'u-thao', shiftName: 'Evening', workDate: day,
+      startsAt: `${day}T14:00:00+07:00`, endsAt: `${day}T22:00:00+07:00`, zones: [{ zoneId: 'z-b', zoneName: 'Checkout' }],
+    };
+    const request: SwapRequest = {
+      swapRequestId: 'sw-help', type: 'COVER', status: 'PENDING_MANAGER', requester: { userId: 'u-thao', fullName: 'Thảo' },
+      requesterShift: shift, target: null, targetShift: null, reasonCode: 'HEALTH', note: 'Could not find cover',
+      createdAt: '2026-10-20T03:00:00Z', expiresAt: `${day}T14:00:00+07:00`, targetRespondedAt: null,
+      decidedBy: null, decidedAt: null, decisionNote: null, cancelledBy: null, cancelledAt: null, cancellationReason: null,
+      viewerRole: 'MANAGER', canCancel: false, canRespond: false, canDecide: true, checks: [], updatedAt: '2026-10-20T03:00:00Z',
+    };
+    routes['GET /api/swap-requests/sw-help'] = () => json(request);
+    routes['GET /api/swap-requests/sw-help/manager-candidates'] = () => json({
+      shiftAssignmentId: 'a-help', type: 'COVER', deadline: `${day}T14:00:00+07:00`, hiddenCount: 1,
+      candidates: [{ colleague: { userId: 'u-lan', fullName: 'Hoàng Lan' }, shift: null, weeklyHoursAfter: 44, recommended: false }],
+    });
+    routes['POST /api/swap-requests/sw-help/assign-cover'] = (call) => json({
+      ...request, status: 'APPROVED', target: { userId: 'u-lan', fullName: 'Hoàng Lan' }, canDecide: false,
+      decidedAt: '2026-10-20T04:00:00Z', decisionNote: call.body!.note,
+    });
+    show('/manager/swaps/sw-help', <SwapRequestDetail />, '/manager/swaps/:swapRequestId');
+
+    expect(await screen.findByRole('option', { name: 'Hoàng Lan · 44/48 h · high workload' })).toBeInTheDocument();
+    await userEvent.type(screen.getByRole('textbox'), 'Emergency coverage');
+    await userEvent.click(screen.getByRole('button', { name: 'Assign cover' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Cover assigned');
+    expect(calls.at(-1)).toMatchObject({
+      path: '/api/swap-requests/sw-help/assign-cover', body: { targetUserId: 'u-lan', note: 'Emergency coverage' },
+    });
+  });
+
   it('uses weekly Work Shift language and only accepts 4, 6 or 8 hour shifts', async () => {
     routes['GET /api/shifts'] = () => json([morning]);
     routes['POST /api/shifts'] = (call) => json(template('t-new', String(call.body!.name), String(call.body!.startTime), String(call.body!.endTime)));

@@ -1,6 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { approveSwap, getSwapRequest, listSwapRequests, rejectSwap, type SwapRequest, type SwapShift } from '../../api/planning';
+import {
+  approveSwap, assignManagerCover, getManagerCoverCandidates, getSwapRequest, listSwapRequests, rejectSwap,
+  type SwapCandidate, type SwapRequest, type SwapShift,
+} from '../../api/planning';
 import { Icon } from '../../components/Icon';
 import { ManagerLayout } from '../../components/ManagerLayout';
 import { Badge, Button, Card, CardHeader } from '../../components/ui';
@@ -9,7 +12,7 @@ import { useLoad } from './useLoad';
 import s from './manager.module.css';
 
 const TABS = [
-  { key: 'PENDING_MANAGER', label: 'Pending' },
+  { key: 'PENDING_MANAGER', label: 'Manager actions' },
   { key: 'APPROVED', label: 'Approved' },
   { key: 'REJECTED', label: 'Rejected' },
   { key: 'PENDING_PEER,DECLINED_BY_PEER,CANCELLED,EXPIRED', label: 'Other' },
@@ -31,11 +34,14 @@ const CHECK_NAMES: Record<string, string> = {
   ZONE_COVERAGE: 'Zone coverage',
 };
 
-const statusOf = (r: SwapRequest) => STATUS[r.status] ?? { label: r.status, tone: 'neutral' as const };
+const needsAssignment = (r: SwapRequest) => r.status === 'PENDING_MANAGER' && !r.target;
+const statusOf = (r: SwapRequest) => needsAssignment(r)
+  ? { label: 'Manager assignment needed', tone: 'warning' as const }
+  : STATUS[r.status] ?? { label: r.status, tone: 'neutral' as const };
 const shiftLine = (shift: SwapShift) => `${longDayLabel(shift.workDate)} · ${shift.shiftName}`;
 const zonesOf = (shift: SwapShift) => shift.zones.map((z) => z.zoneName).join(', ') || 'No zone';
 const title = (r: SwapRequest) => r.type === 'COVER'
-  ? `${r.requester.fullName} asks ${r.target?.fullName ?? 'a colleague'} to cover`
+  ? needsAssignment(r) ? `${r.requester.fullName} asks the Manager to assign cover` : `${r.requester.fullName} asks ${r.target?.fullName ?? 'a colleague'} to cover`
   : `${r.requester.fullName} requests to swap with ${r.target?.fullName ?? 'a colleague'}`;
 
 function ShiftBox({ label, shift, after }: { label: string; shift: SwapShift; after?: boolean }) {
@@ -83,13 +89,13 @@ export function SwapRequests() {
             </div>
           </div>
           <Card>
-            <CardHeader title={tab === 'PENDING_MANAGER' ? 'Pending review' : TABS.find((t) => t.key === tab)?.label ?? ''}
+            <CardHeader title={tab === 'PENDING_MANAGER' ? 'Manager actions' : TABS.find((t) => t.key === tab)?.label ?? ''}
               subtitle={tab === 'PENDING_MANAGER'
-                ? undefined
+                ? 'Assign cover for Staff who need help, or approve peer-agreed requests.'
                 : 'Decided and closed requests'} />
             {error ? <p className={s.error} role="alert">{error}</p>
               : !requests ? <p className={s.note} role="status">Loading requests…</p>
-              : requests.length === 0 ? <p className={s.note}>{tab === 'PENDING_MANAGER' ? 'Nothing to approve right now.' : 'No requests here.'}</p>
+              : requests.length === 0 ? <p className={s.note}>{tab === 'PENDING_MANAGER' ? 'No Manager action is needed right now.' : 'No requests here.'}</p>
               : (
                 <div className={s.list}>
                   {requests.map((r) => (
@@ -108,7 +114,7 @@ export function SwapRequests() {
                         <ShiftBox label={`${r.requester.fullName} · current shift`} shift={r.requesterShift} />
                         {r.targetShift
                           ? <ShiftBox label={`${r.target?.fullName} · current shift`} shift={r.targetShift} after />
-                          : <div className={`${s.shiftBox} ${s.after}`}><span className={s.boxLabel}>Cover</span><span className={s.boxMain}>{r.target?.fullName}</span><span className={s.muted}>Takes the shift, gives nothing back</span></div>}
+                          : <div className={`${s.shiftBox} ${s.after}`}><span className={s.boxLabel}>Cover</span><span className={s.boxMain}>{r.target?.fullName ?? 'Manager selects Staff'}</span><span className={s.muted}>{r.target ? 'Takes the shift, gives nothing back' : 'Schedule stays unchanged until assignment'}</span></div>}
                       </div>
                       <div className={s.swapFoot}>
                         <p className={s.muted}>
@@ -116,7 +122,7 @@ export function SwapRequests() {
                           {r.expiresAt && r.status === 'PENDING_MANAGER' ? ` · Decide by ${dateTime(r.expiresAt)}` : ''}
                           {r.decidedAt ? `Decided ${dateTime(r.decidedAt)}${r.decidedBy ? ` by ${r.decidedBy.fullName}` : ''}.` : ''}
                         </p>
-                        <Link to={`/manager/swaps/${r.swapRequestId}`} className={s.back}>{r.canDecide ? 'Review request' : 'View details'}</Link>
+                        <Link to={`/manager/swaps/${r.swapRequestId}`} className={s.back}>{needsAssignment(r) ? 'Assign cover' : r.canDecide ? 'Review request' : 'View details'}</Link>
                       </div>
                     </article>
                   ))}
@@ -140,6 +146,22 @@ export function SwapRequestDetail() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [showChecks, setShowChecks] = useState(false);
+  const [candidates, setCandidates] = useState<SwapCandidate[] | null>(null);
+  const [targetUserId, setTargetUserId] = useState('');
+
+  useEffect(() => {
+    if (!request || !needsAssignment(request)) return;
+    const controller = new AbortController();
+    void getManagerCoverCandidates(request.swapRequestId, controller.signal)
+      .then((result) => {
+        if (!controller.signal.aborted) {
+          setCandidates(result.candidates);
+          setTargetUserId((current) => current || result.candidates[0]?.colleague.userId || '');
+        }
+      })
+      .catch((reason: unknown) => { if (!controller.signal.aborted) setError(problem(reason)); });
+    return () => controller.abort();
+  }, [request?.status, request?.swapRequestId, request?.target]);
 
   async function decide(approve: boolean) {
     if (!request) return;
@@ -158,6 +180,17 @@ export function SwapRequestDetail() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function assignCover() {
+    if (!request || !targetUserId) return setError('Choose a Staff member to cover this shift.');
+    if (!note.trim()) return setError('Write the reason for the Manager assignment.');
+    setBusy(true); setError('');
+    try {
+      const assigned = await assignManagerCover(request.swapRequestId, targetUserId, note.trim());
+      setRequest(assigned);
+      setNotice('Cover assigned. The schedule changed and both Staff members were notified.');
+    } catch (reason) { setError(problem(reason)); setBusy(false); }
   }
 
   const r = request;
@@ -227,7 +260,28 @@ export function SwapRequestDetail() {
                     ))}
                   </ul>
                 )}
-                {r.canDecide ? (
+                {needsAssignment(r) ? (
+                  <form className={s.decision} onSubmit={(event) => { event.preventDefault(); void assignCover(); }}>
+                    <label htmlFor="cover-staff">Staff member assigned to cover</label>
+                    {!candidates && !error && <p className={s.note}>Checking eligible Staff…</p>}
+                    <select id="cover-staff" className={s.noteInput} value={targetUserId} onChange={(event) => setTargetUserId(event.target.value)} disabled={busy}>
+                      <option value="" disabled>Choose Staff</option>
+                      {(candidates ?? []).map((candidate) => (
+                        <option key={candidate.colleague.userId} value={candidate.colleague.userId}>
+                          {candidate.colleague.fullName} · {candidate.weeklyHoursAfter}/48 h{candidate.recommended ? ' · recommended' : ' · high workload'}
+                        </option>
+                      ))}
+                    </select>
+                    {candidates?.length === 0 && <p className={s.error}>No eligible Staff can cover this shift without breaking a hard rule.</p>}
+                    <label htmlFor="cover-reason">Manager assignment reason</label>
+                    <textarea id="cover-reason" className={s.noteInput} rows={2} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Required for audit and Staff notification" disabled={busy} />
+                    {error && <p className={s.error} role="alert">{error}</p>}
+                    <div className={s.formActions}>
+                      <Button variant="dangerGhost" disabled={busy} onClick={() => void decide(false)}>Cannot assign</Button>
+                      <Button type="submit" disabled={busy || candidates?.length === 0}>{busy ? 'Assigning…' : 'Assign cover'}</Button>
+                    </div>
+                  </form>
+                ) : r.canDecide ? (
                   <form className={s.decision} onSubmit={(e) => { e.preventDefault(); void decide(true); }}>
                     <label className={s.srOnly} htmlFor="decision-note">Decision note (required when rejecting)</label>
                     <textarea id="decision-note" className={s.noteInput} rows={2} value={note} onChange={(e) => setNote(e.target.value)}
