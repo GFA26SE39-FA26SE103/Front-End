@@ -6,6 +6,7 @@ import { loadSession } from '../../auth/session';
 import { Dialog } from '../../components/Dialog';
 import { OperatorLayout } from '../../components/OperatorLayout';
 import { Button, Card, CardHeader, Chip } from '../../components/ui';
+import { TaskVerification } from './TaskVerification';
 import { useTaskPolling } from './useTaskPolling';
 import s from './OperatorTasks.module.css';
 
@@ -83,6 +84,7 @@ function TaskDetail({ taskId }: { taskId: string }) {
             <li>Created · {date(task.createdAt)}</li><li>Assigned · {date(task.assignedAt)}</li><li>Accepted · {date(task.acceptedAt)}</li>
             {task.plannedStartAt && <li>Planned start · {date(task.plannedStartAt)}</li>}<li>Started · {date(task.startedAt)}</li><li>Submitted · {date(task.submittedAt)}</li>
           </ol></Card>
+          <TaskVerification task={task} canReview={canAssign} onDecided={message => { setNotice(message); refresh(); }} />
         </div><div className={s.stack}><Card><CardHeader title="Assignment" />
           <dl className={s.kv}><dt>Staff</dt><dd>{task.assigneeName ?? 'Unassigned'}</dd><dt>Method</dt><dd>{task.assigneeUserId ? task.assignmentType === 'MANUAL' ? 'Operator assigned' : 'Staff accepted offer' : 'Awaiting acceptance'}</dd><dt>Updated</dt><dd>{date(task.updatedAt)}</dd></dl>
           {canAssign && ['OFFERED', 'ACCEPTED'].includes(task.status) ? <Button disabled={!!error} onClick={() => setAssigning(true)}>{task.assigneeUserId ? 'Reassign task' : 'Assign task'}</Button>

@@ -27,3 +27,28 @@ export const listAssignableStaff = (id: string, signal?: AbortSignal) => apiFetc
 export const assignTask = (id: string, assignment: TaskAssignment, signal?: AbortSignal) => apiFetch<OperationalTask>(`${taskPath(id)}/assign`, {
   method: 'POST', body: JSON.stringify(assignment), signal,
 });
+
+// MF-03 completion: Staff evidence and submission, independent Operator verification (Report 3 §3.7.4–3.7.5).
+export type EvidencePhoto = { evidenceId: string; evidenceType: 'BEFORE_PHOTO' | 'AFTER_PHOTO'; imageUrl: string; capturedAt: string };
+export type ReviewStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
+export type TaskSubmission = {
+  submissionId: string; submittedByUserId: string; submittedByName: string | null; note: string; submittedAt: string;
+  reviewStatus: ReviewStatus; rejectReason: string | null; photos: EvidencePhoto[];
+};
+export type TaskEvidence = {
+  taskId: string; taskStatus: TaskStatus; requiresBeforePhoto: boolean; requiresAfterPhoto: boolean; rejectionCount: number;
+  drafts: EvidencePhoto[]; submissions: TaskSubmission[];
+};
+export type TaskCompletionResult = {
+  taskId: string; status: TaskStatus; submittedAt: string | null; verifiedAt: string | null; rejectionCount: number;
+  assigneeUserId: string | null; updatedAt: string; evidence: TaskEvidence;
+};
+export const getTaskEvidence = (id: string, signal?: AbortSignal) => apiFetch<TaskEvidence>(`${taskPath(id)}/evidence`, { signal });
+/** Photo bytes need the session token, so they are fetched as a blob rather than linked. */
+export const getEvidenceImage = (imageUrl: string, signal?: AbortSignal) => apiFetch<Blob>(imageUrl, { responseType: 'blob', signal });
+export const verifyTask = (id: string, expectedUpdatedAt: string) => apiFetch<TaskCompletionResult>(`${taskPath(id)}/verify`, {
+  method: 'POST', body: JSON.stringify({ expectedUpdatedAt }),
+});
+export const rejectTask = (id: string, reason: string, expectedUpdatedAt: string) => apiFetch<TaskCompletionResult>(`${taskPath(id)}/reject`, {
+  method: 'POST', body: JSON.stringify({ reason, expectedUpdatedAt }),
+});

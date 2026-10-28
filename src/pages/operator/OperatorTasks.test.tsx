@@ -7,7 +7,9 @@ import { assignTask, getTask, listAssignableStaff, listTasks, type OperationalTa
 import { saveSession } from '../../auth/session';
 import { mockNativeDialogs } from '../../test/dialog';
 import OperatorTasks, { OperatorTaskDetail } from './OperatorTasks';
-vi.mock('../../api/tasks', () => ({ taskStatuses: ['OFFERED', 'ACCEPTED', 'IN_PROGRESS', 'SUBMITTED', 'VERIFIED', 'CANCELLED'], assignTask: vi.fn(), getTask: vi.fn(), listAssignableStaff: vi.fn(), listTasks: vi.fn() }));
+vi.mock('../../api/tasks', () => ({ taskStatuses: ['OFFERED', 'ACCEPTED', 'IN_PROGRESS', 'SUBMITTED', 'VERIFIED', 'CANCELLED'], assignTask: vi.fn(), getTask: vi.fn(), listAssignableStaff: vi.fn(), listTasks: vi.fn(),
+  getTaskEvidence: vi.fn(() => Promise.resolve({ taskId: 'task-1', taskStatus: 'OFFERED', requiresBeforePhoto: false, requiresAfterPhoto: false, rejectionCount: 0, drafts: [], submissions: [] })),
+  getEvidenceImage: vi.fn(() => new Promise(() => {})), verifyTask: vi.fn(), rejectTask: vi.fn() }));
 mockNativeDialogs();
 
 const task: OperationalTask = {
