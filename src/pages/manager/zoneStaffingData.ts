@@ -1,7 +1,7 @@
 import { listFloors, listSupermarkets, listZones } from '../../api/floors';
 import type { ScheduleView, ScheduledShift } from '../../api/planning';
 
-export type StaffingZone = { zoneId: string; code: string; zoneName: string };
+export type StaffingZone = { zoneId: string; code: string; zoneName: string; minimum: number; updatedAt: string };
 export type StaffingFloor = { floorId: string; floorNumber: number; floorName: string; zones: StaffingZone[] };
 export type StaffingState = 'Checked in' | 'Draft' | 'Published';
 export type StaffingPersonView = { userId: string; fullName: string; state: StaffingState };
@@ -41,7 +41,7 @@ export async function loadStaffingFloors(signal?: AbortSignal): Promise<Staffing
     zones: (await listZones(floor.floorId, signal))
       .filter((zone) => zone.status === 'ACTIVE')
       .sort((a, b) => a.name.localeCompare(b.name))
-      .map((zone) => ({ zoneId: zone.zoneId, code: zone.code, zoneName: zone.name })),
+      .map((zone) => ({ zoneId: zone.zoneId, code: zone.code, zoneName: zone.name, minimum: zone.minStaff, updatedAt: zone.updatedAt })),
   })));
 }
 
@@ -82,11 +82,11 @@ export function buildStaffingOverview(
         floorStaff.add(person.userId);
         allStaff.add(person.userId);
       });
-      const minimum = schedule.coverage.find((coverage) => coverage.shiftId === shiftId && coverage.zoneId === zone.zoneId)?.minStaff ?? 0;
+      const minimum = zone.minimum;
       const gap = staff.length < minimum;
       zoneCount += 1;
       if (gap) gapCount += 1;
-      return { ...zone, assigned: staff.length, minimum, gap, staff };
+      return { ...zone, assigned: staff.length, gap, staff };
     });
 
     return { ...floor, zoneCount: zones.length, assignedStaff: floorStaff.size, zones };

@@ -11,20 +11,20 @@ import { buildStaffingOverview, type StaffingFloor } from './zoneStaffingData';
 const manager = { userId: 'mgr', email: 'mgr@store.test', fullName: 'Trần Minh', roleId: 'role-MANAGER', role: 'MANAGER', status: 'ACTIVE' };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
-type Call = { path: string; query: string; method: string };
+type Call = { path: string; query: string; method: string; body?: unknown };
 let calls: Call[];
 
 const floors: StaffingFloor[] = [
   {
     floorId: 'f-1', floorNumber: 1, floorName: 'Ground floor',
     zones: [
-      { zoneId: 'z-checkout', code: 'CHECKOUT', zoneName: 'Checkout' },
-      { zoneId: 'z-produce', code: 'PRODUCE', zoneName: 'Produce' },
+      { zoneId: 'z-checkout', code: 'CHECKOUT', zoneName: 'Checkout', minimum: 3, updatedAt: '2026-10-25T00:00:00Z' },
+      { zoneId: 'z-produce', code: 'PRODUCE', zoneName: 'Produce', minimum: 1, updatedAt: '2026-10-25T00:00:00Z' },
     ],
   },
   {
     floorId: 'f-2', floorNumber: 2, floorName: 'Upper floor',
-    zones: [{ zoneId: 'z-frozen', code: 'FROZEN', zoneName: 'Frozen' }],
+    zones: [{ zoneId: 'z-frozen', code: 'FROZEN', zoneName: 'Frozen', minimum: 1, updatedAt: '2026-10-25T00:00:00Z' }],
   },
 ];
 
@@ -61,7 +61,7 @@ function schedule(workDate: string): ScheduleView {
 function serve(today: string) {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = new URL(String(input));
-    calls.push({ path: url.pathname, query: url.search, method: init?.method ?? 'GET' });
+    calls.push({ path: url.pathname, query: url.search, method: init?.method ?? 'GET', body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined });
     if (url.pathname === '/api/supermarkets') return json([{ supermarketId: 'store-1', code: 'S1', name: 'Central', status: 'ACTIVE' }]);
     // The current Floor API has no lifecycle status; every returned Floor is available.
     if (url.pathname === '/api/supermarkets/store-1/floors') return json([
@@ -69,11 +69,12 @@ function serve(today: string) {
       { floorId: 'f-2', supermarketId: 'store-1', floorNumber: 2, name: 'Upper floor' },
     ]);
     if (url.pathname === '/api/floors/f-1/zones') return json([
-      { zoneId: 'z-checkout', floorId: 'f-1', code: 'CHECKOUT', name: 'Checkout', status: 'ACTIVE' },
-      { zoneId: 'z-produce', floorId: 'f-1', code: 'PRODUCE', name: 'Produce', status: 'ACTIVE' },
-      { zoneId: 'z-old', floorId: 'f-1', code: 'OLD', name: 'Old zone', status: 'INACTIVE' },
+      { zoneId: 'z-checkout', floorId: 'f-1', code: 'CHECKOUT', name: 'Checkout', minStaff: 3, updatedAt: '2026-10-25T00:00:00Z', status: 'ACTIVE' },
+      { zoneId: 'z-produce', floorId: 'f-1', code: 'PRODUCE', name: 'Produce', minStaff: 1, updatedAt: '2026-10-25T00:00:00Z', status: 'ACTIVE' },
+      { zoneId: 'z-old', floorId: 'f-1', code: 'OLD', name: 'Old zone', minStaff: 2, updatedAt: '2026-10-25T00:00:00Z', status: 'INACTIVE' },
     ]);
-    if (url.pathname === '/api/floors/f-2/zones') return json([{ zoneId: 'z-frozen', floorId: 'f-2', code: 'FROZEN', name: 'Frozen', status: 'ACTIVE' }]);
+    if (url.pathname === '/api/floors/f-2/zones') return json([{ zoneId: 'z-frozen', floorId: 'f-2', code: 'FROZEN', name: 'Frozen', minStaff: 1, updatedAt: '2026-10-25T00:00:00Z', status: 'ACTIVE' }]);
+    if (url.pathname === '/api/zones/z-checkout/minimum-staff' && init?.method === 'PATCH') return json({ zoneId: 'z-checkout', minStaff: 4, updatedAt: '2026-10-25T00:01:00Z' });
     if (url.pathname === '/api/shifts') return json([shift]);
     if (url.pathname === '/api/schedule') {
       const selected = url.searchParams.get('from') ?? today;
@@ -120,6 +121,18 @@ describe('Manager Zone staffing overview', () => {
     expect(screen.getByRole('heading', { name: 'Floor 2 · Upper floor' })).toBeInTheDocument();
     expect(within(screen.getByTestId('zone-z-checkout')).getByText('2 / 3')).toBeInTheDocument();
     expect(within(screen.getByTestId('zone-z-produce')).getByText('No Staff assigned')).toBeInTheDocument();
+    expect(screen.getByText('Admin only creates and maps Zones.')).toBeInTheDocument();
+
+    const checkout = within(screen.getByTestId('zone-z-checkout'));
+    await userEvent.click(checkout.getByRole('button', { name: 'Set minimum' }));
+    const minimum = checkout.getByRole('spinbutton', { name: 'Minimum Staff for Checkout' });
+    await userEvent.clear(minimum);
+    await userEvent.type(minimum, '4');
+    await userEvent.click(checkout.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls).toContainEqual(expect.objectContaining({
+      path: '/api/zones/z-checkout/minimum-staff', method: 'PATCH',
+      body: { minStaff: 4, expectedUpdatedAt: '2026-10-25T00:00:00Z' },
+    })));
 
     const scheduleCalls = calls.filter((call) => call.path === '/api/schedule').length;
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Floor' }), 'f-2');

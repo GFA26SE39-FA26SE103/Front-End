@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getSchedule, listWorkShifts, type ScheduleView, type WorkShift } from '../../api/planning';
+import { getSchedule, listWorkShifts, updateZoneMinimumStaff, type ScheduleView, type WorkShift } from '../../api/planning';
 import { ManagerLayout } from '../../components/ManagerLayout';
 import { Button, StatCard } from '../../components/ui';
 import { clock, isoDate, parseDate, weekStart } from './dates';
@@ -32,6 +32,9 @@ export default function ZoneStaffing() {
   const [shiftId, setShiftId] = useState('');
   const [floorId, setFloorId] = useState('');
   const [reload, setReload] = useState(0);
+  const [editingMinimum, setEditingMinimum] = useState<{ zoneId: string; value: string } | null>(null);
+  const [minimumSaving, setMinimumSaving] = useState(false);
+  const [minimumError, setMinimumError] = useState('');
   const today = isoDate(new Date());
   const { data, error } = useLoad<Loaded>(`${date}|${reload}`, async (signal) => {
     const [floors, workShifts, schedule] = await Promise.all([
@@ -65,9 +68,33 @@ export default function ZoneStaffing() {
   );
   const selectedShift = shifts.find((shift) => shift.shiftId === shiftId);
 
+  const saveMinimum = async (zoneId: string, updatedAt: string) => {
+    const value = editingMinimum?.zoneId === zoneId ? editingMinimum.value.trim() : '';
+    const minimum = Number(value);
+    if (!/^\d+$/.test(value) || !Number.isSafeInteger(minimum)) {
+      setMinimumError('Minimum Staff must be a whole number of zero or greater.');
+      return;
+    }
+    setMinimumSaving(true);
+    setMinimumError('');
+    try {
+      await updateZoneMinimumStaff(zoneId, minimum, updatedAt);
+      setEditingMinimum(null);
+      setReload((current) => current + 1);
+    } catch (reason) {
+      setMinimumError(reason instanceof Error && reason.message ? reason.message : 'Could not update the staffing baseline.');
+    } finally {
+      setMinimumSaving(false);
+    }
+  };
+
   return (
     <ManagerLayout title="Zone staffing" subtitle="Review Staff coverage by date, shift and floor">
       <div className={s.page}>
+        <section className={s.ownership} aria-label="Minimum staffing ownership">
+          <div><strong>Manager staffing baseline</strong><span>Set the minimum Staff required for each Zone. The same baseline applies to every active Work Shift.</span></div>
+          <span>Admin only creates and maps Zones.</span>
+        </section>
         <section className={s.filters} aria-label="Staffing filters">
           <label>
             <span>Date</span>
@@ -132,8 +159,18 @@ export default function ZoneStaffing() {
                             </div>
                           </div>
                           <div className={s.coverage}>
-                            <strong>{zone.assigned} / {zone.minimum}</strong>
-                            <span className={zone.gap ? s.gap : s.covered}>{zone.minimum === 0 ? 'No minimum' : zone.gap ? 'Needs Staff' : 'Covered'}</span>
+                            <div className={s.coverageSummary}>
+                              <strong>{zone.assigned} / {zone.minimum}</strong>
+                              <span className={zone.gap ? s.gap : s.covered}>{zone.minimum === 0 ? 'No minimum' : zone.gap ? 'Needs Staff' : 'Covered'}</span>
+                              <button type="button" className={s.editMinimum} onClick={() => { setEditingMinimum({ zoneId: zone.zoneId, value: String(zone.minimum) }); setMinimumError(''); }}>Set minimum</button>
+                            </div>
+                            {editingMinimum?.zoneId === zone.zoneId && (
+                              <form className={s.minimumForm} onSubmit={(event) => { event.preventDefault(); void saveMinimum(zone.zoneId, zone.updatedAt); }}>
+                                <label>Staff in every active shift<input aria-label={`Minimum Staff for ${zone.zoneName}`} type="number" min="0" step="1" value={editingMinimum.value} onChange={(event) => setEditingMinimum({ zoneId: zone.zoneId, value: event.target.value })} autoFocus /></label>
+                                <div><button type="submit" disabled={minimumSaving}>{minimumSaving ? 'Saving…' : 'Save'}</button><button type="button" disabled={minimumSaving} onClick={() => { setEditingMinimum(null); setMinimumError(''); }}>Cancel</button></div>
+                                {minimumError && <span className={s.minimumError} role="alert">{minimumError}</span>}
+                              </form>
+                            )}
                           </div>
                           <div className={s.people}>
                             {zone.staff.length === 0 ? <span className={s.noStaff}>No Staff assigned</span> : zone.staff.map((person) => (

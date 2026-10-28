@@ -1,4 +1,5 @@
 import { apiFetch } from './client';
+import type { ZoneRecord } from './floors';
 
 // MF-04 Manager shift planning and swap approval (Back-End docs/API.md, "MF-04 xếp ca cho Manager" and
 // "MF-04 đổi ca SWAP/COVER"). Dates are local store dates (yyyy-MM-dd); instants are UTC ISO strings.
@@ -61,6 +62,10 @@ export const updateAssignment = (assignmentId: string, request: { userId?: strin
 export const cancelAssignment = (assignmentId: string, reason: string | null) =>
   post<ScheduledShift>(`/api/schedule/assignments/${id(assignmentId)}/cancel`, { reason });
 export const publishSchedule = (from: string, to: string) => post<PublishResult>('/api/schedule/publish', { from, to });
+export const updateZoneMinimumStaff = (zoneId: string, minStaff: number, expectedUpdatedAt: string) =>
+  apiFetch<ZoneRecord>(`/api/zones/${id(zoneId)}/minimum-staff`, {
+    method: 'PATCH', body: JSON.stringify({ minStaff, expectedUpdatedAt }),
+  });
 
 export const listUnavailability = (from: string, to: string, signal?: AbortSignal) =>
   apiFetch<Unavailability[]>(`/api/staff-unavailability?from=${from}&to=${to}`, { signal });

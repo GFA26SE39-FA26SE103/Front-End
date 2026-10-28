@@ -51,8 +51,6 @@ describe('ZoneEditorOverlay', () => {
     await user.selectOptions(screen.getByLabelText('Zone type'), 'FRESH_FOOD');
     await user.click(screen.getByRole('button', { name: 'Green' }));
     await user.type(screen.getByLabelText('Area in square metres'), '125.5');
-    await user.clear(screen.getByRole('spinbutton', { name: /Minimum staff per shift/ }));
-    await user.type(screen.getByRole('spinbutton', { name: /Minimum staff per shift/ }), '1');
     await user.click(screen.getByRole('button', { name: 'Save zone' }));
 
     expect(onSave).toHaveBeenCalledWith({
@@ -61,7 +59,6 @@ describe('ZoneEditorOverlay', () => {
       zoneType: 'FRESH_FOOD',
       colorHex: '#22C55E',
       areaM2: 125.5,
-      minStaff: 1,
       mapPolygon: [
         { x: 0.1, y: 0.1 },
         { x: 0.5, y: 0.1 },
@@ -109,7 +106,6 @@ describe('ZoneEditorOverlay', () => {
     const zone = screen.getByRole('button', { name: 'Edit zone Produce' });
 
     fireEvent.pointerDown(zone, { pointerId: 3, clientX: 180, clientY: 90 });
-    expect(screen.getByRole('spinbutton', { name: /Minimum staff per shift/ })).toHaveValue(2);
     fireEvent.pointerMove(zone, { pointerId: 3, clientX: 260, clientY: 130 });
     fireEvent.pointerUp(zone, { pointerId: 3, clientX: 260, clientY: 130 });
     await user.click(screen.getByRole('button', { name: 'Save zone' }));

@@ -378,7 +378,6 @@ describe('StoreLayout', () => {
 
     await waitFor(() => expect(createZone).toHaveBeenCalledWith('floor-1', {
       code: 'PRODUCE', name: 'Produce', zoneType: 'FRESH_FOOD', colorHex: '#22C55E', areaM2: null, status: 'ACTIVE',
-      minStaff: 0,
       mapPolygon: [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.1 }, { x: 0.5, y: 0.5 }, { x: 0.1, y: 0.5 }],
     }));
     expect(await screen.findByText('Zone saved.')).toBeInTheDocument();

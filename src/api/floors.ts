@@ -43,7 +43,6 @@ export type ZoneRequest = {
   status: string;
   colorHex: string | null;
   areaM2: number | null;
-  minStaff: number;
 };
 
 export type FloorMapView = {

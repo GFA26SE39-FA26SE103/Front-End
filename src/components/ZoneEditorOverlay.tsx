@@ -10,7 +10,6 @@ export type ZoneEditorSave = {
   zoneType: string;
   colorHex: string;
   areaM2: number | null;
-  minStaff: number;
   mapPolygon: MapPoint[];
 };
 
@@ -114,7 +113,6 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onCancel }: ZoneEdito
   const [zoneType, setZoneType] = useState('');
   const [colorHex, setColorHex] = useState(DEFAULT_COLOR);
   const [area, setArea] = useState('');
-  const [minStaff, setMinStaff] = useState('0');
   const [error, setError] = useState('');
   const [toolbarPosition, setToolbarPosition] = useState({ x: 16, y: 16 });
 
@@ -127,7 +125,6 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onCancel }: ZoneEdito
     setZoneType('');
     setColorHex(DEFAULT_COLOR);
     setArea('');
-    setMinStaff('0');
     setError('');
   };
 
@@ -151,7 +148,6 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onCancel }: ZoneEdito
     setZoneType(zone.zoneType ?? '');
     setColorHex(zone.colorHex ?? DEFAULT_COLOR);
     setArea(zone.areaM2 == null ? '' : String(zone.areaM2));
-    setMinStaff(String(zone.minStaff));
     setError('');
   };
 
@@ -280,16 +276,14 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onCancel }: ZoneEdito
   const save = async () => {
     const trimmedName = name.trim();
     const parsedArea = area.trim() === '' ? null : Number(area);
-    const parsedMinStaff = Number(minStaff);
     if (!complete || points.length < 3) return setError('Finish the zone shape before saving.');
     if (!trimmedName) return setError('Enter a zone name.');
     if (!zoneTypeCodes.has(zoneType)) return setError('Choose a zone type.');
     if (!/^#[0-9A-F]{6}$/i.test(colorHex)) return setError('Choose a valid zone color.');
     if (parsedArea !== null && (!Number.isFinite(parsedArea) || parsedArea <= 0 || parsedArea > 9999999999.99 || !/^\d+(\.\d{1,2})?$/.test(area.trim()))) return setError('Area must be positive and use at most two decimal places.');
-    if (!/^\d+$/.test(minStaff.trim()) || !Number.isSafeInteger(parsedMinStaff)) return setError('Minimum staff must be a whole number of zero or greater.');
     setError('');
     try {
-      await onSave({ zoneId: selectedZoneId, name: trimmedName, zoneType, colorHex: colorHex.toUpperCase(), areaM2: parsedArea, minStaff: parsedMinStaff, mapPolygon: points });
+      await onSave({ zoneId: selectedZoneId, name: trimmedName, zoneType, colorHex: colorHex.toUpperCase(), areaM2: parsedArea, mapPolygon: points });
       resetDraft();
       setTool('edit');
     } catch (reason) {
@@ -356,11 +350,6 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onCancel }: ZoneEdito
         </select>
       </label>
       <label className={s.field}>Area in square metres<input type="number" min="0.01" max="9999999999.99" step="0.01" value={area} onChange={(event) => setArea(event.target.value)} placeholder="Optional" /></label>
-      <label className={s.field}>Minimum staff per shift
-        <input type="number" min="0" step="1" value={minStaff} onChange={(event) => setMinStaff(event.target.value)} required />
-        <span className={s.hint}>Admin sets the Zone baseline; Manager schedules enough Staff. Zero means no minimum is enforced.</span>
-      </label>
-
       {tool === 'polygon' && <button type="button" className={s.closePolygon} disabled={points.length < 3 || complete} onClick={() => setComplete(true)}>Close polygon</button>}
       {error && <p className={s.error} role="alert">{error}</p>}
       <div className={s.actions}>

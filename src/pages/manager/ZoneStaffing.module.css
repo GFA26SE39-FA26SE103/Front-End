@@ -1,4 +1,8 @@
 .page { display: flex; flex-direction: column; gap: 16px; width: 100%; min-width: 0; }
+.ownership { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 16px; border: 1px solid var(--color-primary); border-radius: 12px; background: var(--color-primary-tint); color: var(--color-text-muted); font-size: 12px; }
+.ownership div { display: flex; flex-direction: column; gap: 3px; }
+.ownership strong { color: var(--color-text); font-size: 14px; }
+.ownership > span { white-space: nowrap; }
 .filters { display: flex; align-items: flex-end; gap: 12px; padding: 16px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); box-shadow: var(--shadow-card); }
 .filters label { display: flex; flex-direction: column; gap: 6px; min-width: 190px; color: var(--color-text-muted); font-size: 11px; font-weight: 600; letter-spacing: .45px; text-transform: uppercase; }
 .filters input, .filters select { height: 38px; padding: 0 11px; border: 1px solid var(--color-border); border-radius: 7px; background: var(--color-surface); color: var(--color-text); font: inherit; font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none; }
@@ -14,14 +18,23 @@
 .floorSummary span { min-width: 90px; padding: 8px 10px; border-radius: 8px; background: var(--color-surface-2); color: var(--color-text-muted); font-size: 12px; text-align: center; }
 .floorSummary strong { color: var(--color-text); font-size: 15px; }
 .zoneList { display: flex; flex-direction: column; }
-.zoneRow { display: grid; grid-template-columns: minmax(220px, .9fr) 130px minmax(280px, 1.5fr); gap: 20px; align-items: start; padding: 17px 20px; border-top: 1px solid var(--color-grid); }
+.zoneRow { display: grid; grid-template-columns: minmax(220px, .9fr) minmax(230px, .8fr) minmax(280px, 1.5fr); gap: 20px; align-items: start; padding: 17px 20px; border-top: 1px solid var(--color-grid); }
 .zoneRow:first-child { border-top: 0; }
 .zoneIdentity { display: flex; gap: 8px; min-width: 0; }
 .branch { color: var(--color-text-dim); font-family: monospace; }
 .zoneIdentity h3 { margin: 0; font-size: 14px; font-weight: 650; }
 .zoneCode { display: block; margin-top: 3px; color: var(--color-text-dim); font-size: 10px; font-weight: 600; letter-spacing: .5px; }
-.coverage { display: flex; align-items: center; gap: 8px; }
+.coverage { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.coverageSummary { display: flex; align-items: center; gap: 8px; }
 .coverage strong { min-width: 36px; font-size: 14px; }
+.editMinimum { padding: 0; border: 0; background: transparent; color: var(--color-primary); font-size: 11px; font-weight: 650; text-decoration: underline; cursor: pointer; }
+.minimumForm { display: flex; flex-direction: column; gap: 7px; width: 100%; padding: 10px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface-2); }
+.minimumForm label { display: flex; flex-direction: column; gap: 5px; color: var(--color-text-muted); font-size: 10px; font-weight: 650; }
+.minimumForm input { width: 100%; height: 34px; padding: 0 9px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface); color: var(--color-text); }
+.minimumForm div { display: flex; gap: 6px; }
+.minimumForm button { min-height: 30px; padding: 0 10px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface); color: var(--color-text); font-weight: 650; cursor: pointer; }
+.minimumForm button[type='submit'] { border-color: var(--color-primary); background: var(--color-primary); color: white; }
+.minimumError { color: var(--color-danger); font-size: 11px; }
 .gap, .covered { display: inline-flex; align-items: center; min-height: 22px; padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; white-space: nowrap; }
 .gap { background: var(--color-danger-tint); color: var(--color-danger); }
 .covered { background: var(--color-success-tint); color: var(--color-success); }
@@ -43,11 +56,13 @@
   .filters { flex-wrap: wrap; }
   .context { width: 100%; margin-left: 0; padding-bottom: 0; }
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .zoneRow { grid-template-columns: minmax(190px, 1fr) 120px minmax(220px, 1.3fr); }
+  .zoneRow { grid-template-columns: minmax(190px, 1fr) minmax(210px, .9fr) minmax(220px, 1.3fr); }
 }
 
 @media (max-width: 680px) {
   .filters { align-items: stretch; }
+  .ownership { align-items: flex-start; flex-direction: column; }
+  .ownership > span { white-space: normal; }
   .filters label { width: 100%; min-width: 0; }
   .stats { grid-template-columns: 1fr; }
   .floorHeader { align-items: flex-start; flex-direction: column; }
