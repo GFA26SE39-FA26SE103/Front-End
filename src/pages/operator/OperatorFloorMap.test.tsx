@@ -107,9 +107,20 @@ describe('OperatorFloorMap', () => {
     const popup = screen.getByRole('dialog', { name: 'Camera CAM-01' });
     expect(within(popup).getByText('Online')).toBeInTheDocument();
     expect(within(popup).getByText('Checkout')).toBeInTheDocument();
+    expect(within(popup).getByText('Latest snapshot · refreshes every 10s')).toBeInTheDocument();
     expect(await within(popup).findByRole('img', { name: 'Latest frame from CAM-01' })).toBeInTheDocument();
 
     await user.click(within(popup).getByRole('button', { name: 'Open live' }));
+    expect(screen.getByText('Live page')).toBeInTheDocument();
+  });
+
+  it('opens an online camera directly from the live cameras shortcut', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const liveSection = await screen.findByRole('region', { name: 'Live cameras' });
+    expect(within(liveSection).queryByRole('button', { name: 'Open CAM-02 live' })).not.toBeInTheDocument();
+    await user.click(await within(liveSection).findByRole('button', { name: 'Open CAM-01 live' }));
     expect(screen.getByText('Live page')).toBeInTheDocument();
   });
 

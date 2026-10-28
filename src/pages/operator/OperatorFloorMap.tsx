@@ -21,6 +21,7 @@ import {
 import s from './OperatorFloorMap.module.css';
 
 const HEALTH_REFRESH_MS = 30_000;
+const SNAPSHOT_REFRESH_MS = 10_000;
 const emptyDetails: FloorDetails = { zones: [], cameras: [], mappings: [] };
 
 export default function OperatorFloorMap() {
@@ -103,6 +104,7 @@ export default function OperatorFloorMap() {
   }, [details, selectedCameraId, selectedZoneId]);
   const unplaced = details.cameras.filter((camera) => camera.mapX === null || camera.mapY === null).length;
   const online = details.cameras.filter((camera) => healthTone(camera) === 'success').length;
+  const liveCameras = details.cameras.filter((camera) => healthTone(camera) === 'success');
 
   const subtitle = selectedFloor
     ? `${storeName ? `${storeName} · ` : ''}${selectedFloor.name || `Floor ${selectedFloor.floorNumber}`} · ${online}/${details.cameras.length} cameras online`
@@ -184,6 +186,20 @@ export default function OperatorFloorMap() {
       </section>
 
       <aside className={s.right}>
+        <section className={s.liveSection} aria-label="Live cameras">
+          <Overline>LIVE CAMERAS</Overline>
+          <div className={s.liveList}>
+            {liveCameras.map((camera) => {
+              const cameraZones = zonesForCamera(camera.cameraId, details.zones, details.mappings);
+              return <button key={camera.cameraId} className={s.liveCamera} aria-label={`Open ${camera.code} live`} onClick={() => navigate(`/operator/cameras/${camera.cameraId}`)}>
+                <span><strong>{camera.code}</strong><small>{cameraZones.map((zone) => zone.name).join(', ') || 'No mapped Zone'}</small></span>
+                <span className={s.liveAction}>View live →</span>
+              </button>;
+            })}
+            {!loading && liveCameras.length === 0 && <p className={s.muted}>No cameras online on this floor.</p>}
+          </div>
+        </section>
+
         <Overline>ZONE STATUS</Overline>
         <div className={s.zoneList}>
           {details.zones.map((zone) => {
@@ -229,17 +245,24 @@ function CameraPopup({ camera, zones, onOpenLive, onClose }: { camera: CameraRec
   useEffect(() => {
     const controller = new AbortController();
     let objectUrl: string | null = null;
-    getCameraPreview(camera.cameraId, controller.signal)
-      .then((blob) => {
-        if (controller.signal.aborted) return;
-        objectUrl = URL.createObjectURL(blob);
-        setSnapshot({ cameraId: camera.cameraId, url: objectUrl, failed: false });
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setSnapshot({ cameraId: camera.cameraId, url: null, failed: true });
-      });
+    const refresh = () => {
+      getCameraPreview(camera.cameraId, controller.signal)
+        .then((blob) => {
+          if (controller.signal.aborted) return;
+          const nextUrl = URL.createObjectURL(blob);
+          if (objectUrl) URL.revokeObjectURL(objectUrl);
+          objectUrl = nextUrl;
+          setSnapshot({ cameraId: camera.cameraId, url: nextUrl, failed: false });
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setSnapshot({ cameraId: camera.cameraId, url: null, failed: true });
+        });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, SNAPSHOT_REFRESH_MS);
     return () => {
       controller.abort();
+      window.clearInterval(timer);
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [camera.cameraId]);
@@ -256,6 +279,7 @@ function CameraPopup({ camera, zones, onOpenLive, onClose }: { camera: CameraRec
         <Chip tone={healthTone(camera)} pill>{healthLabel(camera)}</Chip>
         <button className={s.close} aria-label="Close camera details" onClick={onClose}>×</button>
       </div>
+      <span className={s.snapshotLabel}>Latest snapshot · refreshes every 10s</span>
       <div className={s.snapshot}>
         {current?.url ? <img src={current.url} alt={`Latest frame from ${camera.code}`} />
           : <span>{current?.failed ? 'Snapshot unavailable' : 'Loading snapshot…'}</span>}

@@ -178,6 +178,33 @@
   font-size: 11px;
 }
 
+.liveSection,
+.liveList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.liveCamera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-success);
+  border-radius: 10px;
+  background: var(--color-success-tint);
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.liveCamera:hover { box-shadow: 0 0 0 2px var(--color-success-tint); }
+.liveCamera > span:first-child { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; }
+.liveCamera strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.liveCamera small { overflow: hidden; color: var(--color-text-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.liveAction { flex-shrink: 0; color: var(--color-success); font-size: 11px; font-weight: 700; }
+
 .incidents {
   padding: 14px;
   border: 1px dashed var(--color-border);
@@ -253,6 +280,8 @@
   color: #c8ced8;
   font-size: 11px;
 }
+
+.snapshotLabel { color: var(--color-text-muted); font-size: 10px; font-weight: 600; }
 
 .snapshot img {
   width: 100%;
