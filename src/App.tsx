@@ -61,6 +61,7 @@ export default function App() {
       <Route element={<ProtectedRoute allowedRoles={['MANAGER']} />}>
         <Route path="/manager/dashboard" element={<Navigate to="/manager/schedule" replace />} />
         <Route path="/manager/schedule" element={<Schedule />} />
+        <Route path="/manager/floor-map" element={<OperatorFloorMap workspace="manager" />} />
         <Route path="/manager/staffing" element={<ZoneStaffing />} />
         <Route path="/manager/swaps" element={<SwapRequests />} />
         <Route path="/manager/swaps/:swapRequestId" element={<SwapRequestDetail />} />

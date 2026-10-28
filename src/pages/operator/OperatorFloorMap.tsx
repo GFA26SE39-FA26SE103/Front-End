@@ -4,6 +4,7 @@ import { getCameraPreview, listCameras, type CameraRecord } from '../../api/came
 import type { FloorRecord, ZoneRecord } from '../../api/floors';
 import { AdminLayout } from '../../components/AdminLayout';
 import { FloorPlanView } from '../../components/FloorPlanView';
+import { ManagerLayout } from '../../components/ManagerLayout';
 import { OperatorLayout } from '../../components/OperatorLayout';
 import { Button, Chip, Overline } from '../../components/ui';
 import {
@@ -25,9 +26,9 @@ const HEALTH_REFRESH_MS = 30_000;
 const SNAPSHOT_REFRESH_MS = 10_000;
 const emptyDetails: FloorDetails = { zones: [], cameras: [], mappings: [] };
 
-type LiveWorkspace = 'operator' | 'admin';
+type FloorMapWorkspace = 'operator' | 'admin' | 'manager';
 
-export default function OperatorFloorMap({ workspace = 'operator' }: { workspace?: LiveWorkspace }) {
+export default function OperatorFloorMap({ workspace = 'operator' }: { workspace?: FloorMapWorkspace }) {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [storeName, setStoreName] = useState('');
@@ -100,6 +101,12 @@ export default function OperatorFloorMap({ workspace = 'operator' }: { workspace
   );
   const zoneTone = (zone: ZoneRecord) => COVERAGE[coverage.get(zone.zoneId)?.status ?? 'uncovered'].tone;
   const selectedCamera = details.cameras.find((camera) => camera.cameraId === selectedCameraId) ?? null;
+  const selectedZone = details.zones.find((zone) => zone.zoneId === selectedZoneId) ?? null;
+  const selectedZoneCameras = selectedZoneId
+    ? details.cameras.filter((camera) => details.mappings.some((mapping) => (
+      mapping.zoneId === selectedZoneId && mapping.cameraId === camera.cameraId && mapping.status === 'ACTIVE'
+    )))
+    : [];
   const highlighted = useMemo(() => {
     if (selectedZoneId) return new Set([selectedZoneId]);
     if (selectedCameraId) return new Set(zonesForCamera(selectedCameraId, details.zones, details.mappings).map((zone) => zone.zoneId));
@@ -171,12 +178,20 @@ export default function OperatorFloorMap({ workspace = 'operator' }: { workspace
                 setSelectedZoneId((current) => (current === zoneId ? null : zoneId));
               }}
               cameraPopup={selectedCamera && (
-                <CameraPopup
-                  camera={selectedCamera}
-                  zones={zonesForCamera(selectedCamera.cameraId, details.zones, details.mappings)}
-                  onOpenLive={() => navigate(cameraPath(selectedCamera.cameraId))}
-                  onClose={() => setSelectedCameraId(null)}
-                />
+                workspace === 'manager' ? (
+                  <ManagerCameraPopup
+                    camera={selectedCamera}
+                    zones={zonesForCamera(selectedCamera.cameraId, details.zones, details.mappings)}
+                    onClose={() => setSelectedCameraId(null)}
+                  />
+                ) : (
+                  <CameraPopup
+                    camera={selectedCamera}
+                    zones={zonesForCamera(selectedCamera.cameraId, details.zones, details.mappings)}
+                    onOpenLive={() => navigate(cameraPath(selectedCamera.cameraId))}
+                    onClose={() => setSelectedCameraId(null)}
+                  />
+                )
               )}
             />
           ) : (
@@ -192,7 +207,7 @@ export default function OperatorFloorMap({ workspace = 'operator' }: { workspace
       </section>
 
       <aside className={s.right}>
-        <section className={s.liveSection} aria-label="Live cameras">
+        {workspace !== 'manager' && <section className={s.liveSection} aria-label="Live cameras">
           <Overline>LIVE CAMERAS</Overline>
           <div className={s.liveList}>
             {liveCameras.map((camera) => {
@@ -204,7 +219,7 @@ export default function OperatorFloorMap({ workspace = 'operator' }: { workspace
             })}
             {!loading && liveCameras.length === 0 && <p className={s.muted}>No cameras online on this floor.</p>}
           </div>
-        </section>
+        </section>}
 
         <Overline>ZONE STATUS</Overline>
         <div className={s.zoneList}>
@@ -235,11 +250,40 @@ export default function OperatorFloorMap({ workspace = 'operator' }: { workspace
           {!loading && details.zones.length === 0 && <p className={s.muted}>No zones on this floor yet.</p>}
         </div>
 
-        <Overline>ACTIVE INCIDENTS</Overline>
-        <div className={s.incidents}>
-          <strong>No incident feed yet</strong>
-          <p>AI-detected and staff-reported incidents appear here once MF-02 monitoring is connected.</p>
-        </div>
+        {workspace === 'manager' ? (
+          <section className={s.zoneCameraSection} aria-label="Cameras in selected zone">
+            <Overline>CAMERAS IN ZONE</Overline>
+            {selectedZone ? (
+              <>
+                <p className={s.selectedZoneName}>{selectedZone.name}</p>
+                <div className={s.zoneCameraList}>
+                  {selectedZoneCameras.map((camera) => (
+                    <button
+                      key={camera.cameraId}
+                      className={s.zoneCameraRow}
+                      onClick={() => {
+                        setSelectedZoneId(null);
+                        setSelectedCameraId(camera.cameraId);
+                      }}
+                    >
+                      <span><strong>{camera.code}</strong><small>{camera.name}</small></span>
+                      <Chip tone={healthTone(camera)} pill>{healthLabel(camera)}</Chip>
+                    </button>
+                  ))}
+                  {selectedZoneCameras.length === 0 && <p className={s.muted}>No cameras are mapped to this Zone.</p>}
+                </div>
+              </>
+            ) : <p className={s.muted}>Select a Zone on the map or in the list to see its cameras.</p>}
+          </section>
+        ) : (
+          <>
+            <Overline>ACTIVE INCIDENTS</Overline>
+            <div className={s.incidents}>
+              <strong>No incident feed yet</strong>
+              <p>AI-detected and staff-reported incidents appear here once MF-02 monitoring is connected.</p>
+            </div>
+          </>
+        )}
       </aside>
     </>
   );
@@ -252,7 +296,34 @@ export default function OperatorFloorMap({ workspace = 'operator' }: { workspace
     );
   }
 
+  if (workspace === 'manager') {
+    return (
+      <ManagerLayout title="Floor map" subtitle={subtitle}>
+        <div className={s.adminWorkspace}>{content}</div>
+      </ManagerLayout>
+    );
+  }
+
   return <OperatorLayout title="Floor map" subtitle={subtitle}>{content}</OperatorLayout>;
+}
+
+function ManagerCameraPopup({ camera, zones, onClose }: { camera: CameraRecord; zones: ZoneRecord[]; onClose: () => void }) {
+  return (
+    <div className={s.popup} role="dialog" aria-label={`Camera ${camera.code}`}>
+      <div className={s.popupHead}>
+        <div>
+          <strong>{camera.code}</strong>
+          <small>{camera.name}</small>
+        </div>
+        <Chip tone={healthTone(camera)} pill>{healthLabel(camera)}</Chip>
+        <button className={s.close} aria-label="Close camera details" onClick={onClose}>×</button>
+      </div>
+      <dl className={s.facts}>
+        <dt>Zones</dt><dd>{zones.length ? zones.map((zone) => zone.name).join(', ') : 'Not mapped'}</dd>
+        <dt>Last seen</dt><dd>{formatSeen(camera.lastSeenAt)}</dd>
+      </dl>
+    </div>
+  );
 }
 
 function CameraPopup({ camera, zones, onOpenLive, onClose }: { camera: CameraRecord; zones: ZoneRecord[]; onOpenLive: () => void; onClose: () => void }) {

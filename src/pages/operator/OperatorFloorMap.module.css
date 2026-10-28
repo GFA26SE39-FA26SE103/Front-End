@@ -214,6 +214,57 @@
 .liveCamera small { overflow: hidden; color: var(--color-text-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .liveAction { flex-shrink: 0; color: var(--color-success); font-size: 11px; font-weight: 700; }
 
+.zoneCameraSection,
+.zoneCameraList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.selectedZoneName {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.zoneCameraRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.zoneCameraRow:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-tint);
+}
+
+.zoneCameraRow > span:first-child {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.zoneCameraRow strong,
+.zoneCameraRow small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zoneCameraRow strong { font-size: 12px; }
+.zoneCameraRow small { color: var(--color-text-muted); font-size: 10px; }
+
 .incidents {
   padding: 14px;
   border: 1px dashed var(--color-border);

@@ -80,6 +80,14 @@ const renderAdminPage = () => render(
   </MemoryRouter>,
 );
 
+const renderManagerPage = () => render(
+  <MemoryRouter initialEntries={['/manager/floor-map']}>
+    <Routes>
+      <Route path="/manager/floor-map" element={<OperatorFloorMap workspace="manager" />} />
+    </Routes>
+  </MemoryRouter>,
+);
+
 describe('OperatorFloorMap', () => {
   beforeEach(() => {
     vi.mocked(listSupermarkets).mockResolvedValue([{ supermarketId: 'store-1', code: 'STORE', name: 'Central store', address: null, status: 'ACTIVE' }]);
@@ -141,6 +149,28 @@ describe('OperatorFloorMap', () => {
     expect(screen.getByRole('link', { name: 'Live floor map' })).toHaveAttribute('href', '/admin/live-floor-map');
     await user.click(await screen.findByRole('button', { name: 'Open CAM-01 live' }));
     expect(screen.getByText('Admin live page')).toBeInTheDocument();
+  });
+
+  it('shows Managers which cameras belong to a Zone without exposing snapshots or live streaming', async () => {
+    const user = userEvent.setup();
+    renderManagerPage();
+
+    expect(await screen.findByRole('navigation', { name: 'Manager' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Floor map' })).toHaveAttribute('href', '/manager/floor-map');
+    expect(screen.queryByRole('region', { name: 'Live cameras' })).not.toBeInTheDocument();
+
+    const checkout = await screen.findByRole('button', { name: /Checkout.*Live coverage/ });
+    await user.click(checkout);
+    const cameras = screen.getByRole('region', { name: 'Cameras in selected zone' });
+    expect(within(cameras).getByText('CAM-01')).toBeInTheDocument();
+    expect(within(cameras).queryByText('CAM-02')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Inspect camera CAM-01' }));
+    const popup = screen.getByRole('dialog', { name: 'Camera CAM-01' });
+    expect(within(popup).getByText('Checkout')).toBeInTheDocument();
+    expect(within(popup).queryByRole('button', { name: 'Open live' })).not.toBeInTheDocument();
+    expect(within(popup).queryByText(/Latest snapshot/)).not.toBeInTheDocument();
+    expect(getCameraPreview).not.toHaveBeenCalled();
   });
 
   it('explains when the floor has no uploaded plan', async () => {

@@ -13,7 +13,9 @@ vi.mock('../pages/SetupHealth', () => ({ default: () => <AdminLayout title="Dash
 vi.mock('../pages/UsersRoles', () => ({ default: () => <p>Account admin content</p> }));
 vi.mock('../pages/admin/ResponsePolicies', () => ({ default: () => <h1>Response policies screen</h1> }));
 vi.mock('../pages/operator/OperatorFloorMap', () => ({
-  default: ({ workspace = 'operator' }: { workspace?: string }) => <h1>{workspace === 'admin' ? 'Admin live floor map screen' : 'Floor map screen'}</h1>,
+  default: ({ workspace = 'operator' }: { workspace?: string }) => (
+    <h1>{workspace === 'admin' ? 'Admin live floor map screen' : workspace === 'manager' ? 'Manager floor map screen' : 'Floor map screen'}</h1>
+  ),
 }));
 vi.mock('../pages/operator/OperatorCameraLive', () => ({
   default: ({ workspace = 'operator' }: { workspace?: string }) => <h1>{workspace === 'admin' ? 'Admin live camera screen' : 'Camera live screen'}</h1>,
@@ -87,8 +89,15 @@ describe('role routing and authenticated access', () => {
     await screen.findByRole('heading', { name: heading });
   });
 
+  it('lets MANAGER open the planning floor map', async () => {
+    session(makeUser('MANAGER'));
+    vi.mocked(getCurrentUser).mockResolvedValue(makeUser('MANAGER'));
+    show('/manager/floor-map');
+    await screen.findByRole('heading', { name: 'Manager floor map screen' });
+  });
+
   it.each([
-    ['ADMIN', '/manager/dashboard'], ['MANAGER', '/staff/dashboard'],
+    ['ADMIN', '/manager/dashboard'], ['ADMIN', '/manager/floor-map'], ['MANAGER', '/staff/dashboard'],
     ['ADMIN', '/operator/floor-map'], ['ADMIN', '/operator/cameras/camera-1'],
     ['STAFF', '/operator/dashboard'], ['STAFF', '/operator/floor-map'],
     ['MANAGER', '/operator/floor-map'], ['MANAGER', '/operator/cameras/camera-1'],
