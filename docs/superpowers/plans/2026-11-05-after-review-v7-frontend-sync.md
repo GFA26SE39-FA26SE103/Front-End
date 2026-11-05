@@ -93,4 +93,3 @@
 - [ ] Run focused tests for Tasks 1–3.
 - [ ] Run `npm run build`, `npm run lint`, and the full test suite with worktree-local TEMP.
 - [ ] Record any unrelated baseline failure without changing its feature.
-

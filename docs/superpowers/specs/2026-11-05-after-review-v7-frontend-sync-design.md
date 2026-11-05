@@ -39,4 +39,3 @@ Use a staged contract-first sync. Update only fields and endpoints present in th
 - `Notification.Severity` and OperationalEvent priority remain valid and are not renamed.
 - No commits, pushes, or merges are made before Lộc confirms the checklist and cross-review.
 - Existing unrelated camera-test flakiness is not repaired as part of this sync.
-
