@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiFetch } from './client';
-import { assignTask, getTask, listAssignableStaff, listTasks } from './tasks';
+import { assignTask, getTask, listAssignableStaff, listTaskOffers, listTasks } from './tasks';
 vi.mock('./client', () => ({ apiFetch: vi.fn() }));
 
 describe('Operator task API', () => {
@@ -20,5 +20,10 @@ describe('Operator task API', () => {
     const assignment = { staffUserId: 'staff-1', reason: 'Zone support', expectedUpdatedAt: '2026-10-25T05:00:00Z' };
     await assignTask('task/1', assignment);
     expect(apiFetch).toHaveBeenLastCalledWith('/api/tasks/task%2F1/assign', { method: 'POST', body: JSON.stringify(assignment), signal: undefined });
+  });
+  it('queries the Operator V7 TaskOffer activity contract', async () => {
+    const signal = new AbortController().signal;
+    await listTaskOffers({ status: 'PENDING,DECLINED', taskId: 'task/1' }, signal);
+    expect(apiFetch).toHaveBeenLastCalledWith('/api/operator/task-offers?status=PENDING%2CDECLINED&taskId=task%2F1', { signal });
   });
 });

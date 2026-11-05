@@ -34,7 +34,7 @@ export function CameraMonitoringPanel({ state }: { state: CameraMonitoringState 
         {zone.issueCode && <p>{reasonLabel(zone.issueCode)}</p>}
         <p>People in ROI: {count(zone.peopleCount)} · Queue (≥5s): {count(zone.queueCount)}</p>
         {zone.rules.map(rule => <div key={rule.ruleId} className={s.runtimeRule}>
-          <strong>{rule.incidentName}</strong>
+          <div className={s.zoneRow}><strong>{rule.incidentName}</strong>{rule.operationalEventPriority && <Chip tone={rule.operationalEventPriority === 'CRITICAL' ? 'danger' : 'warning'}>EVENT {rule.operationalEventPriority}</Chip>}</div>
           <p>{rule.mode === 'PEOPLE_COUNT' ? 'People count in ROI (temporary)' : rule.mode === 'QUEUE_LENGTH' ? 'Queue length (5s continuous dwell)' : rule.mode} · Metric: {count(rule.metricValue)} {rule.unit === 'PEOPLE' ? 'people' : rule.unit}</p>
           <p>Warning ≥ {rule.warningThreshold} · Critical ≥ {rule.criticalThreshold}</p>
           <p>Warning sustain: {seconds(rule.warningProgressMs)}/{rule.sustainSec}s · Critical: {seconds(rule.criticalProgressMs)}/{rule.sustainSec}s</p>

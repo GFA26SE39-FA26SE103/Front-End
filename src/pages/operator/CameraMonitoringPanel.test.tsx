@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { CameraMonitoringPanel } from './CameraMonitoringPanel';
 import type { CameraMonitoringState } from './useCameraMonitoring';
-const state: CameraMonitoringState = { loading: false, runtimeError: '', feedError: '', runtime: { cameraId: 'cam', state: 'RUNNING', reason: 'MEASUREMENTS_ACTIVE', errorCode: null, videoSourceType: 'RECORDED', sessionId: 'session', sourceElapsedMs: 6000, observedAt: '2026-10-03T00:00:00Z', isStale: false, annotationContext: 'confidence:0.5', zones: [{ zoneId: 'z', zoneName: 'Frozen', configId: 'c', configVersion: '2026-10-03T00:00:00Z', configurationStatus: 'ACTIVE', confidence: .7, peopleCount: 3, queueCount: 0, issueCode: null, rules: [{ ruleId: 'r', incidentCode: 'LONG_QUEUE', incidentName: 'Long Queue', mode: 'QUEUE_LENGTH', unit: 'PEOPLE', warningThreshold: 1, criticalThreshold: 2, sustainSec: 1, cooldownSec: 300, metricValue: 0, warningProgressMs: 0, criticalProgressMs: 0, cooldownRemainingSec: 0, reason: 'QUEUE_DWELL_PENDING', incidentId: null }] }] }, feed: { items: [], hasMore: false, nextCreatedAt: null, nextIncidentId: null } };
+const state: CameraMonitoringState = { loading: false, runtimeError: '', feedError: '', runtime: { cameraId: 'cam', state: 'RUNNING', reason: 'MEASUREMENTS_ACTIVE', errorCode: null, videoSourceType: 'RECORDED', sessionId: 'session', sourceElapsedMs: 6000, observedAt: '2026-10-03T00:00:00Z', isStale: false, annotationContext: 'confidence:0.5', zones: [{ zoneId: 'z', zoneName: 'Frozen', configId: 'c', configVersion: '2026-10-03T00:00:00Z', configurationStatus: 'ACTIVE', confidence: .7, peopleCount: 3, queueCount: 0, issueCode: null, rules: [{ ruleId: 'r', incidentCode: 'LONG_QUEUE', incidentName: 'Long Queue', mode: 'QUEUE_LENGTH', unit: 'PEOPLE', warningThreshold: 1, criticalThreshold: 2, sustainSec: 1, cooldownSec: 300, metricValue: 0, warningProgressMs: 0, criticalProgressMs: 0, cooldownRemainingSec: 0, reason: 'QUEUE_DWELL_PENDING', incidentId: null, operationalEventPriority: 'WARNING' }] }] }, feed: { items: [], hasMore: false, nextCreatedAt: null, nextIncidentId: null } };
 describe('live monitoring and incidents', () => {
   it('does not imply the source is released while deactivation is pending', () => {
     render(<CameraMonitoringPanel state={{ ...state, runtime: { ...state.runtime!, state: 'STOPPING', reason: 'MONITORING_STOP_PENDING', zones: [] } }} />);
@@ -15,6 +15,7 @@ describe('live monitoring and incidents', () => {
     expect(screen.getByText(/Waiting for 5s continuous dwell/)).toBeInTheDocument();
     expect(screen.getByText(/Warning ≥ 1/)).toHaveTextContent('Critical ≥ 2');
     expect(screen.getByText(/confidence:0.5/)).toBeInTheDocument();
+    expect(screen.getByText('EVENT WARNING')).toBeInTheDocument();
     expect(screen.getByText('No open incidents for this camera or its mapped zones.')).toBeInTheDocument();
   });
   it('shows stale errors instead of an empty or healthy feed', () => {

@@ -10,6 +10,15 @@ export type OperationalTask = {
   assignedAt: string | null; acceptedAt: string | null; plannedStartAt: string | null;
   startedAt: string | null; submittedAt: string | null; eventClearedAt: string | null;
   needsAssignment: boolean; updatedAt: string;
+  slaPolicyId?: string | null; slaPriorityCode?: string | null; slaPolicyVersion?: number | null;
+  responseDeadlineAt?: string | null; resolutionDeadlineAt?: string | null;
+};
+export type TaskOffer = {
+  offerId: string; taskId: string; origin: string; sourceCode: string; eventTypeCode: string | null; title: string; instructions: string | null;
+  priority: string; zoneId: string; zoneName: string; cameraCode: string | null; cameraName: string | null; metricValue: number | null;
+  measurementMode: string | null; measurementUnit: string | null; createdAt: string; recipients: number; attempt: number; maxAttempts: number;
+  nextAlertAt: string | null; status: string; closedReason: string | null; eventClearedAt: string | null; staffUserId: string; staffName: string | null;
+  dispatchCycleId: string; waveNumber: number; dispatchScope: string; expiresAt: string; respondedAt: string | null;
 };
 export type AssignableStaff = {
   userId: string; fullName: string; assignedToZone: boolean; activeTasks: number; shiftEndsAt: string;
@@ -23,6 +32,13 @@ export function listTasks(query: { status?: string; needsAssignment?: boolean } 
   return apiFetch<OperationalTask[]>(`/api/tasks${params.size ? `?${params}` : ''}`, { signal });
 }
 export const getTask = (id: string, signal?: AbortSignal) => apiFetch<OperationalTask>(taskPath(id), { signal });
+export function listTaskOffers(query: { status?: string; taskId?: string } = {}, signal?: AbortSignal) {
+  const params = new URLSearchParams();
+  if (query.status) params.set('status', query.status);
+  if (query.taskId) params.set('taskId', query.taskId);
+  return apiFetch<TaskOffer[]>(`/api/operator/task-offers${params.size ? `?${params}` : ''}`, { signal });
+}
+export const getTaskOffer = (id: string, signal?: AbortSignal) => apiFetch<TaskOffer>(`/api/operator/task-offers/${encodeURIComponent(id)}`, { signal });
 export const listAssignableStaff = (id: string, signal?: AbortSignal) => apiFetch<AssignableStaff[]>(`${taskPath(id)}/assignable-staff`, { signal });
 export const assignTask = (id: string, assignment: TaskAssignment, signal?: AbortSignal) => apiFetch<OperationalTask>(`${taskPath(id)}/assign`, {
   method: 'POST', body: JSON.stringify(assignment), signal,

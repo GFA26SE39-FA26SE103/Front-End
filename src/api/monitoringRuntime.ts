@@ -4,7 +4,7 @@ export type MonitoringRuleRuntime = {
   ruleId: string; incidentCode: string; incidentName: string; mode: string; unit: string;
   warningThreshold: number; criticalThreshold: number; sustainSec: number; cooldownSec: number;
   metricValue: number | null; warningProgressMs: number; criticalProgressMs: number;
-  cooldownRemainingSec: number; reason: string; incidentId: string | null;
+  cooldownRemainingSec: number; reason: string; incidentId: string | null; operationalEventPriority?: string | null;
 };
 export type MonitoringZoneRuntime = {
   zoneId: string; zoneName: string; configId: string | null; configVersion: string | null;
