@@ -5,6 +5,9 @@ export type AuthUser = {
   roleId: string;
   role: string;
   status: string;
+  specialtyId?: string | null;
+  specialtyCode?: string | null;
+  specialtyName?: string | null;
 };
 
 export type AuthSession = {

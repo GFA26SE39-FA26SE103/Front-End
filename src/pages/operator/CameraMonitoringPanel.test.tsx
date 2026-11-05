@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { CameraMonitoringPanel } from './CameraMonitoringPanel';
 import type { CameraMonitoringState } from './useCameraMonitoring';
-const state: CameraMonitoringState = { loading: false, runtimeError: '', feedError: '', runtime: { cameraId: 'cam', state: 'RUNNING', reason: 'MEASUREMENTS_ACTIVE', errorCode: null, videoSourceType: 'RECORDED', sessionId: 'session', sourceElapsedMs: 6000, observedAt: '2026-10-03T00:00:00Z', isStale: false, annotationContext: 'confidence:0.5', zones: [{ zoneId: 'z', zoneName: 'Frozen', configId: 'c', configVersion: '2026-10-03T00:00:00Z', configurationStatus: 'ACTIVE', confidence: .7, peopleCount: 3, queueCount: 0, issueCode: null, rules: [{ ruleId: 'r', incidentCode: 'LONG_QUEUE', incidentName: 'Long Queue', mode: 'QUEUE_LENGTH', unit: 'PEOPLE', warningThreshold: 1, criticalThreshold: 2, sustainSec: 1, cooldownSec: 300, metricValue: 0, warningProgressMs: 0, criticalProgressMs: 0, cooldownRemainingSec: 0, reason: 'QUEUE_DWELL_PENDING', incidentId: null, incidentSeverity: null }] }] }, feed: { items: [], hasMore: false, nextCreatedAt: null, nextIncidentId: null } };
+const state: CameraMonitoringState = { loading: false, runtimeError: '', feedError: '', runtime: { cameraId: 'cam', state: 'RUNNING', reason: 'MEASUREMENTS_ACTIVE', errorCode: null, videoSourceType: 'RECORDED', sessionId: 'session', sourceElapsedMs: 6000, observedAt: '2026-10-03T00:00:00Z', isStale: false, annotationContext: 'confidence:0.5', zones: [{ zoneId: 'z', zoneName: 'Frozen', configId: 'c', configVersion: '2026-10-03T00:00:00Z', configurationStatus: 'ACTIVE', confidence: .7, peopleCount: 3, queueCount: 0, issueCode: null, rules: [{ ruleId: 'r', incidentCode: 'LONG_QUEUE', incidentName: 'Long Queue', mode: 'QUEUE_LENGTH', unit: 'PEOPLE', warningThreshold: 1, criticalThreshold: 2, sustainSec: 1, cooldownSec: 300, metricValue: 0, warningProgressMs: 0, criticalProgressMs: 0, cooldownRemainingSec: 0, reason: 'QUEUE_DWELL_PENDING', incidentId: null }] }] }, feed: { items: [], hasMore: false, nextCreatedAt: null, nextIncidentId: null } };
 describe('live monitoring and incidents', () => {
   it('does not imply the source is released while deactivation is pending', () => {
     render(<CameraMonitoringPanel state={{ ...state, runtime: { ...state.runtime!, state: 'STOPPING', reason: 'MONITORING_STOP_PENDING', zones: [] } }} />);
@@ -24,10 +24,27 @@ describe('live monitoring and incidents', () => {
     expect(screen.queryByText('No open incidents for this camera or its mapped zones.')).not.toBeInTheDocument();
   });
   it('labels DETECTED demo incidents as not dispatched and retains the trigger-camera label', () => {
-    render(<CameraMonitoringPanel state={{ ...state, feed: { ...state.feed!, items: [{ incidentId: 'i', zoneId: 'z', zoneName: 'Frozen', incidentCode: 'OVERCROWDING_CONGESTION', incidentName: 'Overcrowding', triggerCameraId: 'old', triggerCameraName: 'Previous camera', severity: 'CRITICAL', status: 'DETECTED', title: 'Crowd incident', createdAt: '2026-10-03T00:00:00Z', updatedAt: '2026-10-03T00:00:01Z', closedAt: null, metricValue: 3, measurementMode: 'PEOPLE_COUNT', thresholdUnit: 'PEOPLE', videoSourceType: 'RECORDED', isDemo: true }] } }} />);
+    render(<CameraMonitoringPanel state={{ ...state, feed: { ...state.feed!, items: [{ incidentId: 'i', zoneId: 'z', zoneName: 'Frozen', incidentCode: 'OVERCROWDING_CONGESTION', incidentName: 'Overcrowding', triggerCameraId: 'old', triggerCameraName: 'Previous camera', status: 'DETECTED', title: 'Crowd incident', createdAt: '2026-10-03T00:00:00Z', updatedAt: '2026-10-03T00:00:01Z', closedAt: null, slaPolicyId: 'policy-1', slaPriorityCode: 'HIGH', slaPolicyVersion: 3, responseDeadlineAt: '2026-11-05T10:30:00Z', resolutionDeadlineAt: '2026-11-05T11:00:00Z', mitigatedAt: null, metricValue: 3, measurementMode: 'PEOPLE_COUNT', thresholdUnit: 'PEOPLE', videoSourceType: 'RECORDED', isDemo: true }] } }} />);
     expect(screen.getByText(/AI created · not dispatched/)).toBeInTheDocument();
     expect(screen.getAllByText(/DEMO/).length).toBeGreaterThan(0);
     expect(screen.getByText(/Previous camera/)).toBeInTheDocument();
+    expect(screen.getByText('SLA HIGH')).toBeInTheDocument();
+    expect(screen.getByText('Policy snapshot v3')).toBeInTheDocument();
+    expect(screen.getByText((_, element) => element?.tagName === 'P' && element.textContent === 'Respond by 5 Nov 2026, 17:30 · Resolve by 5 Nov 2026, 18:00')).toBeInTheDocument();
+    expect(screen.queryByText('CRITICAL')).not.toBeInTheDocument();
+  });
+  it('shows an explicit unavailable state instead of inventing SLA data', () => {
+    render(<CameraMonitoringPanel state={{ ...state, feed: { ...state.feed!, items: [{ incidentId: 'i', zoneId: 'z', zoneName: 'Frozen', incidentCode: 'LONG_QUEUE', incidentName: 'Long queue', triggerCameraId: null, triggerCameraName: null, status: 'OPEN', title: 'Queue incident', createdAt: '2026-11-05T10:00:00Z', updatedAt: '2026-11-05T10:01:00Z', closedAt: null, slaPolicyId: null, slaPriorityCode: null, slaPolicyVersion: null, responseDeadlineAt: null, resolutionDeadlineAt: null, mitigatedAt: null, metricValue: 4, measurementMode: 'QUEUE_LENGTH', thresholdUnit: 'PEOPLE', videoSourceType: 'LIVE', isDemo: false }] } }} />);
+    expect(screen.getByText('SLA unavailable')).toBeInTheDocument();
+    expect(screen.getByText('No SLA deadline snapshot is available for this incident.')).toBeInTheDocument();
+    expect(screen.queryByText(/Respond by/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Resolve by/)).not.toBeInTheDocument();
+  });
+  it('ignores a legacy incident severity field on an open runtime incident', () => {
+    const legacy = { ...state, runtime: { ...state.runtime!, zones: [{ ...state.runtime!.zones[0], rules: [{ ...state.runtime!.zones[0].rules[0], incidentId: 'incident-1', incidentSeverity: 'CRITICAL' }] }] } } as unknown as CameraMonitoringState;
+    render(<CameraMonitoringPanel state={legacy} />);
+    expect(screen.getByText('Open incident')).toBeInTheDocument();
+    expect(screen.queryByText('CRITICAL')).not.toBeInTheDocument();
   });
   it('distinguishes Draft and completed, cooldown and sustain pending', () => {
     render(<CameraMonitoringPanel state={{ ...state, runtime: { ...state.runtime!, state: 'COMPLETED', zones: [{ ...state.runtime!.zones[0], configurationStatus: 'DRAFT', peopleCount: null, queueCount: null, rules: [{ ...state.runtime!.zones[0].rules[0], reason: 'SUSTAIN_PENDING', metricValue: null, cooldownRemainingSec: 20, warningProgressMs: 500 }] }] } }} />);

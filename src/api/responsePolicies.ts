@@ -6,6 +6,7 @@ export type AutomaticTaskPolicy = {
   isEnabled: boolean;
   actionType: 'CREATE_OPERATIONAL_TASK' | string;
   executionMode: 'AUTOMATIC' | string;
+  taskTypeCode: string | null;
   title: string | null;
   instructions: string | null;
 };
@@ -23,7 +24,7 @@ export type ResponsePolicy = {
 export type ResponsePolicySaveRequest = {
   isEnabled: boolean;
   expectedVersion: number | null;
-  action: { isEnabled: boolean; title: string | null; instructions: string | null };
+  action: { isEnabled: boolean; taskTypeCode: string | null; title: string | null; instructions: string | null };
 };
 
 const id = encodeURIComponent;

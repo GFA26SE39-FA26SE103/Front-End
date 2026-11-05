@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createAccount, listAccounts, listRoles, setAccountEnabled, updateAccount, type AccountRecord, type RoleRecord } from '../api/accounts';
+import { createAccount, listAccounts, listRoles, listStaffSpecialties, setAccountEnabled, updateAccount, type AccountRecord, type RoleRecord, type StaffSpecialtyRecord } from '../api/accounts';
 import { ApiError } from '../api/client';
 import { roleLabel } from '../auth/roles';
 import { clearSession, loadSession, updateSessionUser } from '../auth/session';
@@ -8,7 +8,7 @@ import { AdminLayout } from '../components/AdminLayout';
 import { Button, Card, CardHeader, Chip, type Tone } from '../components/ui';
 import s from './UsersRoles.module.css';
 
-type Editor = { userId: string | null; fullName: string; email: string; password: string; roleId: string };
+type Editor = { userId: string | null; fullName: string; email: string; password: string; roleId: string; specialtyId: string };
 const roleTone: Record<string, Tone> = { ADMIN: 'primary', OPERATOR: 'primary', MANAGER: 'purple', STAFF: 'warning' };
 const scopes: Record<string, string> = {
   ADMIN: 'Account administration and store, floor, zone and camera configuration.',
@@ -18,10 +18,10 @@ const scopes: Record<string, string> = {
 };
 
 function editUser(user: AccountRecord): Editor {
-  return { userId: user.userId, fullName: user.fullName, email: user.email, password: '', roleId: user.roleId };
+  return { userId: user.userId, fullName: user.fullName, email: user.email, password: '', roleId: user.roleId, specialtyId: user.specialtyId ?? '' };
 }
 function newUser(roles: RoleRecord[]): Editor {
-  return { userId: null, fullName: '', email: '', password: '', roleId: roles.find((role) => role.name === 'STAFF')?.roleId ?? roles[0]?.roleId ?? '' };
+  return { userId: null, fullName: '', email: '', password: '', roleId: roles.find((role) => role.name === 'STAFF')?.roleId ?? roles[0]?.roleId ?? '', specialtyId: '' };
 }
 function errorMessage(reason: unknown): string {
   if (reason instanceof ApiError) {
@@ -62,6 +62,7 @@ export default function UsersRoles() {
   const navigate = useNavigate();
   const [accounts, setAccounts] = useState<AccountRecord[]>([]);
   const [roles, setRoles] = useState<RoleRecord[]>([]);
+  const [specialties, setSpecialties] = useState<StaffSpecialtyRecord[]>([]);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [query, setQuery] = useState('');
   const [reload, setReload] = useState(0);
@@ -73,10 +74,11 @@ export default function UsersRoles() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void Promise.all([listAccounts(controller.signal), listRoles(controller.signal)]).then(([users, availableRoles]) => {
+    void Promise.all([listAccounts(controller.signal), listRoles(controller.signal), listStaffSpecialties(controller.signal)]).then(([users, availableRoles, availableSpecialties]) => {
       if (controller.signal.aborted) return;
       setAccounts(users);
       setRoles(availableRoles);
+      setSpecialties(availableSpecialties);
       setReady(true);
       setLoadError('');
     }).catch((reason: unknown) => {
@@ -86,10 +88,11 @@ export default function UsersRoles() {
   }, [reload]);
 
   const selected = accounts.find((user) => user.userId === editor?.userId);
+  const selectedRole = roles.find((role) => role.roleId === editor?.roleId);
   const activeAdmins = accounts.filter((user) => user.role === 'ADMIN' && user.status === 'ACTIVE').length;
   const lastAdmin = selected?.role === 'ADMIN' && selected.status === 'ACTIVE' && activeAdmins <= 1;
   const self = selected?.userId === loadSession()?.user.userId;
-  const visible = accounts.filter((user) => `${user.fullName} ${user.email} ${user.role}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const visible = accounts.filter((user) => `${user.fullName} ${user.email} ${user.role} ${user.specialtyName ?? ''}`.toLowerCase().includes(query.trim().toLowerCase()));
 
   function choose(next: Editor) {
     setEditor(next);
@@ -126,7 +129,11 @@ export default function UsersRoles() {
     setError('');
     setNotice('');
     try {
-      const request = { fullName: editor.fullName.trim(), roleId: editor.roleId };
+      const request = {
+        fullName: editor.fullName.trim(),
+        roleId: editor.roleId,
+        specialtyId: selectedRole?.name === 'STAFF' ? editor.specialtyId || null : null,
+      };
       const updated = editor.userId
         ? await updateAccount(editor.userId, request)
         : await createAccount({ ...request, email: editor.email.trim(), password: editor.password });
@@ -164,16 +171,17 @@ export default function UsersRoles() {
           </CardHeader>
           {notice && <p className={s.success} role="status">{notice}</p>}
           {loadError ? <div className={s.feedback} role="alert"><p>{loadError}</p><Button variant="secondary" onClick={refresh}>Retry loading accounts</Button></div>
-            : !ready ? <p role="status" className={s.note}>Loading accounts and roles…</p>
+            : !ready ? <p role="status" className={s.note}>Loading accounts, roles and Staff specialties…</p>
             : <>
               <label className={s.search}>Search accounts<input type="search" placeholder="Name, email or role" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
               <div className={s.tableWrap}>
                 <table className={s.table}>
-                  <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th><span className={s.srOnly}>Actions</span></th></tr></thead>
+                  <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Specialty</th><th>Status</th><th><span className={s.srOnly}>Actions</span></th></tr></thead>
                   <tbody>{visible.map((user) => <tr key={user.userId} className={selected?.userId === user.userId ? s.rowSelected : ''}>
                     <td className={s.person}>{user.fullName}{user.userId === loadSession()?.user.userId && <span className={s.you}>You</span>}</td>
                     <td className={s.email}>{user.email}</td>
                     <td><Chip tone={roleTone[user.role] ?? 'neutral'} pill>{roleLabel(user.role)}</Chip></td>
+                    <td className={s.specialty}>{user.role === 'STAFF' ? user.specialtyName || 'Not assigned' : '—'}</td>
                     <td><Chip tone={user.status === 'ACTIVE' ? 'success' : 'neutral'}>{user.status === 'ACTIVE' ? 'Active' : 'Disabled'}</Chip></td>
                     <td><Button variant="secondary" disabled={busy} aria-label={`Edit ${user.email}`} onClick={() => choose(editUser(user))}>Edit</Button></td>
                   </tr>)}</tbody>
@@ -201,9 +209,17 @@ export default function UsersRoles() {
                 <label>Full name<input autoComplete="name" required maxLength={150} value={editor.fullName} onChange={(event) => setEditor({ ...editor, fullName: event.target.value })} /></label>
                 <label>Email<input type="email" autoComplete="off" required maxLength={255} readOnly={Boolean(editor.userId)} value={editor.email} onChange={(event) => setEditor({ ...editor, email: event.target.value })} /></label>
                 {!editor.userId && <label>Password<input type="password" autoComplete="new-password" required minLength={12} maxLength={128} value={editor.password} onChange={(event) => setEditor({ ...editor, password: event.target.value })} /><span className={s.note}>12–128 characters. Share the initial password with the account owner privately.</span></label>}
-                <label>Role<select required value={editor.roleId} onChange={(event) => setEditor({ ...editor, roleId: event.target.value })}>
+                <label>Role<select required value={editor.roleId} onChange={(event) => {
+                  const roleId = event.target.value;
+                  const nextRole = roles.find((role) => role.roleId === roleId);
+                  setEditor({ ...editor, roleId, specialtyId: nextRole?.name === 'STAFF' ? editor.specialtyId : '' });
+                }}>
                   {roles.map((role) => <option key={role.roleId} value={role.roleId} disabled={lastAdmin && role.name !== 'ADMIN'}>{roleLabel(role.name)}</option>)}
                 </select></label>
+                {selectedRole?.name === 'STAFF' && <label>Staff specialty<select aria-label="Staff specialty" value={editor.specialtyId} onChange={(event) => setEditor({ ...editor, specialtyId: event.target.value })}>
+                  <option value="">No specialty assigned</option>
+                  {specialties.map((specialty) => <option key={specialty.specialtyId} value={specialty.specialtyId}>{specialty.name} ({specialty.code})</option>)}
+                </select><span className={s.specialtyHint}>Without a specialty, this Staff account will not receive task offers that require a matching specialty.</span></label>}
                 {lastAdmin && <p className={s.note}>This is the last active Administrator. Its role and active status must be preserved.</p>}
                 {self && !lastAdmin && <p className={s.note}>Changing your own role or disabling your account signs you out immediately.</p>}
                 <div className={s.formActions}>

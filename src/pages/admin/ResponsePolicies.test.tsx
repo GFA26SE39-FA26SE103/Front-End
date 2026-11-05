@@ -11,7 +11,7 @@ const policyId = '22222222-2222-2222-2222-222222222222';
 const warning: ResponsePolicy = {
   policyId, ruleId, eventPriority: 'WARNING', isEnabled: true, version: 1,
   updatedAt: '2026-10-25T05:00:00Z', readyForAutomaticTask: true, issues: [],
-  action: { actionId, isEnabled: true, actionType: 'CREATE_OPERATIONAL_TASK', executionMode: 'AUTOMATIC', title: 'Check congestion', instructions: 'Help customers move safely.' },
+  action: { actionId, isEnabled: true, actionType: 'CREATE_OPERATIONAL_TASK', executionMode: 'AUTOMATIC', taskTypeCode: 'TT-03', title: 'Check congestion', instructions: 'Help customers move safely.' },
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
@@ -41,7 +41,7 @@ describe('Response policy administration', () => {
       }
       if (method === 'PUT' && path.endsWith('/CRITICAL')) {
         if (failSave) return json({ code: 'POLICY_SAVE_FAILED', detail: 'Response policy could not be saved.' }, 503);
-        const request = body as { isEnabled: boolean; action: { isEnabled: boolean; title: string; instructions: string } };
+        const request = body as { isEnabled: boolean; action: { isEnabled: boolean; taskTypeCode: string | null; title: string; instructions: string } };
         return json({ ...warning, policyId: 'critical-policy', eventPriority: 'CRITICAL', version: 1,
           isEnabled: request.isEnabled, action: { ...warning.action, actionId: 'critical-action', ...request.action } });
       }
@@ -61,9 +61,11 @@ describe('Response policy administration', () => {
     expect(screen.getByRole('link', { name: /Back to AI configuration/ })).toHaveAttribute('href', '/admin/ai-config');
     expect(within(warningGroup).getByText('Automatic offer ready')).toBeInTheDocument();
     expect(within(warningGroup).getByLabelText('Task title (optional)')).toHaveValue('Check congestion');
+    expect(within(warningGroup).getByLabelText('Task type code (optional)')).toHaveValue('TT-03');
 
     const critical = screen.getByRole('group', { name: 'CRITICAL policy' });
     expect(within(critical).getByText('Not configured')).toBeInTheDocument();
+    fireEvent.change(within(critical).getByLabelText('Task type code (optional)'), { target: { value: 'TT-04' } });
     fireEvent.change(within(critical).getByLabelText('Task title (optional)'), { target: { value: 'Urgent congestion response' } });
     fireEvent.change(within(critical).getByLabelText('Staff instructions (optional)'), { target: { value: 'Open a safe route and assist customers.' } });
     fireEvent.click(within(critical).getByRole('button', { name: 'Save CRITICAL policy' }));
@@ -71,7 +73,7 @@ describe('Response policy administration', () => {
     expect(await screen.findByText('CRITICAL policy saved.')).toBeInTheDocument();
     await waitFor(() => expect(requests.find((request) => request.method === 'PUT')).toEqual({
       path: `/api/monitoring-rules/${ruleId}/response-policies/CRITICAL`, method: 'PUT',
-      body: { isEnabled: true, expectedVersion: null, action: { isEnabled: true, title: 'Urgent congestion response', instructions: 'Open a safe route and assist customers.' } },
+      body: { isEnabled: true, expectedVersion: null, action: { isEnabled: true, taskTypeCode: 'TT-04', title: 'Urgent congestion response', instructions: 'Open a safe route and assist customers.' } },
     }));
   });
 

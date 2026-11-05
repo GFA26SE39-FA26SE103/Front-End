@@ -22,6 +22,8 @@
 .rowSelected { background: var(--color-primary-tint); }
 .person { font-weight: 600; }
 .email { color: var(--color-text-muted); overflow-wrap: anywhere; }
+.specialty { color: var(--color-text-muted); }
+.specialtyHint { color: var(--color-warning); font-size: 11px; line-height: 1.5; font-weight: 400; }
 .you { display: inline-block; font-size: 9px; color: var(--color-primary); margin-left: 6px; }
 .note { color: var(--color-text-muted); font-size: 11px; line-height: 1.6; font-weight: 400; }
 .feedback { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; color: var(--color-danger); }

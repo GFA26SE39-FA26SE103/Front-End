@@ -7,15 +7,21 @@ import type { AccountRecord } from '../api/accounts';
 import UsersRoles from './UsersRoles';
 
 const roles = ['ADMIN', 'OPERATOR', 'MANAGER', 'STAFF'].map((name) => ({ roleId: `role-${name}`, name }));
+const specialties = [
+  { specialtyId: 'specialty-queue', code: 'QUEUE', name: 'Queue Operations', description: 'Responds to queue incidents.' },
+  { specialtyId: 'specialty-cleaning', code: 'CLEANING', name: 'Cleaning', description: null },
+];
 const account = (userId: string, role: string, status = 'ACTIVE'): AccountRecord => ({
   userId, email: `${userId}@example.test`, fullName: userId, roleId: `role-${role}`, role, status,
+  specialtyId: null, specialtyCode: null, specialtyName: null,
 });
 const admin = account('admin', 'ADMIN');
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 let users: AccountRecord[];
 let writeError: { code: string; detail: string } | null;
-let requests: { path: string; method: string; body: Record<string, string> | null; bearer: string | null }[];
+let requests: { path: string; method: string; body: Record<string, unknown> | null; bearer: string | null }[];
+let specialtyLoadFails: boolean;
 
 function show() {
   render(<MemoryRouter initialEntries={['/admin/users']}><Routes>
@@ -41,25 +47,36 @@ describe('Users & Roles account integration', () => {
   beforeEach(() => {
     users = [admin, account('second-admin', 'ADMIN'), account('operator', 'OPERATOR')];
     writeError = null;
+    specialtyLoadFails = false;
     requests = [];
     saveSession({ accessToken: 'admin-token', expiresAt: '2099-01-01T00:00:00Z', user: admin }, true);
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const path = new URL(String(input)).pathname;
       const method = init?.method ?? 'GET';
-      const body = init?.body ? JSON.parse(String(init.body)) as Record<string, string> : null;
+      const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
       requests.push({ path, method, body, bearer: new Headers(init?.headers).get('Authorization') });
       if (method === 'GET' && path === '/api/users') return json(users);
       if (method === 'GET' && path === '/api/roles') return json(roles);
+      if (method === 'GET' && path === '/api/staff-specialties') return specialtyLoadFails ? json({ detail: 'Unavailable' }, 503) : json(specialties);
       if (writeError) return json(writeError, 409);
       if (method === 'POST' && path === '/api/users' && body) {
-        const created = { ...account('created', roles.find((role) => role.roleId === body.roleId)!.name), email: body.email, fullName: body.fullName };
+        const specialty = specialties.find((item) => item.specialtyId === body.specialtyId);
+        const created = {
+          ...account('created', roles.find((role) => role.roleId === body.roleId)!.name),
+          email: String(body.email), fullName: String(body.fullName),
+          specialtyId: specialty?.specialtyId ?? null, specialtyCode: specialty?.code ?? null, specialtyName: specialty?.name ?? null,
+        };
         users = [...users, created];
         return json(created, 201);
       }
       const id = path.split('/')[3];
       const current = users.find((user) => user.userId === id);
       if (current && method === 'PATCH' && body) {
-        const updated = { ...current, fullName: body.fullName, roleId: body.roleId, role: roles.find((role) => role.roleId === body.roleId)!.name };
+        const specialty = specialties.find((item) => item.specialtyId === body.specialtyId);
+        const updated = {
+          ...current, fullName: String(body.fullName), roleId: String(body.roleId), role: roles.find((role) => role.roleId === body.roleId)!.name,
+          specialtyId: specialty?.specialtyId ?? null, specialtyCode: specialty?.code ?? null, specialtyName: specialty?.name ?? null,
+        };
         users = users.map((user) => user.userId === id ? updated : user);
         return json(updated);
       }
@@ -87,7 +104,7 @@ describe('Users & Roles account integration', () => {
     await screen.findByText('Account created. The user can now sign in.');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(requests.find((request) => request.method === 'POST' && request.path === '/api/users')).toMatchObject({
-      bearer: 'Bearer admin-token', body: { email: 'new@example.test', fullName: 'New Operator', password: 'TestPassword123!', roleId: 'role-OPERATOR' },
+      bearer: 'Bearer admin-token', body: { email: 'new@example.test', fullName: 'New Operator', password: 'TestPassword123!', roleId: 'role-OPERATOR', specialtyId: null },
     });
     expect(screen.queryByLabelText(/Password/)).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Edit new@example.test' }));
@@ -97,7 +114,52 @@ describe('Users & Roles account integration', () => {
     await user.selectOptions(screen.getByLabelText('Role'), 'role-MANAGER');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
     await screen.findByText('Account changes saved.');
-    expect(requests.find((request) => request.method === 'PATCH')).toMatchObject({ path: '/api/users/created', body: { fullName: 'New Manager', roleId: 'role-MANAGER' } });
+    expect(requests.find((request) => request.method === 'PATCH')).toMatchObject({ path: '/api/users/created', body: { fullName: 'New Manager', roleId: 'role-MANAGER', specialtyId: null } });
+  });
+
+  it('loads Staff specialties and sends the selected specialty when creating a Staff account', async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByRole('button', { name: 'Create account' });
+    expect(requests.some((request) => request.path === '/api/staff-specialties' && request.method === 'GET')).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'Create account' }));
+    expect(screen.getByLabelText('Staff specialty')).toBeVisible();
+    await user.type(screen.getByLabelText('Full name'), 'Queue Staff');
+    await user.type(screen.getByLabelText('Email'), 'queue.staff@example.test');
+    await user.type(screen.getByLabelText(/Password/), 'TestPassword123!');
+    await user.selectOptions(screen.getByLabelText('Staff specialty'), 'specialty-queue');
+    await user.click(screen.getAllByRole('button', { name: 'Create account' })[1]);
+    await screen.findByText('Account created. The user can now sign in.');
+    expect(requests.find((request) => request.method === 'POST' && request.path === '/api/users')).toMatchObject({
+      body: { roleId: 'role-STAFF', specialtyId: 'specialty-queue' },
+    });
+    expect(screen.getByRole('cell', { name: 'Queue Operations' })).toBeVisible();
+  });
+
+  it('clears a Staff specialty when changing the account to a non-Staff role', async () => {
+    const user = userEvent.setup();
+    users = [...users, {
+      ...account('queue-staff', 'STAFF'),
+      specialtyId: 'specialty-queue', specialtyCode: 'QUEUE', specialtyName: 'Queue Operations',
+    }];
+    show();
+    await screen.findByRole('button', { name: 'Edit queue-staff@example.test' });
+    await user.click(screen.getByRole('button', { name: 'Edit queue-staff@example.test' }));
+    expect(screen.getByLabelText('Staff specialty')).toHaveValue('specialty-queue');
+    await user.selectOptions(screen.getByLabelText('Role'), 'role-MANAGER');
+    expect(screen.queryByLabelText('Staff specialty')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await screen.findByText('Account changes saved.');
+    expect(requests.find((request) => request.method === 'PATCH' && request.path === '/api/users/queue-staff')).toMatchObject({
+      body: { roleId: 'role-MANAGER', specialtyId: null },
+    });
+  });
+
+  it('blocks account editing when the specialty catalog cannot be loaded', async () => {
+    specialtyLoadFails = true;
+    show();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unavailable');
+    expect(screen.getByRole('button', { name: 'Create account' })).toBeDisabled();
   });
 
   it('disables and re-enables an account', async () => {

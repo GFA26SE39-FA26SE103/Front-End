@@ -18,17 +18,19 @@ type Draft = {
   version: number | null;
   policyEnabled: boolean;
   actionEnabled: boolean;
+  taskTypeCode: string;
   title: string;
   instructions: string;
   ready: boolean;
   issues: string[];
 };
-const emptyDraft = (): Draft => ({ policyId: null, version: null, policyEnabled: true, actionEnabled: true, title: '', instructions: '', ready: false, issues: [] });
+const emptyDraft = (): Draft => ({ policyId: null, version: null, policyEnabled: true, actionEnabled: true, taskTypeCode: '', title: '', instructions: '', ready: false, issues: [] });
 const fromPolicy = (policy: ResponsePolicy): Draft => ({
   policyId: policy.policyId,
   version: policy.version,
   policyEnabled: policy.isEnabled,
   actionEnabled: policy.action?.isEnabled ?? true,
+  taskTypeCode: policy.action?.taskTypeCode ?? '',
   title: policy.action?.title ?? '',
   instructions: policy.action?.instructions ?? '',
   ready: policy.readyForAutomaticTask,
@@ -114,6 +116,7 @@ export default function ResponsePolicies() {
         expectedVersion: draft.version,
         action: {
           isEnabled: draft.actionEnabled,
+          taskTypeCode: draft.taskTypeCode.trim() || null,
           title: draft.title.trim() || null,
           instructions: draft.instructions.trim() || null,
         },
@@ -165,6 +168,7 @@ export default function ResponsePolicies() {
 
               <label className={s.toggle}><input type="checkbox" checked={draft.policyEnabled} onChange={(event) => update(priority, { policyEnabled: event.target.checked })} />Enable response policy</label>
               <label className={s.toggle}><input type="checkbox" checked={draft.actionEnabled} onChange={(event) => update(priority, { actionEnabled: event.target.checked })} />Automatically offer task to eligible Staff</label>
+              <label>Task type code (optional)<input aria-label="Task type code (optional)" maxLength={50} value={draft.taskTypeCode} placeholder="Example: TT-03" onChange={(event) => update(priority, { taskTypeCode: event.target.value })} /><span className={s.help}>Use a seeded backend task-type code. Leave blank only when this event category already maps to exactly one task type.</span></label>
               <label>Task title (optional)<input aria-label="Task title (optional)" maxLength={200} value={draft.title} placeholder="Default: Event type — Zone" onChange={(event) => update(priority, { title: event.target.value })} /></label>
               <label>Staff instructions (optional)<textarea aria-label="Staff instructions (optional)" maxLength={4000} rows={5} value={draft.instructions} placeholder="No instructions if left blank." onChange={(event) => update(priority, { instructions: event.target.value })} /></label>
 

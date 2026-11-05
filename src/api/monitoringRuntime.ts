@@ -4,7 +4,7 @@ export type MonitoringRuleRuntime = {
   ruleId: string; incidentCode: string; incidentName: string; mode: string; unit: string;
   warningThreshold: number; criticalThreshold: number; sustainSec: number; cooldownSec: number;
   metricValue: number | null; warningProgressMs: number; criticalProgressMs: number;
-  cooldownRemainingSec: number; reason: string; incidentId: string | null; incidentSeverity: string | null;
+  cooldownRemainingSec: number; reason: string; incidentId: string | null;
 };
 export type MonitoringZoneRuntime = {
   zoneId: string; zoneName: string; configId: string | null; configVersion: string | null;
@@ -18,8 +18,10 @@ export type CameraMonitoringRuntime = {
 };
 export type IncidentFeedItem = {
   incidentId: string; zoneId: string; zoneName: string; incidentCode: string; incidentName: string;
-  triggerCameraId: string | null; triggerCameraName: string | null; severity: string; status: string;
+  triggerCameraId: string | null; triggerCameraName: string | null; status: string;
   title: string; createdAt: string; updatedAt: string; closedAt: string | null;
+  slaPolicyId: string | null; slaPriorityCode: string | null; slaPolicyVersion: number | null;
+  responseDeadlineAt: string | null; resolutionDeadlineAt: string | null; mitigatedAt: string | null;
   metricValue: number | null; measurementMode: string | null; thresholdUnit: string | null;
   videoSourceType: string; isDemo: boolean;
 };

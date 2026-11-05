@@ -1,4 +1,4 @@
-import { Chip, Overline } from '../../components/ui';
+import { Chip, Overline, type Tone } from '../../components/ui';
 import type { CameraMonitoringState } from './useCameraMonitoring';
 import s from './OperatorCameraLive.module.css';
 
@@ -13,6 +13,8 @@ const reasons: Record<string, string> = {
 const reasonLabel = (code: string) => reasons[code] ?? code.replaceAll('_', ' ');
 const count = (value: number | null) => value === null ? '—' : value;
 const seconds = (value: number) => (value / 1000).toFixed(1).replace(/\.0$/, '');
+const date = (value: string) => new Date(value).toLocaleString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'medium', timeStyle: 'short' });
+const slaTone = (priority: string | null): Tone => priority === 'CRITICAL' ? 'danger' : priority === 'HIGH' ? 'warning' : priority === 'MEDIUM' ? 'primary' : 'neutral';
 export function CameraMonitoringPanel({ state }: { state: CameraMonitoringState }) {
   const { runtime, feed, runtimeError, feedError, loading } = state;
   return <section className={s.monitoring} aria-label="Monitoring and incidents">
@@ -37,7 +39,7 @@ export function CameraMonitoringPanel({ state }: { state: CameraMonitoringState 
           <p>Warning ≥ {rule.warningThreshold} · Critical ≥ {rule.criticalThreshold}</p>
           <p>Warning sustain: {seconds(rule.warningProgressMs)}/{rule.sustainSec}s · Critical: {seconds(rule.criticalProgressMs)}/{rule.sustainSec}s</p>
           <p>{reasonLabel(rule.reason)}{rule.cooldownRemainingSec > 0 ? ` · ${Math.ceil(rule.cooldownRemainingSec)}s cooldown remaining` : ''}</p>
-          {rule.incidentSeverity && <p>Open incident: {rule.incidentSeverity}</p>}
+          {rule.incidentId && <p>Open incident</p>}
         </div>)}
       </article>)}
     </>}
@@ -46,10 +48,17 @@ export function CameraMonitoringPanel({ state }: { state: CameraMonitoringState 
     {feedError && feed && <p>Last incident feed is stale.</p>}
     {feed && !feedError && !feed.items.length && <p>No open incidents for this camera or its mapped zones.</p>}
     {feed?.items.map(incident => <article key={incident.incidentId} className={s.incident}>
-      <div className={s.zoneRow}><Chip tone={incident.severity === 'CRITICAL' ? 'danger' : 'warning'}>{incident.severity}</Chip><Chip tone="neutral">{incident.status}</Chip>{incident.isDemo && <Chip tone="warning">DEMO</Chip>}</div>
+      <div className={s.zoneRow}><Chip tone={slaTone(incident.slaPriorityCode)}>{incident.slaPriorityCode ? `SLA ${incident.slaPriorityCode}` : 'SLA unavailable'}</Chip><Chip tone="neutral">{incident.status}</Chip>{incident.isDemo && <Chip tone="warning">DEMO</Chip>}</div>
       <strong>{incident.incidentName} · {incident.zoneName}</strong>
       <p>{incident.title}</p>
       {incident.status === 'DETECTED' && <p>AI created · not dispatched</p>}
+      {incident.slaPolicyVersion !== null && <p>Policy snapshot v{incident.slaPolicyVersion}</p>}
+      {incident.responseDeadlineAt || incident.resolutionDeadlineAt ? <p>
+        {incident.responseDeadlineAt && <>Respond by {date(incident.responseDeadlineAt)}</>}
+        {incident.responseDeadlineAt && incident.resolutionDeadlineAt && ' · '}
+        {incident.resolutionDeadlineAt && <>Resolve by {date(incident.resolutionDeadlineAt)}</>}
+      </p> : <p>No SLA deadline snapshot is available for this incident.</p>}
+      {incident.mitigatedAt && <p>Mitigated at {date(incident.mitigatedAt)}</p>}
       <p>Trigger camera: {incident.triggerCameraName ?? '—'} · Latest metric: {count(incident.metricValue)} {incident.thresholdUnit === 'PEOPLE' ? 'people' : incident.thresholdUnit}</p>
       <p className={s.muted}>{new Date(incident.updatedAt).toLocaleString()}</p>
     </article>)}
