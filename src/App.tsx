@@ -23,6 +23,7 @@ import WorkShifts from './pages/manager/WorkShifts';
 import { SwapRequestDetail, SwapRequests } from './pages/manager/SwapRequests';
 import ZoneStaffing from './pages/manager/ZoneStaffing';
 import Analytics from './pages/manager/Analytics';
+import OperationalEvents, { OperationalEventDetail } from './pages/operator/OperationalEvents';
 import GlobalSettings from './pages/GlobalSettings';
 import { ManagerNotifications, OperatorNotifications } from './pages/NotificationInbox';
 
@@ -56,6 +57,8 @@ export default function App() {
         <Route path="/operator/dashboard" element={<Navigate to="/operator/floor-map" replace />} />
         <Route path="/operator/floor-map" element={<OperatorFloorMap />} />
         <Route path="/operator/tasks" element={<OperatorTasks />} />
+        <Route path="/operator/events" element={<OperationalEvents />} />
+        <Route path="/operator/events/:eventId" element={<OperationalEventDetail />} />
         <Route path="/operator/tasks/:taskId" element={<OperatorTaskDetail />} />
         <Route path="/operator/offers" element={<OperatorTaskOffers />} />
         <Route path="/operator/cameras/:cameraId" element={<OperatorCameraLive />} />
@@ -64,6 +67,8 @@ export default function App() {
       <Route element={<ProtectedRoute allowedRoles={['MANAGER']} />}>
         <Route path="/manager/dashboard" element={<Navigate to="/manager/analytics" replace />} />
         <Route path="/manager/analytics" element={<Analytics />} />
+        <Route path="/manager/events" element={<OperationalEvents workspace="manager" />} />
+        <Route path="/manager/events/:eventId" element={<OperationalEventDetail workspace="manager" />} />
         <Route path="/manager/schedule" element={<Schedule />} />
         <Route path="/manager/floor-map" element={<OperatorFloorMap workspace="manager" />} />
         <Route path="/manager/staffing" element={<ZoneStaffing />} />

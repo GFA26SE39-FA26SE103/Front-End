@@ -40,6 +40,8 @@ describe('Operator Task Board', () => {
     const user = userEvent.setup(); page();
     expect(await screen.findByRole('link', { name: task.title })).toHaveAttribute('href', '/operator/tasks/task-1');
     expect(screen.getByText('Operational event · EVT-12345678')).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('Status'), 'ALL');
+    await waitFor(() => expect(listTasks).toHaveBeenLastCalledWith({ status: 'OFFERED,ACCEPTED,IN_PROGRESS,SUBMITTED,VERIFIED,CANCELLED', needsAssignment: false }, expect.any(AbortSignal)));
     await user.selectOptions(screen.getByLabelText('Status'), 'IN_PROGRESS');
     await waitFor(() => expect(listTasks).toHaveBeenLastCalledWith({ status: 'IN_PROGRESS', needsAssignment: false }, expect.any(AbortSignal)));
     await user.click(screen.getByLabelText('Needs assignment only'));

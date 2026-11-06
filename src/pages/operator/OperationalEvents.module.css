@@ -1,0 +1,33 @@
+.page { position: relative; width: 100%; min-width: 0; overflow: auto; padding: 24px; display: flex; flex-direction: column; gap: 18px; }
+.page > * { flex-shrink: 0; }
+.managerPage { padding: 0; align-self: flex-start; overflow: visible; }
+.page h2, .page h3, .page p { margin: 0; }
+.page h2 { font-size: 21px; margin-bottom: 5px; }
+.page h3 { font-size: 14px; }
+.page a { color: var(--color-primary); text-decoration: none; font-weight: 600; }
+.page a:hover { text-decoration: underline; }
+.heading, .pagination { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.heading p, .note { color: var(--color-text-muted); font-size: 12px; line-height: 1.6; }
+.filters { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.filters label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; }
+.filters select, .filters input { height: 36px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); border-radius: 7px; padding: 7px 10px; min-width: 130px; font: inherit; font-size: 12px; }
+.zoneFilter { flex: 1; min-width: 170px; }
+.filters button { height: 36px; }
+.page input:focus-visible, .page select:focus-visible, .page a:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.tableWrap { width: 100%; overflow-x: auto; margin-top: 16px; }
+.table { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; }
+.table th, .table td { border-bottom: 1px solid var(--color-border); padding: 14px 10px; vertical-align: top; }
+.table thead th { color: var(--color-text-muted); font-size: 11px; font-weight: 600; white-space: nowrap; background: var(--color-surface-2); }
+.table tbody th { font-weight: 600; min-width: 160px; }
+.table tbody tr:last-child > * { border-bottom: 0; }
+.badges { display: flex; gap: 5px; flex-wrap: wrap; }
+.pagination { border-top: 1px solid var(--color-border); padding-top: 16px; margin-top: 12px; }
+.pagination > div { display: flex; gap: 8px; }
+.error { padding: 12px; border-radius: 7px; color: var(--color-danger); background: var(--color-danger-tint); font-size: 12px; line-height: 1.6; }
+.catalogError { display: flex; gap: 10px; align-items: center; color: var(--color-danger); font-size: 12px; }
+.empty { padding: 24px 0; color: var(--color-text-muted); font-size: 13px; }
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: 22px 0; }
+.facts dt { font-size: 12px; color: var(--color-text-muted); margin-bottom: 6px; }
+.facts dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+@media(max-width: 800px) { .facts { grid-template-columns: 1fr; } }

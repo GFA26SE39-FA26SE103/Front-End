@@ -51,6 +51,9 @@ Validation: **205 frontend tests passed** (12 new Task API/board/polling checks)
 | `/operator/notifications` | Recipient-scoped task assignment/escalation inbox | New integrated screen |
 | `/manager/notifications` | Recipient-scoped schedule and shift-swap inbox | New integrated screen |
 | `/manager/analytics` | API-backed Event/Incident/Task KPIs, daily trends, SLA and Zone breakdown | Manager — Analytics; `/manager/dashboard` redirects here |
+| `/operator/events`, `/manager/events` | Read-only Event history and detail, All/status/priority/Zone/date filters and paging | Analytics Event KPI preserves its date/Zone filters when opening history |
+
+Event history requires the matching `/api/operational-events` backend endpoints. Operator Task Board now offers **All tasks**, requesting all six statuses through the existing comma-separated status contract, including VERIFIED/CANCELLED; the existing 200-recent-match cap remains. Validation: 21 focused Event/Task/Analytics tests and frontend build passed; browser interaction checks used mocked API responses. No staging end-to-end check is claimed.
 
 Manager analytics contract, behavior and verification: [integration notes](docs/MANAGER_ANALYTICS.md). Requires the matching backend's three `/api/manager/analytics/*` endpoints; no mock fallback is used.
 
