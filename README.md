@@ -50,6 +50,9 @@ Validation: **205 frontend tests passed** (12 new Task API/board/polling checks)
 | `/admin/settings` | API-backed global FCM master/category settings; in-app/web notification records stay enabled | New integrated screen |
 | `/operator/notifications` | Recipient-scoped task assignment/escalation inbox | New integrated screen |
 | `/manager/notifications` | Recipient-scoped schedule and shift-swap inbox | New integrated screen |
+| `/manager/analytics` | API-backed Event/Incident/Task KPIs, daily trends, SLA and Zone breakdown | Manager — Analytics; `/manager/dashboard` redirects here |
+
+Manager analytics contract, behavior and verification: [integration notes](docs/MANAGER_ANALYTICS.md). Requires the matching backend's three `/api/manager/analytics/*` endpoints; no mock fallback is used.
 
 ## Current integration status (2026-10-03)
 

@@ -21,6 +21,7 @@ import Schedule from './pages/manager/Schedule';
 import WorkShifts from './pages/manager/WorkShifts';
 import { SwapRequestDetail, SwapRequests } from './pages/manager/SwapRequests';
 import ZoneStaffing from './pages/manager/ZoneStaffing';
+import Analytics from './pages/manager/Analytics';
 import GlobalSettings from './pages/GlobalSettings';
 import { ManagerNotifications, OperatorNotifications } from './pages/NotificationInbox';
 
@@ -59,7 +60,8 @@ export default function App() {
         <Route path="/operator/notifications" element={<OperatorNotifications />} />
       </Route>
       <Route element={<ProtectedRoute allowedRoles={['MANAGER']} />}>
-        <Route path="/manager/dashboard" element={<Navigate to="/manager/schedule" replace />} />
+        <Route path="/manager/dashboard" element={<Navigate to="/manager/analytics" replace />} />
+        <Route path="/manager/analytics" element={<Analytics />} />
         <Route path="/manager/schedule" element={<Schedule />} />
         <Route path="/manager/floor-map" element={<OperatorFloorMap workspace="manager" />} />
         <Route path="/manager/staffing" element={<ZoneStaffing />} />
