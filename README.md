@@ -22,6 +22,8 @@ npm test -- --run
 
 ## Operator Task Board — 25/10/2026
 
+Policy UI alignment (06/11/2026): the Manage policy page follows the operational SLA compatibility API: WARNING notifies Operator; CRITICAL creates a Task and requires an explicit TaskType when enabled. Each action has one enable switch. Saves propagate the shared EventType policy version across both drafts; failures require reloading saved state before another write. No policy delete control is presented: disable the selected action instead. Changes apply across Zones using the same EventType; existing Task snapshots stay unchanged. Event/Zone context is shown when opened from AI Configuration. A TaskType picker still requires a backend catalog API; the approved code input remains available.
+
 `/operator/tasks` and `/operator/tasks/:taskId` use the authenticated Task APIs for list/filter/detail, assignee, source, priority and progress. The Operator can assign or reassign an OFFERED/ACCEPTED task using checked-in/on-shift candidates; Admin can inspect but cannot assign. Assignment sends the Task's `updatedAt` as `expectedUpdatedAt`; a conflict requires closing the dialog and reviewing fresh data. Reassignment/outside-Zone assignment requires a reason in both client and backend.
 
 The board polls every 4 seconds after successful reads, backs off on failures and pauses in hidden tabs; it keeps the last result with a stale warning instead of substituting demo data. Counts describe the filtered set, limited by the backend's latest-200 list. Event recovery does not mark accepted work complete. Evidence verification/policy authoring remain separate workstreams.
@@ -48,6 +50,9 @@ Validation: **205 frontend tests passed** (12 new Task API/board/polling checks)
 | `/admin/settings` | API-backed global FCM master/category settings; in-app/web notification records stay enabled | New integrated screen |
 | `/operator/notifications` | Recipient-scoped task assignment/escalation inbox | New integrated screen |
 | `/manager/notifications` | Recipient-scoped schedule and shift-swap inbox | New integrated screen |
+| `/manager/analytics` | API-backed Event/Incident/Task KPIs, daily trends, SLA and Zone breakdown | Manager — Analytics; `/manager/dashboard` redirects here |
+
+Manager analytics contract, behavior and verification: [integration notes](docs/MANAGER_ANALYTICS.md). Requires the matching backend's three `/api/manager/analytics/*` endpoints; no mock fallback is used.
 
 ## Current integration status (2026-10-03)
 
@@ -173,3 +178,7 @@ Cloudinary timeout compatibility verification (2026-10-03): **29 focused tests i
 - Authentication, Users & Roles, Cameras, Store Layout and AI Config have API-backed slices. Other screens still use mock/component state until their backend contracts are implemented.
 - Model confidence is an input filter, not an incident severity/routing threshold; legacy Routing mock does not represent current AGENTS.md rules.
 - Only the Light theme is wired. Dark colour tokens exist (`[data-theme='dark']`), but the Figma icons are exported in light-theme colours, so dark mode needs dark icon variants first.
+
+## Response-policy TaskType selection — 2026-11-06
+
+Critical response uses the Admin-only `GET /api/task-types` catalog. Options show `code — name`; selecting one shows its description. Loading, empty/error/retry and unavailable saved-code states are handled without replacing policy drafts. Deploy the matching backend endpoint before this frontend update; an older backend disables critical saves until the catalog can load.

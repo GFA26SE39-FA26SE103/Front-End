@@ -5,6 +5,7 @@ import { AccountMenu } from './AccountMenu';
 import s from './AdminLayout.module.css';
 
 const NAV = [
+  { to: '/manager/analytics', label: 'Analytics', icon: 'nav-grid', activeIcon: 'nav-grid-active' },
   { to: '/manager/schedule', label: 'Schedule', icon: 'nav-grid', activeIcon: 'nav-grid-active' },
   { to: '/manager/floor-map', label: 'Floor map', icon: 'layers' },
   { to: '/manager/staffing', label: 'Zone staffing', icon: 'nav-users', activeIcon: 'nav-users-active' },
@@ -14,7 +15,7 @@ const NAV = [
   { to: '/manager/notifications', label: 'Notifications', icon: 'nav-bell', activeIcon: 'nav-bell-active' },
 ];
 
-/** The Manager console: same shell as the Admin console, with the MF-04 planning pages. */
+/** Manager planning and recorded operational analytics. */
 export function ManagerLayout({ title, subtitle, actions, children }: { title: string; subtitle: string; actions?: ReactNode; children: ReactNode }) {
   return (
     <div className={s.shell}>
