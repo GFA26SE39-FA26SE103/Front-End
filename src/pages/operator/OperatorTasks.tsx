@@ -84,6 +84,10 @@ function TaskDetail({ taskId }: { taskId: string }) {
             <li>Created · {date(task.createdAt)}</li><li>Assigned · {date(task.assignedAt)}</li><li>Accepted · {date(task.acceptedAt)}</li>
             {task.plannedStartAt && <li>Planned start · {date(task.plannedStartAt)}</li>}<li>Started · {date(task.startedAt)}</li><li>Submitted · {date(task.submittedAt)}</li>
           </ol></Card>
+          <Card><CardHeader title="SLA snapshot" subtitle="Frozen when the task was created" /><dl className={s.kv}>
+            <dt>Priority</dt><dd>{task.slaPriorityCode ?? 'Unavailable'}</dd><dt>Policy version</dt><dd>{task.slaPolicyVersion ?? '—'}</dd>
+            <dt>Respond by</dt><dd>{date(task.responseDeadlineAt ?? null)}</dd><dt>Resolve by</dt><dd>{date(task.resolutionDeadlineAt ?? null)}</dd>
+          </dl>{!task.slaPolicyId && <p className={s.info}>No SLA policy snapshot is available. The UI does not invent a deadline.</p>}</Card>
           <TaskVerification task={task} canReview={canAssign} onDecided={message => { setNotice(message); refresh(); }} />
         </div><div className={s.stack}><Card><CardHeader title="Assignment" />
           <dl className={s.kv}><dt>Staff</dt><dd>{task.assigneeName ?? 'Unassigned'}</dd><dt>Method</dt><dd>{task.assigneeUserId ? task.assignmentType === 'MANUAL' ? 'Operator assigned' : 'Staff accepted offer' : 'Awaiting acceptance'}</dd><dt>Updated</dt><dd>{date(task.updatedAt)}</dd></dl>

@@ -60,7 +60,8 @@ export default function AiConfig() {
     async function load() {
       setLoading(true); setError('');
       try {
-        const [stores, catalog] = await Promise.all([listSupermarkets(controller.signal), listIncidentTypes(controller.signal)]);
+        const [stores, allTypes] = await Promise.all([listSupermarkets(controller.signal), listIncidentTypes(controller.signal)]);
+        const catalog = allTypes.filter(type => type.sourceType === 'AI_DETECTED');
         const floorRecords = stores[0] ? (await listFloors(stores[0].supermarketId, controller.signal)).sort((a, b) => a.floorNumber - b.floorNumber) : [];
         const groups = await Promise.all(floorRecords.map(async f => ({ floorId: f.floorId, floorNumber: f.floorNumber, name: f.name || 'Floor ' + f.floorNumber, zones: await listZones(f.floorId, controller.signal) })));
         const entries = await Promise.all(groups.flatMap(g => g.zones).map(async z => {
