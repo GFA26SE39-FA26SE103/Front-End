@@ -36,6 +36,14 @@
 .actions { justify-content: flex-end; }
 .timeline { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.8; }
 .timeline li { padding: 6px 0; }
+.offerHeader, .offerTitle { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.offerList { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.offer { border-top: 1px solid var(--color-border); padding-top: 12px; }
+.offer:first-child { border-top: 0; padding-top: 0; }
+.offerTitle strong { font-size: 12px; }
+.offerFacts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 8px 0 0; font-size: 11px; line-height: 1.5; }
+.offerFacts dt { color: var(--color-text-muted); }
+.offerFacts dd { margin: 0; text-align: right; }
 @media(max-width: 1100px) { .stats { grid-template-columns: repeat(2, 1fr); } .detail { grid-template-columns: 1fr; } }
 .submission { display: flex; flex-direction: column; gap: 10px; padding: 12px 0; border-top: 1px solid var(--color-border); }
 .submission:first-of-type { border-top: 0; padding-top: 0; }

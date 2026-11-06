@@ -22,7 +22,6 @@ export function OperatorLayout({ title, subtitle, children }: { title: string; s
           <NavLink to="/operator/floor-map" className={({ isActive }) => `${s.navLink} ${isActive ? s.active : ''}`}>Floor map</NavLink>
           <NavLink to="/operator/tasks" className={({ isActive }) => `${s.navLink} ${isActive ? s.active : ''}`}>Tasks</NavLink>
           <NavLink to="/operator/events" className={({ isActive }) => `${s.navLink} ${isActive ? s.active : ''}`}>Events</NavLink>
-          <NavLink to="/operator/offers" className={({ isActive }) => `${s.navLink} ${isActive ? s.active : ''}`}>Offers</NavLink>
           <NavLink to="/operator/notifications" className={({ isActive }) => `${s.navLink} ${isActive ? s.active : ''}`}>Notifications</NavLink>
         </nav>
         <AccountMenu />

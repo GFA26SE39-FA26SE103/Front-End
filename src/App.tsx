@@ -12,7 +12,6 @@ import ResponsePolicies from './pages/admin/ResponsePolicies';
 import OperatorCameraLive from './pages/operator/OperatorCameraLive';
 import OperatorFloorMap from './pages/operator/OperatorFloorMap';
 import OperatorTasks, { OperatorTaskDetail } from './pages/operator/OperatorTasks';
-import OperatorTaskOffers from './pages/operator/OperatorTaskOffers';
 import Login from './pages/auth/Login';
 import { ForgotPassword, PasswordUpdated, ResetLinkExpired, ResetLinkSent, SetNewPassword } from './pages/auth/Recovery';
 import { ProtectedRoute } from './auth/ProtectedRoute';
@@ -60,7 +59,6 @@ export default function App() {
         <Route path="/operator/events" element={<OperationalEvents />} />
         <Route path="/operator/events/:eventId" element={<OperationalEventDetail />} />
         <Route path="/operator/tasks/:taskId" element={<OperatorTaskDetail />} />
-        <Route path="/operator/offers" element={<OperatorTaskOffers />} />
         <Route path="/operator/cameras/:cameraId" element={<OperatorCameraLive />} />
         <Route path="/operator/notifications" element={<OperatorNotifications />} />
       </Route>

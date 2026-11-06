@@ -3,11 +3,11 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../api/client';
-import { assignTask, getTask, listAssignableStaff, listTasks, type OperationalTask } from '../../api/tasks';
+import { assignTask, getTask, listAssignableStaff, listTaskOffers, listTasks, type OperationalTask, type TaskOffer } from '../../api/tasks';
 import { saveSession } from '../../auth/session';
 import { mockNativeDialogs } from '../../test/dialog';
 import OperatorTasks, { OperatorTaskDetail } from './OperatorTasks';
-vi.mock('../../api/tasks', () => ({ taskStatuses: ['OFFERED', 'ACCEPTED', 'IN_PROGRESS', 'SUBMITTED', 'VERIFIED', 'CANCELLED'], assignTask: vi.fn(), getTask: vi.fn(), listAssignableStaff: vi.fn(), listTasks: vi.fn(),
+vi.mock('../../api/tasks', () => ({ taskStatuses: ['OFFERED', 'ACCEPTED', 'IN_PROGRESS', 'SUBMITTED', 'VERIFIED', 'CANCELLED'], assignTask: vi.fn(), getTask: vi.fn(), listAssignableStaff: vi.fn(), listTaskOffers: vi.fn(), listTasks: vi.fn(),
   getTaskEvidence: vi.fn(() => Promise.resolve({ taskId: 'task-1', taskStatus: 'OFFERED', requiresBeforePhoto: false, requiresAfterPhoto: false, rejectionCount: 0, drafts: [], submissions: [] })),
   getEvidenceImage: vi.fn(() => new Promise(() => {})), verifyTask: vi.fn(), rejectTask: vi.fn() }));
 mockNativeDialogs();
@@ -18,6 +18,13 @@ const task: OperationalTask = {
   zoneId: 'zone-1', zoneName: 'Checkout', cameraCode: 'CAM-03', status: 'OFFERED', assignmentType: 'OFFER',
   assigneeUserId: null, assigneeName: null, createdAt: '2026-10-25T04:00:00Z', assignedAt: null,
   acceptedAt: null, plannedStartAt: null, startedAt: null, submittedAt: null, eventClearedAt: null, needsAssignment: true, updatedAt: '2026-10-25T04:00:00Z',
+};
+const offer: TaskOffer = {
+  offerId: 'offer-1', taskId: 'task-1', origin: 'OPERATIONAL_EVENT', sourceCode: 'EVT-12345678', eventTypeCode: 'CONGESTION',
+  title: task.title, instructions: task.instructions, priority: 'WARNING', zoneId: 'zone-1', zoneName: 'Checkout', cameraCode: 'CAM-03', cameraName: 'Checkout camera',
+  metricValue: 6, measurementMode: 'QUEUE_LENGTH', measurementUnit: 'PEOPLE', createdAt: '2026-10-25T04:01:00Z', recipients: 2, attempt: 1, maxAttempts: 3,
+  nextAlertAt: null, status: 'PENDING', closedReason: null, eventClearedAt: null, staffUserId: 'staff-1', staffName: 'Linh', dispatchCycleId: 'cycle-1',
+  waveNumber: 1, dispatchScope: 'SAME_ZONE', expiresAt: '2026-10-25T04:02:00Z', respondedAt: null,
 };
 function session(role = 'OPERATOR') {
   saveSession({ accessToken: 'test-only', expiresAt: new Date(Date.now() + 3600000).toISOString(), user: { userId: 'operator-1', email: 'operator@test.local', fullName: 'Operator', roleId: 'role-1', role, status: 'ACTIVE' } }, false);
@@ -31,6 +38,7 @@ describe('Operator Task Board', () => {
   beforeEach(() => {
     vi.clearAllMocks(); session();
     vi.mocked(listTasks).mockResolvedValue([task]); vi.mocked(getTask).mockResolvedValue(task);
+    vi.mocked(listTaskOffers).mockResolvedValue([offer]);
     vi.mocked(listAssignableStaff).mockResolvedValue([
       { userId: 'staff-1', fullName: 'Linh', assignedToZone: true, activeTasks: 0, shiftEndsAt: '2026-10-25T09:00:00Z' },
       { userId: 'staff-2', fullName: 'Minh', assignedToZone: false, activeTasks: 1, shiftEndsAt: '2026-10-25T09:00:00Z' },
@@ -74,6 +82,14 @@ describe('Operator Task Board', () => {
     session('ADMIN'); page('/operator/tasks/task-1');
     expect(await screen.findByText('Assignment actions require an Operator account.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Assign task' })).not.toBeInTheDocument();
+  });
+  it('shows only this Task dispatch offers inside Task detail', async () => {
+    page('/operator/tasks/task-1');
+    expect(await screen.findByText('Dispatch offers')).toBeInTheDocument();
+    expect(screen.getByText('Linh')).toBeInTheDocument();
+    expect(screen.getByText('PENDING')).toBeInTheDocument();
+    expect(screen.getByText('Wave 1 · same zone')).toBeInTheDocument();
+    expect(listTaskOffers).toHaveBeenCalledWith({ taskId: 'task-1' }, expect.any(AbortSignal));
   });
   it('keeps an event-cleared in-progress task active and prevents reassignment', async () => {
     vi.mocked(getTask).mockResolvedValue({ ...task, status: 'IN_PROGRESS', assigneeUserId: 'staff-1', assigneeName: 'Linh', eventClearedAt: '2026-10-25T04:10:00Z' });
