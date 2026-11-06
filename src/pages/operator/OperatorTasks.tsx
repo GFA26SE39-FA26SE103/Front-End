@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
-import { assignTask, getTask, listAssignableStaff, listTasks, taskStatuses, type AssignableStaff, type OperationalTask, type TaskStatus } from '../../api/tasks';
+import { assignTask, getTask, listAssignableStaff, listTaskOffers, listTasks, taskStatuses, type AssignableStaff, type OperationalTask, type TaskOffer, type TaskStatus } from '../../api/tasks';
 import { loadSession } from '../../auth/session';
 import { Dialog } from '../../components/Dialog';
 import { OperatorLayout } from '../../components/OperatorLayout';
@@ -19,6 +19,7 @@ function Status({ task }: { task: OperationalTask }) {
   return <Chip tone={task.status === 'VERIFIED' ? 'success' : task.status === 'IN_PROGRESS' ? 'primary' : task.status === 'SUBMITTED' ? 'purple' : 'neutral'}>{labels[task.status] ?? task.status}</Chip>;
 }
 function Priority({ value }: { value: string }) { return <Chip tone={value === 'CRITICAL' ? 'danger' : value === 'WARNING' ? 'warning' : 'neutral'}>{value}</Chip>; }
+const offerTone = (offer: TaskOffer) => offer.status === 'ACCEPTED' ? 'success' : offer.status === 'PENDING' ? 'primary' : offer.status === 'DECLINED' ? 'warning' : 'neutral';
 
 export default function OperatorTasks() {
   const [status, setStatus] = useState('');
@@ -93,13 +94,30 @@ function TaskDetail({ taskId }: { taskId: string }) {
           <dl className={s.kv}><dt>Staff</dt><dd>{task.assigneeName ?? 'Unassigned'}</dd><dt>Method</dt><dd>{task.assigneeUserId ? task.assignmentType === 'MANUAL' ? 'Operator assigned' : 'Staff accepted offer' : 'Awaiting acceptance'}</dd><dt>Updated</dt><dd>{date(task.updatedAt)}</dd></dl>
           {canAssign && ['OFFERED', 'ACCEPTED'].includes(task.status) ? <Button disabled={!!error} onClick={() => setAssigning(true)}>{task.assigneeUserId ? 'Reassign task' : 'Assign task'}</Button>
             : <p className={s.muted}>{!canAssign ? 'Assignment actions require an Operator account.' : 'Assignment is available for offered or accepted tasks before work starts.'}</p>}
-        </Card></div></div>
+        </Card><TaskOffers taskId={task.taskId} /></div></div>
         {assigning && <AssignDialog key={task.taskId} task={task} onClose={() => setAssigning(false)} onConflict={refresh} onSaved={saved => {
           setAssigning(false); setNotice(`Task assigned to ${saved.assigneeName ?? 'Staff'}.`); refresh();
         }} />}
       </>}
     </div>
   </OperatorLayout>;
+}
+
+function TaskOffers({ taskId }: { taskId: string }) {
+  const load = useCallback((signal: AbortSignal) => listTaskOffers({ taskId }, signal), [taskId]);
+  const { data: offers, error, checkedAt, refresh } = useTaskPolling(load);
+  return <Card><CardHeader title="Dispatch offers" subtitle="Staff invitations for this Task" />
+    <div className={s.offerHeader}><span className={s.muted}>{checkedAt ? `Updated ${date(checkedAt.toISOString())}` : 'Waiting for backend'}</span><Button variant="secondary" onClick={refresh}>Refresh offers</Button></div>
+    {error && <p className={s.error} role="alert">{error}</p>}
+    {!offers && !error && <p className={s.message} role="status">Loading offers…</p>}
+    {offers?.length === 0 && <p className={s.message}>No Staff offers were sent for this Task.</p>}
+    {!!offers?.length && <ol className={s.offerList}>{offers.map(offer => <li key={offer.offerId} className={s.offer}>
+      <div className={s.offerTitle}><strong>{offer.staffName ?? offer.staffUserId}</strong><Chip tone={offerTone(offer)}>{offer.status}</Chip></div>
+      <p className={s.muted}>Wave {offer.waveNumber} · {offer.dispatchScope.replaceAll('_', ' ').toLowerCase()}</p>
+      <dl className={s.offerFacts}><dt>Offered</dt><dd>{date(offer.createdAt)}</dd><dt>{offer.respondedAt ? 'Responded' : 'Expires'}</dt><dd>{date(offer.respondedAt ?? offer.expiresAt)}</dd></dl>
+      {offer.closedReason && <p className={s.muted}>{offer.closedReason}</p>}
+    </li>)}</ol>}
+  </Card>;
 }
 
 function AssignDialog({ task, onClose, onSaved, onConflict }: { task: OperationalTask; onClose: () => void; onSaved: (task: OperationalTask) => void; onConflict: () => void }) {
