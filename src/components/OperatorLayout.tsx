@@ -21,6 +21,7 @@ export function OperatorLayout({ title, subtitle, children }: { title: string; s
         <nav className={s.nav} aria-label="Operator">
           <NavLink to="/operator/floor-map" className={({ isActive }) => `${s.navLink} ${isActive ? s.active : ''}`}>Floor map</NavLink>
           <NavLink to="/operator/tasks" className={({ isActive }) => `${s.navLink} ${isActive ? s.active : ''}`}>Tasks</NavLink>
+          <NavLink to="/operator/events" className={({ isActive }) => `${s.navLink} ${isActive ? s.active : ''}`}>Events</NavLink>
           <NavLink to="/operator/notifications" className={({ isActive }) => `${s.navLink} ${isActive ? s.active : ''}`}>Notifications</NavLink>
         </nav>
         <AccountMenu />

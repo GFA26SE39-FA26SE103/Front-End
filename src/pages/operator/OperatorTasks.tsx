@@ -23,7 +23,7 @@ function Priority({ value }: { value: string }) { return <Chip tone={value === '
 export default function OperatorTasks() {
   const [status, setStatus] = useState('');
   const [needsAssignment, setNeedsAssignment] = useState(false);
-  const load = useCallback((signal: AbortSignal) => listTasks({ status, needsAssignment }, signal), [status, needsAssignment]);
+  const load = useCallback((signal: AbortSignal) => listTasks({ status: status === 'ALL' ? taskStatuses.join(',') : status, needsAssignment }, signal), [status, needsAssignment]);
   const { data: tasks, error, checkedAt, refresh } = useTaskPolling(load);
   return <OperatorLayout title="Task board" subtitle="Coordinate staff responses and assignments">
     <div className={s.page}>
@@ -33,7 +33,7 @@ export default function OperatorTasks() {
       </div>
       <Card>
         <div className={s.tools}><div className={s.filters}>
-          <label>Status<select value={status} onChange={event => setStatus(event.target.value)}><option value="">Active tasks</option>{taskStatuses.map(value => <option key={value} value={value}>{labels[value]}</option>)}</select></label>
+          <label>Status<select value={status} onChange={event => setStatus(event.target.value)}><option value="">Active tasks</option><option value="ALL">All tasks</option>{taskStatuses.map(value => <option key={value} value={value}>{labels[value]}</option>)}</select></label>
           <label><input type="checkbox" checked={needsAssignment} onChange={event => setNeedsAssignment(event.target.checked)} />Needs assignment only</label>
         </div><span className={s.muted}>{checkedAt ? `Updated ${date(checkedAt.toISOString())} · Vietnam time` : 'Waiting for backend'}</span></div>
         {error && <p className={s.error} role="alert">{error}{tasks ? ' Showing the last successful result. Refresh before taking action.' : ''}</p>}

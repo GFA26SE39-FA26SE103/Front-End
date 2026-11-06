@@ -17,6 +17,8 @@
 .kpi { gap: 10px; }
 .kpi p { color: var(--color-text-muted); font-size: 12px; font-weight: 500; }
 .kpi > strong { font-size: 30px; font-weight: 600; letter-spacing: -1px; }
+.eventLink { color: inherit; text-decoration: none; }
+.eventLink:hover, .eventLink:focus-visible { color: var(--color-primary); text-decoration: underline; }
 .kpi > span { font-size: 11px; color: var(--color-text-muted); line-height: 1.5; }
 .highlight { border-top: 3px solid var(--color-primary); padding-top: 18px; }
 .visualRow { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(280px, 1fr); gap: 16px; align-items: start; }

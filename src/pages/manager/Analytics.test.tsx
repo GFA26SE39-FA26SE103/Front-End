@@ -60,6 +60,7 @@ describe('Manager analytics', () => {
     fireEvent.click(screen.getByText('View daily data'));
     expect(screen.getByRole('table', { name: /Daily records/ })).toHaveTextContent('2026-10-31');
     expect(screen.getByRole('link', { name: 'Analytics' })).toHaveAttribute('href', '/manager/analytics');
+    expect(screen.getByRole('link', { name: 'View 12 events in this period' })).toHaveAttribute('href', '/manager/events?from=2026-10-31&to=2026-11-06');
   });
 
   it('applies identical filters to overview, trends and zones and retains the full zone selector', async () => {

@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import {
   getAnalyticsOverview, getAnalyticsTrends, getAnalyticsZones,
@@ -97,6 +98,7 @@ export default function Analytics() {
   const entries = summary ? Object.entries(summary.tasks.byStatus) : [];
   const selectedZone = zoneOptions.find(zone => zone.zoneId === query.zoneId)?.zoneName ?? 'All zones';
   const empty = summary && summary.events.total === 0 && summary.incidents.recorded === 0 && summary.tasks.total === 0;
+  const eventFilters = period ? new URLSearchParams({ from: period.from, to: period.to, ...(period.zoneId ? { zoneId: period.zoneId } : {}) }) : null;
 
   return <ManagerLayout title="Operational analytics" subtitle="Review recorded events, tasks and service performance.">
     <div className={s.page}>
@@ -123,7 +125,7 @@ export default function Analytics() {
         </div>
         {empty && <p className={s.emptyNotice} role="status">No records in this period. Try a different date range or zone. Missing averages and SLA rates appear as —.</p>}
         <div className={s.kpis}>
-          <Card className={s.kpi}><p>Events detected</p><strong>{number(summary.events.total)}</strong><span>{number(summary.events.active)} currently active · {number(summary.events.latestCritical)} latest critical</span></Card>
+          <Card className={s.kpi}><p>Events detected</p><strong><Link className={s.eventLink} to={`/manager/events?${eventFilters}`} aria-label={`View ${summary.events.total} events in this period`}>{number(summary.events.total)}</Link></strong><span>{number(summary.events.active)} currently active · {number(summary.events.latestCritical)} latest critical</span></Card>
           <Card className={s.kpi}><p>Incidents</p><strong>{number(summary.incidents.total)}</strong><span>{number(summary.incidents.open)} open · {number(summary.incidents.dismissed)} dismissed excluded</span></Card>
           <Card className={s.kpi}><p>Tasks created</p><strong>{number(summary.tasks.total)}</strong><span>{number(summary.tasks.byStatus.VERIFIED ?? 0)} verified · {number(summary.tasks.byStatus.SUBMITTED ?? 0)} awaiting verification</span></Card>
           <Card className={`${s.kpi} ${s.highlight}`}><p>Response SLA met</p><strong>{percent(summary.tasks.responseSla.metPercent)}</strong><span>{number(summary.tasks.responseSla.evaluated)} evaluated · {number(summary.tasks.responseSla.unavailable)} unavailable</span></Card>
