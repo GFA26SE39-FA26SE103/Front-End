@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { saveSession } from '../auth/session';
-import { createFloor, createZone, getFloorMap, updateFloorDetails, uploadFloorMap } from './floors';
+import { createFloor, createZone, getFloorMap, listZoneAdjacency, replaceZoneAdjacency, updateFloorDetails, uploadFloorMap } from './floors';
 
 const user = {
   userId: '00000000-0000-0000-0000-000000000001',
@@ -105,5 +105,20 @@ describe('floor API', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:5080/api/floors/floor-1/zones');
     expect(fetchMock.mock.calls[0][1]?.method).toBe('POST');
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual(request);
+  });
+
+  it('reads and replaces a zone adjacency set through the backend contract', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify([]), {
+      headers: { 'Content-Type': 'application/json' },
+    }));
+
+    await listZoneAdjacency('zone/one');
+    await replaceZoneAdjacency('zone/one', ['zone-two']);
+
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:5080/api/zones/zone%2Fone/adjacent-zones');
+    expect(fetchMock.mock.calls[0][1]?.method).toBeUndefined();
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:5080/api/zones/zone%2Fone/adjacent-zones');
+    expect(fetchMock.mock.calls[1][1]?.method).toBe('PUT');
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({ adjacentZoneIds: ['zone-two'] });
   });
 });

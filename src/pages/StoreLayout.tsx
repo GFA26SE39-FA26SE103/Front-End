@@ -20,6 +20,7 @@ import { CameraCoverageEditor } from '../components/CameraCoverageEditor';
 import { Dialog } from '../components/Dialog';
 import { FloorPlanSurface, type PlacementChange } from '../components/FloorPlanSurface';
 import { FloorEditor } from '../components/FloorEditor';
+import { ZoneAdjacencyEditor } from '../components/ZoneAdjacencyEditor';
 import type { ZoneEditorSave } from '../components/ZoneEditorOverlay';
 import { Icon } from '../components/Icon';
 import { Button, Callout, Card, CardHeader, Chip, Overline } from '../components/ui';
@@ -65,6 +66,7 @@ export default function StoreLayout() {
   const [zoneEditing, setZoneEditing] = useState(false);
   const [zoneSaving, setZoneSaving] = useState(false);
   const [coverageEditing, setCoverageEditing] = useState(false);
+  const [adjacencyOpen, setAdjacencyOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -185,7 +187,7 @@ export default function StoreLayout() {
   const selectedDraft = selectedCameraId ? drafts[selectedCameraId] : undefined;
   const dirtyCameraIds = useMemo(() => new Set(Object.keys(drafts)), [drafts]);
   const storeName = stores.find((store) => store.supermarketId === selectedFloor?.supermarketId)?.name ?? stores[0]?.name;
-  const floorChangesBlocked = uploading || saving || zoneSaving || zoneEditing || coverageEditing || dirtyCameraIds.size > 0;
+  const floorChangesBlocked = uploading || saving || zoneSaving || zoneEditing || coverageEditing || adjacencyOpen || dirtyCameraIds.size > 0;
 
   const selectFloor = (floorId: string) => {
     setSelectedFloorId(floorId);
@@ -195,6 +197,7 @@ export default function StoreLayout() {
     setPickerOpen(false);
     setZoneEditing(false);
     setCoverageEditing(false);
+    setAdjacencyOpen(false);
   };
 
   const uploadMap = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -441,6 +444,14 @@ export default function StoreLayout() {
           setActionMessage(creating ? 'Floor created. Upload its floor plan to continue setup.' : 'Floor details updated.');
         }}
       />}
+      {adjacencyOpen && <ZoneAdjacencyEditor
+        zones={zones}
+        onClose={() => setAdjacencyOpen(false)}
+        onSaved={zoneName => {
+          setActionError('');
+          setActionMessage(`Zone adjacency saved for ${zoneName}.`);
+        }}
+      />}
 
       <div className={s.workspace}>
         {pickerOpen && selectedFloor && (
@@ -476,6 +487,18 @@ export default function StoreLayout() {
             {selectedFloor && (
               <div className={s.canvasTools}>
                 <Chip tone="neutral">{zones.length} zones</Chip>
+                <Button
+                  variant="secondary"
+                  disabled={zones.length === 0 || zoneEditing || coverageEditing}
+                  onClick={() => {
+                    setAdjacencyOpen(true);
+                    setPickerOpen(false);
+                    setActionError('');
+                    setActionMessage('');
+                  }}
+                >
+                  Configure zone adjacency
+                </Button>
                 <Button
                   variant="secondary"
                   disabled={mapState.status !== 'ready'}

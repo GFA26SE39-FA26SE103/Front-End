@@ -45,6 +45,8 @@ export type ZoneRequest = {
   areaM2: number | null;
 };
 
+export type AdjacentZoneRecord = Pick<ZoneRecord, 'zoneId' | 'floorId' | 'code' | 'name' | 'status'>;
+
 export type FloorMapView = {
   floorId: string;
   mapUrl: string;
@@ -73,6 +75,15 @@ export const createZone = (floorId: string, body: ZoneRequest) =>
 
 export const updateZone = (zoneId: string, body: ZoneRequest) =>
   apiFetch<ZoneRecord>(`/api/zones/${zoneId}`, { method: 'PATCH', body: JSON.stringify(body) });
+
+export const listZoneAdjacency = (zoneId: string, signal?: AbortSignal) =>
+  apiFetch<AdjacentZoneRecord[]>(`/api/zones/${encodeURIComponent(zoneId)}/adjacent-zones`, { signal });
+
+export const replaceZoneAdjacency = (zoneId: string, adjacentZoneIds: string[]) =>
+  apiFetch<AdjacentZoneRecord[]>(`/api/zones/${encodeURIComponent(zoneId)}/adjacent-zones`, {
+    method: 'PUT',
+    body: JSON.stringify({ adjacentZoneIds }),
+  });
 
 export const uploadFloorMap = (floorId: string, file: File) => {
   const body = new FormData();

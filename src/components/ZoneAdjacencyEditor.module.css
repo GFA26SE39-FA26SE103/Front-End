@@ -1,0 +1,94 @@
+.help,
+.empty,
+.success {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.help,
+.empty {
+  color: var(--color-text-muted);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.field select {
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.candidates {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-height: 280px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+}
+
+.candidates legend {
+  padding: 0 5px;
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.candidate {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px;
+  border-radius: 8px;
+  background: var(--color-surface-2);
+  cursor: pointer;
+}
+
+.candidate input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary);
+}
+
+.candidate span {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.candidate strong {
+  font-size: 11px;
+}
+
+.candidate small {
+  color: var(--color-text-muted);
+  font-size: 9.5px;
+}
+
+.success {
+  color: var(--color-success);
+  font-weight: 650;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+}

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCameraPreview, listCameraMappings, listCameras, updateCamera } from '../api/cameras';
-import { createFloor, createZone, getFloorMap, listFloors, listSupermarkets, listZones, updateFloorDetails, updateZone, uploadFloorMap } from '../api/floors';
+import { createFloor, createZone, getFloorMap, listFloors, listSupermarkets, listZoneAdjacency, listZones, replaceZoneAdjacency, updateFloorDetails, updateZone, uploadFloorMap } from '../api/floors';
 import StoreLayout from './StoreLayout';
 import { ApiError } from '../api/client';
 import { mockNativeDialogs } from '../test/dialog';
@@ -24,7 +24,9 @@ vi.mock('../api/floors', () => ({
   getFloorMap: vi.fn(),
   listFloors: vi.fn(),
   listSupermarkets: vi.fn(),
+  listZoneAdjacency: vi.fn(),
   listZones: vi.fn(),
+  replaceZoneAdjacency: vi.fn(),
   updateZone: vi.fn(),
   updateFloorDetails: vi.fn(),
   uploadFloorMap: vi.fn(),
@@ -68,6 +70,8 @@ describe('StoreLayout', () => {
     vi.mocked(createFloor).mockResolvedValue({ ...floor, floorId: 'floor-2', floorNumber: 2, name: 'Upper floor', mapAssetUrl: null, mapWidth: null, mapHeight: null });
     vi.mocked(updateFloorDetails).mockResolvedValue({ ...floor, floorNumber: 0, name: 'Lobby' });
     vi.mocked(listZones).mockResolvedValue([]);
+    vi.mocked(listZoneAdjacency).mockResolvedValue([]);
+    vi.mocked(replaceZoneAdjacency).mockResolvedValue([]);
     vi.mocked(listCameras).mockResolvedValue([camera]);
     vi.mocked(listCameraMappings).mockResolvedValue([]);
     vi.mocked(getCameraPreview).mockResolvedValue(new Blob(['preview'], { type: 'image/jpeg' }));
@@ -243,6 +247,24 @@ describe('StoreLayout', () => {
     expect(await screen.findByRole('heading', { name: 'Camera coverage' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Frozen aisle (FROZEN)' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Camera placement' })).not.toBeInTheDocument();
+  });
+
+  it('opens zone adjacency management for the selected floor', async () => {
+    const queue = {
+      zoneId: 'zone-queue', floorId: floor.floorId, code: 'QUEUE', name: 'Queue', zoneType: 'CHECKOUT',
+      mapPolygon: [], colorHex: '#3B82F6', areaM2: null, minStaff: 0, status: 'ACTIVE', updatedAt: '2026-11-09T00:00:00Z',
+    };
+    const checkout = { ...queue, zoneId: 'zone-checkout', code: 'CHECKOUT', name: 'Checkout' };
+    vi.mocked(listZones).mockResolvedValueOnce([queue, checkout]);
+    vi.mocked(listZoneAdjacency).mockResolvedValueOnce([checkout]);
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole('img', { name: /uploaded floor plan/i });
+
+    await user.click(screen.getByRole('button', { name: 'Configure zone adjacency' }));
+
+    expect(await screen.findByRole('heading', { name: 'Zone adjacency' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Checkout (CHECKOUT)')).toBeChecked();
   });
 
   it('adds an already registered camera to the map instead of registering a new one', async () => {
