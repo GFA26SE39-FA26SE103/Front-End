@@ -1,7 +1,12 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
+import { dismissIncident } from '../../api/incidents';
+import { mockNativeDialogs } from '../../test/dialog';
 import { CameraMonitoringPanel } from './CameraMonitoringPanel';
 import type { CameraMonitoringState } from './useCameraMonitoring';
+mockNativeDialogs();
+vi.mock('../../api/incidents', () => ({ dismissIncident: vi.fn() }));
 const state: CameraMonitoringState = { loading: false, runtimeError: '', feedError: '', runtime: { cameraId: 'cam', state: 'RUNNING', reason: 'MEASUREMENTS_ACTIVE', errorCode: null, videoSourceType: 'RECORDED', sessionId: 'session', sourceElapsedMs: 6000, observedAt: '2026-10-03T00:00:00Z', isStale: false, annotationContext: 'confidence:0.5', zones: [{ zoneId: 'z', zoneName: 'Frozen', configId: 'c', configVersion: '2026-10-03T00:00:00Z', configurationStatus: 'ACTIVE', confidence: .7, peopleCount: 3, queueCount: 0, issueCode: null, rules: [{ ruleId: 'r', incidentCode: 'LONG_QUEUE', incidentName: 'Long Queue', mode: 'QUEUE_LENGTH', unit: 'PEOPLE', warningThreshold: 1, criticalThreshold: 2, sustainSec: 1, cooldownSec: 300, metricValue: 0, warningProgressMs: 0, criticalProgressMs: 0, cooldownRemainingSec: 0, reason: 'QUEUE_DWELL_PENDING', incidentId: null, operationalEventPriority: 'WARNING' }] }] }, feed: { items: [], hasMore: false, nextCreatedAt: null, nextIncidentId: null } };
 describe('live monitoring and incidents', () => {
   it('does not imply the source is released while deactivation is pending', () => {
@@ -54,5 +59,22 @@ describe('live monitoring and incidents', () => {
     expect(screen.getByText('DRAFT')).toBeInTheDocument();
     expect(screen.getByText(/20s cooldown remaining/)).toBeInTheDocument();
     expect(screen.getByText(/Waiting for sustain/)).toBeInTheDocument();
+  });
+  it('requires a reason before the operator dismisses an open incident', async () => {
+    vi.mocked(dismissIncident).mockResolvedValue({ incidentId: 'i', status: 'DISMISSED', reason: 'False alarm', closedAt: '2026-11-09T00:00:00Z', updatedAt: '2026-11-09T00:00:00Z' });
+    const incident = { incidentId: 'i', zoneId: 'z', zoneName: 'Frozen', incidentCode: 'LONG_QUEUE', incidentName: 'Long queue', triggerCameraId: null, triggerCameraName: null, status: 'OPEN', title: 'Queue incident', createdAt: '2026-11-05T10:00:00Z', updatedAt: '2026-11-05T10:01:00Z', closedAt: null, slaPolicyId: null, slaPriorityCode: null, slaPolicyVersion: null, responseDeadlineAt: null, resolutionDeadlineAt: null, mitigatedAt: null, metricValue: 4, measurementMode: 'QUEUE_LENGTH', thresholdUnit: 'PEOPLE', videoSourceType: 'LIVE', isDemo: false };
+    const user = userEvent.setup();
+    render(<CameraMonitoringPanel state={{ ...state, feed: { items: [incident], hasMore: false, nextCreatedAt: null, nextIncidentId: null } }} canDismiss />);
+
+    await user.click(screen.getByRole('button', { name: 'Dismiss Long queue incident' }));
+    const dialog = screen.getByRole('dialog', { name: 'Dismiss incident?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Dismiss incident' }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Enter a reason');
+    await user.type(within(dialog).getByLabelText('Dismiss reason'), '  False alarm  ');
+    await user.click(within(dialog).getByRole('button', { name: 'Dismiss incident' }));
+
+    expect(dismissIncident).toHaveBeenCalledWith('i', 'False alarm');
+    expect(await screen.findByRole('status')).toHaveTextContent('Incident dismissed.');
+    expect(screen.queryByText('Queue incident')).not.toBeInTheDocument();
   });
 });

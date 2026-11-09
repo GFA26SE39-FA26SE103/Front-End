@@ -167,7 +167,7 @@ function CameraLiveView({ cameraId, workspace }: { cameraId: string; workspace: 
           {camera && zones.length === 0 && <p className={s.muted}>An Admin has not mapped this camera to any zone yet.</p>}
         </div>
 
-        <CameraMonitoringPanel state={monitoring} />
+        <CameraMonitoringPanel state={monitoring} canDismiss={workspace === 'operator'} />
 
         <Overline>CAMERAS ON THIS FLOOR</Overline>
         <nav className={s.switcher} aria-label="Cameras on this floor">

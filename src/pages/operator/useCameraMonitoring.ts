@@ -14,7 +14,7 @@ export function useCameraMonitoring(cameraId: string, enabled = true, pollInterv
     const poll = async () => {
       const [runtime, feed] = await Promise.allSettled([
         getCameraMonitoringRuntime(cameraId, controller.signal),
-        getCameraIncidents(cameraId, { limit: 20 }, controller.signal),
+        getCameraIncidents(cameraId, { limit: 20, includeEnded: true }, controller.signal),
       ]);
       if (!active || controller.signal.aborted) return;
       setState(previous => ({ cameraId, loading: false,

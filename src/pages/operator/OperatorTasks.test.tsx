@@ -86,7 +86,7 @@ describe('Operator Task Board', () => {
   it('shows only this Task dispatch offers inside Task detail', async () => {
     page('/operator/tasks/task-1');
     expect(await screen.findByText('Dispatch offers')).toBeInTheDocument();
-    expect(screen.getByText('Linh')).toBeInTheDocument();
+    expect(await screen.findByText('Linh')).toBeInTheDocument();
     expect(screen.getByText('PENDING')).toBeInTheDocument();
     expect(screen.getByText('Wave 1 · same zone')).toBeInTheDocument();
     expect(listTaskOffers).toHaveBeenCalledWith({ taskId: 'task-1' }, expect.any(AbortSignal));

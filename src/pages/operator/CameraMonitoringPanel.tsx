@@ -1,4 +1,8 @@
-import { Chip, Overline, type Tone } from '../../components/ui';
+import { useState } from 'react';
+import { dismissIncident } from '../../api/incidents';
+import { Dialog } from '../../components/Dialog';
+import { Button, Chip, Overline, type Tone } from '../../components/ui';
+import type { IncidentFeedItem } from '../../api/monitoringRuntime';
 import type { CameraMonitoringState } from './useCameraMonitoring';
 import s from './OperatorCameraLive.module.css';
 
@@ -15,9 +19,34 @@ const count = (value: number | null) => value === null ? '—' : value;
 const seconds = (value: number) => (value / 1000).toFixed(1).replace(/\.0$/, '');
 const date = (value: string) => new Date(value).toLocaleString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'medium', timeStyle: 'short' });
 const slaTone = (priority: string | null): Tone => priority === 'CRITICAL' ? 'danger' : priority === 'HIGH' ? 'warning' : priority === 'MEDIUM' ? 'primary' : 'neutral';
-export function CameraMonitoringPanel({ state }: { state: CameraMonitoringState }) {
+const ended = (status: string) => ['CLOSED', 'DISMISSED', 'CANCELLED'].includes(status);
+export function CameraMonitoringPanel({ state, canDismiss = false }: { state: CameraMonitoringState; canDismiss?: boolean }) {
   const { runtime, feed, runtimeError, feedError, loading } = state;
-  return <section className={s.monitoring} aria-label="Monitoring and incidents">
+  const [target, setTarget] = useState<IncidentFeedItem | null>(null);
+  const [reason, setReason] = useState('');
+  const [dismissError, setDismissError] = useState('');
+  const [dismissing, setDismissing] = useState(false);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const [dismissMessage, setDismissMessage] = useState('');
+  const incidents = feed?.items.filter(incident => !dismissedIds.has(incident.incidentId));
+  const closeDialog = () => { setTarget(null); setReason(''); setDismissError(''); };
+  const submitDismiss = async () => {
+    if (!target) return;
+    const value = reason.trim();
+    if (!value) return setDismissError('Enter a reason before dismissing this incident.');
+    setDismissing(true); setDismissError(''); setDismissMessage('');
+    try {
+      await dismissIncident(target.incidentId, value);
+      setDismissedIds(current => new Set(current).add(target.incidentId));
+      setDismissMessage('Incident dismissed.');
+      closeDialog();
+    } catch (cause) {
+      setDismissError(cause instanceof Error ? cause.message : 'Could not dismiss this incident.');
+    } finally {
+      setDismissing(false);
+    }
+  };
+  return <><section className={s.monitoring} aria-label="Monitoring and incidents">
     <Overline>AI MONITORING</Overline>
     {loading && <p role="status">Loading monitoring…</p>}
     {runtimeError && <p role="alert">{runtimeError}{runtime ? ' · Last runtime data is stale.' : ''}</p>}
@@ -46,8 +75,9 @@ export function CameraMonitoringPanel({ state }: { state: CameraMonitoringState 
     <Overline>RELATED INCIDENTS</Overline>
     {feedError && <p role="alert">{feedError}</p>}
     {feedError && feed && <p>Last incident feed is stale.</p>}
-    {feed && !feedError && !feed.items.length && <p>No open incidents for this camera or its mapped zones.</p>}
-    {feed?.items.map(incident => <article key={incident.incidentId} className={s.incident}>
+    {dismissMessage && <p role="status" className={s.dismissSuccess}>{dismissMessage}</p>}
+    {feed && !feedError && !incidents?.length && <p>No open incidents for this camera or its mapped zones.</p>}
+    {incidents?.map(incident => <article key={incident.incidentId} className={s.incident}>
       <div className={s.zoneRow}><Chip tone={slaTone(incident.slaPriorityCode)}>{incident.slaPriorityCode ? `SLA ${incident.slaPriorityCode}` : 'SLA unavailable'}</Chip><Chip tone="neutral">{incident.status}</Chip>{incident.isDemo && <Chip tone="warning">DEMO</Chip>}</div>
       <strong>{incident.incidentName} · {incident.zoneName}</strong>
       <p>{incident.title}</p>
@@ -61,7 +91,15 @@ export function CameraMonitoringPanel({ state }: { state: CameraMonitoringState 
       {incident.mitigatedAt && <p>Mitigated at {date(incident.mitigatedAt)}</p>}
       <p>Trigger camera: {incident.triggerCameraName ?? '—'} · Latest metric: {count(incident.metricValue)} {incident.thresholdUnit === 'PEOPLE' ? 'people' : incident.thresholdUnit}</p>
       <p className={s.muted}>{new Date(incident.updatedAt).toLocaleString()}</p>
+      {canDismiss && !ended(incident.status) && <Button variant="dangerGhost" aria-label={`Dismiss ${incident.incidentName} incident`} onClick={() => { setTarget(incident); setReason(''); setDismissError(''); }}>Dismiss incident</Button>}
     </article>)}
-    {feed?.hasMore && <p className={s.muted}>Showing the 20 newest open incidents. More results are available through the paginated feed.</p>}
-  </section>;
+    {feed?.hasMore && <p className={s.muted}>Showing the 20 newest incidents. More results are available through the paginated feed.</p>}
+  </section>
+  {target && <Dialog title="Dismiss incident?" busy={dismissing} onClose={closeDialog}>
+    <p className={s.dismissHelp}><strong>{target.incidentName}</strong> in {target.zoneName} will end as DISMISSED. The reason is required and will be audited.</p>
+    <label className={s.dismissField}>Dismiss reason<textarea aria-label="Dismiss reason" maxLength={2000} value={reason} disabled={dismissing} onChange={event => setReason(event.target.value)} /></label>
+    {dismissError && <p className={s.dismissError} role="alert">{dismissError}</p>}
+    <div className={s.dismissActions}><Button variant="secondary" data-autofocus disabled={dismissing} onClick={closeDialog}>Cancel</Button><Button variant="dangerGhost" disabled={dismissing} onClick={() => void submitDismiss()}>{dismissing ? 'Dismissing…' : 'Dismiss incident'}</Button></div>
+  </Dialog>}
+  </>;
 }

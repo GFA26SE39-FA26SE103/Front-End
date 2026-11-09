@@ -242,3 +242,10 @@
 .monitoring { display: grid; gap: 10px; font-size: 12px; overflow-wrap: anywhere; }
 .monitoring p { margin: 4px 0; line-height: 1.5; }
 .runtimeRule { border-top: 1px solid #dbe3ed; padding-top: 8px; margin-top: 8px; }
+.dismissHelp, .dismissError, .dismissSuccess { margin: 0; font-size: 11px; line-height: 1.5; }
+.dismissHelp { color: var(--color-text-muted); }
+.dismissError { color: var(--color-danger); }
+.dismissSuccess { color: var(--color-success); font-weight: 650; }
+.dismissField { display: flex; flex-direction: column; gap: 7px; color: var(--color-text-muted); font-size: 10px; font-weight: 650; }
+.dismissField textarea { min-height: 100px; padding: 10px; resize: vertical; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); color: var(--color-text); font: inherit; }
+.dismissActions { display: flex; justify-content: flex-end; gap: 9px; }
