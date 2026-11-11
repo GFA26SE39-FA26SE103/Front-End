@@ -1,362 +1,134 @@
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
-import {
-  getCameraPreview,
-  listCameraMappings,
-  removeCameraMapping,
-  saveCameraMapping,
-  type CameraRecord,
-  type CameraZoneMapping,
-  type MapPoint,
-  type ZoneRecord,
-} from '../api/cameras';
-import { clientToNormalized } from './floorPlanGeometry';
+import { useEffect, useState } from 'react';
+import { getCameraPreview, listCameraMappings, removeCameraMapping, saveCameraMapping,
+  type CameraRecord, type CameraZoneMapping, type ZoneRecord } from '../api/cameras';
+import { PolygonRoiEditor, type RoiDraft } from './PolygonRoiEditor';
+import { validateRoiPolygon } from './roiPolygonValidation';
+import { CheckoutCoverageEditor } from './CheckoutCoverageEditor';
 import { Button, CardHeader, Chip } from './ui';
 import s from './CameraCoverageEditor.module.css';
 
-type Tool = 'idle' | 'draw' | 'edit';
+export type CameraCoverageEditorProps = { camera: CameraRecord; zones: ZoneRecord[]; onClose: () => void;
+  onDirtyChange?: (dirty: boolean) => void; onBusyChange?: (busy: boolean) => void };
+const emptyDraft = (): RoiDraft => ({ points: [], complete: false, editing: false });
+const messageOf = (reason: unknown, fallback: string) => reason instanceof Error && reason.message ? reason.message : fallback;
 
-export type CameraCoverageEditorProps = {
-  camera: CameraRecord;
-  zones: ZoneRecord[];
-  onClose: () => void;
-};
+export function CameraCoverageEditor(props: CameraCoverageEditorProps) {
+  return <CoverageSession key={props.camera.cameraId} {...props} />;
+}
 
-const DEFAULT_COLOR = '#3B82F6';
-const HISTORY_LIMIT = 50;
-const MAX_POINTS = 1000;
+function CoverageSession({ camera, zones, onClose, onDirtyChange, onBusyChange }: CameraCoverageEditorProps) {
+  const [mode, setMode] = useState<'zone' | 'checkout'>('zone');
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { onDirtyChange?.(dirty); return () => onDirtyChange?.(false); }, [dirty, onDirtyChange]);
+  useEffect(() => { onBusyChange?.(busy); return () => onBusyChange?.(false); }, [busy, onBusyChange]);
+  const discard = () => !dirty || window.confirm('Discard unsaved ROI or counter changes?');
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+  const floorZones = zones.filter(z => z.floorId === camera.floorId);
+  return <section className={s.editor} aria-label={`Coverage configuration for ${camera.code}`}>
+    <div className={s.header}>
+      <CardHeader title="Camera coverage" subtitle={`${camera.code} · Draw the regions seen by this camera.`} />
+      <Button variant="secondary" disabled={busy} onClick={() => { if (discard()) onClose(); }}>Back to floor plan</Button>
+    </div>
+    <div className={s.modeBar} role="group" aria-label="ROI mode">
+      {(['zone', 'checkout'] as const).map(value => <Button key={value} variant={mode === value ? 'primary' : 'secondary'} aria-pressed={mode === value} disabled={busy}
+        onClick={() => { if (value !== mode && discard()) { setDirty(false); setMode(value); } }}>
+        {value === 'zone' ? 'Zone monitoring ROI' : 'Checkout counter ROI'}
+      </Button>)}
+    </div>
+    {mode === 'checkout' ? <CheckoutCoverageEditor camera={camera} zones={floorZones} onDirtyChange={setDirty} onBusyChange={setBusy} />
+      : <ZoneCoverageEditor camera={camera} zones={floorZones} onDirtyChange={setDirty} onBusyChange={setBusy} />}
+  </section>;
+}
 
-const clonePoints = (points: MapPoint[]) => points.map((point) => ({ ...point }));
-const pointsAttribute = (points: MapPoint[]) => points.map(({ x, y }) => `${x * 1000},${y * 1000}`).join(' ');
-
-export function CameraCoverageEditor({ camera, zones, onClose }: CameraCoverageEditorProps) {
-  const drawingLayerRef = useRef<SVGSVGElement>(null);
-  const moveDrag = useRef<{ pointerId: number; start: MapPoint; original: MapPoint[]; moved: boolean } | null>(null);
-  const resizeDrag = useRef<{ pointerId: number; index: number; original: MapPoint[] } | null>(null);
+function ZoneCoverageEditor({ camera, zones, onDirtyChange, onBusyChange }: Omit<CameraCoverageEditorProps, 'onClose'> & {
+  onDirtyChange: (dirty: boolean) => void; onBusyChange: (busy: boolean) => void;
+}) {
   const [previewUrl, setPreviewUrl] = useState<string>();
   const [previewLoading, setPreviewLoading] = useState(true);
   const [mappings, setMappings] = useState<CameraZoneMapping[]>([]);
-  const [mappingsLoading, setMappingsLoading] = useState(true);
-  const [targetZoneId, setTargetZoneId] = useState('');
-  const [activeZoneId, setActiveZoneId] = useState<string>();
-  const [points, setPoints] = useState<MapPoint[]>([]);
-  const [history, setHistory] = useState<MapPoint[][]>([]);
-  const [complete, setComplete] = useState(false);
-  const [tool, setTool] = useState<Tool>('idle');
-  const [saving, setSaving] = useState(false);
-  const [removingZoneId, setRemovingZoneId] = useState<string>();
+  const [loading, setLoading] = useState(true);
+  const [target, setTarget] = useState('');
+  const [active, setActive] = useState('');
+  const [draft, setDraft] = useState<RoiDraft>(emptyDraft);
+  const [editSession, setEditSession] = useState(0);
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-
+  useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
+  useEffect(() => { onBusyChange(busy); }, [busy, onBusyChange]);
   useEffect(() => {
-    const controller = new AbortController();
-    let objectUrl: string | undefined;
-
-    void getCameraPreview(camera.cameraId, controller.signal)
-      .then((blob) => {
-        if (controller.signal.aborted) return;
-        objectUrl = URL.createObjectURL(blob);
-        setPreviewUrl(objectUrl);
-      })
-      .catch((reason: unknown) => {
-        if (!controller.signal.aborted) setError(messageOf(reason, 'Could not load a camera preview.'));
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setPreviewLoading(false);
-      });
-
-    void listCameraMappings(camera.cameraId, controller.signal)
-      .then((loaded) => {
-        if (!controller.signal.aborted) setMappings(loaded);
-      })
-      .catch((reason: unknown) => {
-        if (!controller.signal.aborted) setError(messageOf(reason, 'Could not load camera coverage.'));
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setMappingsLoading(false);
-      });
-
-    return () => {
-      controller.abort();
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
+    const controller = new AbortController(); let objectUrl: string | undefined;
+    void getCameraPreview(camera.cameraId, controller.signal).then(blob => {
+      if (controller.signal.aborted) return; objectUrl = URL.createObjectURL(blob); setPreviewUrl(objectUrl);
+    }).catch(e => { if (!controller.signal.aborted) setError(messageOf(e, 'Could not load a camera preview.')); })
+      .finally(() => { if (!controller.signal.aborted) setPreviewLoading(false); });
+    void listCameraMappings(camera.cameraId, controller.signal).then(rows => { if (!controller.signal.aborted) setMappings(rows); })
+      .catch(e => { if (!controller.signal.aborted) setError(messageOf(e, 'Could not load camera coverage.')); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [camera.cameraId]);
-
-  const zoneById = (zoneId: string) => zones.find((zone) => zone.zoneId === zoneId);
-  const pointForClient = (clientX: number, clientY: number) => {
-    const layer = drawingLayerRef.current;
-    return layer ? clientToNormalized(layer.getBoundingClientRect(), clientX, clientY) : { x: 0, y: 0 };
+  const zoneById = (id: string) => zones.find(z => z.zoneId === id);
+  const confirmChange = () => !dirty || window.confirm('Discard unsaved ROI changes?');
+  const edit = (mapping: CameraZoneMapping) => {
+    if (!confirmChange()) return;
+    setTarget(mapping.zoneId); setActive(mapping.zoneId);
+    setEditSession(n => n + 1);
+    setDraft({ points: mapping.roiPolygon.map(p => ({ ...p })), complete: true, editing: true });
+    setDirty(false); setError(''); setMessage('');
   };
-  const remember = (snapshot: MapPoint[]) => {
-    setHistory((current) => [...current, clonePoints(snapshot)].slice(-HISTORY_LIMIT));
-  };
-  const clearFeedback = () => {
-    setError('');
-    setMessage('');
-  };
-
-  const startDrawing = () => {
-    if (!targetZoneId || !previewUrl) return;
-    setActiveZoneId(targetZoneId);
-    setPoints([]);
-    setHistory([]);
-    setComplete(false);
-    setTool('draw');
-    clearFeedback();
-  };
-
-  const editMapping = (mapping: CameraZoneMapping) => {
-    setTargetZoneId(mapping.zoneId);
-    setActiveZoneId(mapping.zoneId);
-    setPoints(clonePoints(mapping.roiPolygon));
-    setHistory([]);
-    setComplete(true);
-    setTool('edit');
-    clearFeedback();
-  };
-
-  const startMove = (event: PointerEvent<SVGPolygonElement>) => {
-    if (tool !== 'edit') return;
-    event.stopPropagation();
-    moveDrag.current = {
-      pointerId: event.pointerId,
-      start: pointForClient(event.clientX, event.clientY),
-      original: clonePoints(points),
-      moved: false,
-    };
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-  };
-
-  const continueMove = (event: PointerEvent<SVGPolygonElement>) => {
-    const drag = moveDrag.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    event.stopPropagation();
-    if (!drag.moved) {
-      remember(drag.original);
-      drag.moved = true;
-    }
-    const current = pointForClient(event.clientX, event.clientY);
-    const minX = Math.min(...drag.original.map((point) => point.x));
-    const maxX = Math.max(...drag.original.map((point) => point.x));
-    const minY = Math.min(...drag.original.map((point) => point.y));
-    const maxY = Math.max(...drag.original.map((point) => point.y));
-    const dx = Math.max(-minX, Math.min(1 - maxX, current.x - drag.start.x));
-    const dy = Math.max(-minY, Math.min(1 - maxY, current.y - drag.start.y));
-    setPoints(drag.original.map((point) => ({ x: point.x + dx, y: point.y + dy })));
-  };
-
-  const finishMove = (event: PointerEvent<SVGPolygonElement>) => {
-    if (moveDrag.current?.pointerId !== event.pointerId) return;
-    moveDrag.current = null;
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
-  };
-
-  const startResize = (event: PointerEvent<HTMLButtonElement>, index: number) => {
-    event.stopPropagation();
-    const original = clonePoints(points);
-    remember(original);
-    resizeDrag.current = { pointerId: event.pointerId, index, original };
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-  };
-
-  const continueResize = (event: PointerEvent<HTMLButtonElement>) => {
-    const drag = resizeDrag.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    event.stopPropagation();
-    const next = pointForClient(event.clientX, event.clientY);
-    setPoints(drag.original.map((point, index) => index === drag.index ? next : point));
-  };
-
-  const finishResize = (event: PointerEvent<HTMLButtonElement>) => {
-    if (resizeDrag.current?.pointerId !== event.pointerId) return;
-    resizeDrag.current = null;
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
-  };
-
-  const undo = () => {
-    if (history.length > 0) {
-      setPoints(clonePoints(history[history.length - 1]));
-      setHistory((current) => current.slice(0, -1));
-    } else if (tool === 'draw' && points.length > 0) {
-      setPoints((current) => current.slice(0, -1));
-      setComplete(false);
-    }
-    setError('');
-  };
-
   const save = async () => {
-    if (!activeZoneId || !complete || points.length < 3) {
-      setError('Close the ROI polygon before saving.');
-      return;
-    }
-    const zone = zoneById(activeZoneId);
-    setSaving(true);
-    clearFeedback();
+    const zoneId = active || target;
+    const issue = validateRoiPolygon(draft.points);
+    if (!zoneId || !draft.complete || issue) { setError(issue ?? 'Close the ROI polygon before saving.'); return; }
+    setBusy(true); setError(''); setMessage('');
     try {
-      const saved = await saveCameraMapping(camera.cameraId, activeZoneId, { roiPolygon: points, status: 'ACTIVE' });
-      setMappings((current) => [...current.filter((mapping) => mapping.zoneId !== saved.zoneId), saved]);
-      setTool('edit');
-      setMessage(`${zone?.name ?? 'Zone'} mapped.`);
-    } catch (reason) {
-      setError(messageOf(reason, 'Could not save the ROI.'));
-    } finally {
-      setSaving(false);
-    }
+      const saved = await saveCameraMapping(camera.cameraId, zoneId, { roiPolygon: draft.points, status: 'ACTIVE' });
+      setMappings(rows => [...rows.filter(m => m.zoneId !== saved.zoneId), saved]);
+      setActive(saved.zoneId); setDirty(false); setMessage(`${zoneById(zoneId)?.name ?? 'Zone'} mapped.`);
+    } catch (e) { setError(messageOf(e, 'Could not save the ROI.')); }
+    finally { setBusy(false); }
   };
-
   const remove = async (mapping: CameraZoneMapping) => {
-    const zone = zoneById(mapping.zoneId);
-    setRemovingZoneId(mapping.zoneId);
-    clearFeedback();
+    if (!confirmChange()) return;
+    setBusy(true); setError(''); setMessage('');
     try {
       await removeCameraMapping(camera.cameraId, mapping.zoneId);
-      setMappings((current) => current.filter((item) => item.zoneId !== mapping.zoneId));
-      if (activeZoneId === mapping.zoneId) {
-        setActiveZoneId(undefined);
-        setPoints([]);
-        setHistory([]);
-        setComplete(false);
-        setTool('idle');
-      }
-      setMessage(`${zone?.name ?? 'Zone'} mapping removed.`);
-    } catch (reason) {
-      setError(messageOf(reason, 'Could not remove the ROI.'));
-    } finally {
-      setRemovingZoneId(undefined);
-    }
+      setMappings(rows => rows.filter(m => m.zoneId !== mapping.zoneId));
+      if (active === mapping.zoneId) { setActive(''); setDraft(emptyDraft()); setDirty(false); }
+      setMessage(`${zoneById(mapping.zoneId)?.name ?? 'Zone'} mapping removed.`);
+    } catch (e) { setError(messageOf(e, 'Could not remove the ROI.')); }
+    finally { setBusy(false); }
   };
-
-  const activeColor = zoneById(activeZoneId ?? '')?.colorHex ?? DEFAULT_COLOR;
-  const canUndo = history.length > 0 || (tool === 'draw' && points.length > 0);
-
-  return (
-    <section className={s.editor} aria-label={`Coverage configuration for ${camera.code}`}>
-      <div className={s.header}>
-        <CardHeader title="Camera coverage" subtitle={`${camera.code} · Draw each zone as it appears in this camera.`} />
-        <Button variant="secondary" onClick={onClose}>Back to floor plan</Button>
-      </div>
-
-      <div className={s.layout}>
-        <div className={s.previewColumn}>
-          <div className={s.previewFrame}>
-            {previewUrl ? (
-              <img className={s.preview} src={previewUrl} alt={`Camera preview for ${camera.code}`} />
-            ) : (
-              <div className={s.previewState}>{previewLoading ? 'Loading camera preview…' : 'Camera preview unavailable.'}</div>
-            )}
-            {previewUrl && (
-              <svg
-                ref={drawingLayerRef}
-                className={s.drawingLayer}
-                data-testid="roi-drawing-layer"
-                viewBox="0 0 1000 1000"
-                preserveAspectRatio="none"
-                aria-label="ROI drawing area"
-                onClick={(event) => {
-                  if (tool !== 'draw' || complete) return;
-                  if (points.length >= MAX_POINTS) {
-                    setError(`An ROI can contain at most ${MAX_POINTS} points.`);
-                    return;
-                  }
-                  setPoints((current) => [...current, pointForClient(event.clientX, event.clientY)]);
-                  setError('');
-                }}
-              >
-                {mappings.filter((mapping) => mapping.zoneId !== activeZoneId).map((mapping) => {
-                  const zone = zoneById(mapping.zoneId);
-                  const color = zone?.colorHex ?? DEFAULT_COLOR;
-                  return <polygon key={mapping.cameraZoneId} points={pointsAttribute(mapping.roiPolygon)} fill={color} stroke={color} className={s.savedRoi} />;
-                })}
-                {points.length >= 2 && (
-                  <polygon
-                    points={pointsAttribute(points)}
-                    fill={activeColor}
-                    stroke={activeColor}
-                    className={`${s.activeRoi} ${tool === 'edit' ? s.movable : ''}`}
-                    onPointerDown={startMove}
-                    onPointerMove={continueMove}
-                    onPointerUp={finishMove}
-                    onPointerCancel={() => { moveDrag.current = null; }}
-                    onLostPointerCapture={() => { moveDrag.current = null; }}
-                  />
-                )}
-              </svg>
-            )}
-            {previewUrl && points.map((point, index) => tool === 'edit' ? (
-              <button
-                key={`roi-${activeZoneId}-${index}`}
-                type="button"
-                className={s.resizeHandle}
-                style={{ left: `${point.x * 100}%`, top: `${point.y * 100}%`, '--roi-color': activeColor } as CSSProperties}
-                aria-label={`Resize ROI point ${index + 1}`}
-                onPointerDown={(event) => startResize(event, index)}
-                onPointerMove={continueResize}
-                onPointerUp={finishResize}
-                onPointerCancel={() => { resizeDrag.current = null; }}
-                onLostPointerCapture={() => { resizeDrag.current = null; }}
-              />
-            ) : (
-              <span
-                key={`roi-draft-${index}`}
-                className={s.point}
-                style={{ left: `${point.x * 100}%`, top: `${point.y * 100}%`, backgroundColor: activeColor }}
-                aria-hidden="true"
-              />
-            ))}
-          </div>
-          <p className={s.hint}>Draw on this camera image. The ROI is linked to a floor zone; it is not projected from the floor map.</p>
-        </div>
-
-        <aside className={s.controls}>
-          <label className={s.field}>Target zone
-            <select value={targetZoneId} onChange={(event) => setTargetZoneId(event.target.value)} disabled={!previewUrl || saving}>
-              <option value="">Select a zone</option>
-              {zones.map((zone) => <option key={zone.zoneId} value={zone.zoneId}>{zone.name} ({zone.code})</option>)}
-            </select>
-          </label>
-          <Button block disabled={!targetZoneId || !previewUrl || saving} onClick={startDrawing}>Draw polygon ROI</Button>
-
-          {tool === 'draw' && (
-            <Button variant="secondary" block disabled={points.length < 3 || complete} onClick={() => setComplete(true)}>Close polygon</Button>
-          )}
-          {(tool === 'draw' || tool === 'edit') && (
-            <div className={s.editActions}>
-              <Button variant="secondary" disabled={!canUndo || saving} onClick={undo}>Undo</Button>
-              <Button disabled={!complete || points.length < 3 || saving} onClick={() => void save()}>{saving ? 'Saving…' : 'Save ROI'}</Button>
-            </div>
-          )}
-
-          <div className={s.mappingHeader}>
-            <strong>Mapped zones</strong>
-            <Chip tone="neutral">{mappings.length}</Chip>
-          </div>
-          {mappingsLoading ? <p className={s.muted}>Loading mappings…</p> : mappings.length === 0 ? (
-            <p className={s.muted}>No zones are mapped to this camera yet.</p>
-          ) : (
-            <ul className={s.mappingList}>
-              {mappings.map((mapping) => {
-                const zone = zoneById(mapping.zoneId);
-                const name = zone?.name ?? 'Unknown zone';
-                return (
-                  <li key={mapping.cameraZoneId}>
-                    <span className={s.zoneDot} style={{ backgroundColor: zone?.colorHex ?? DEFAULT_COLOR }} aria-hidden="true" />
-                    <span><strong>{name}</strong><small>{mapping.roiPolygon.length} points</small></span>
-                    {mapping.status === 'ACTIVE' && <a href={`/admin/ai-config?zoneId=${encodeURIComponent(mapping.zoneId)}`}>Configure monitoring for {name}</a>}
-                    <button type="button" onClick={() => editMapping(mapping)} disabled={!previewUrl || saving}>Edit ROI for {name}</button>
-                    <button type="button" className={s.remove} onClick={() => void remove(mapping)} disabled={removingZoneId === mapping.zoneId || saving}>Remove ROI for {name}</button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-
-          {error && <p className={s.error} role="alert">{error}</p>}
-          {message && <p className={s.success} role="status">{message}</p>}
-        </aside>
-      </div>
-    </section>
-  );
-}
-
-function messageOf(reason: unknown, fallback: string) {
-  return reason instanceof Error && reason.message ? reason.message : fallback;
+  return <div className={s.layout}>
+    <PolygonRoiEditor key={`${active || target}:${editSession}`} previewUrl={previewUrl} previewLoading={previewLoading} cameraCode={camera.code}
+      draft={draft} disabled={busy || loading} canDraw={Boolean(target)} color={zoneById(active || target)?.colorHex ?? '#3B82F6'}
+      onChange={next => { setActive(target); setDraft(next); setDirty(true); setError(''); setMessage(''); }}
+      backgroundRois={mappings.filter(m => m.zoneId !== active).map(m => ({ id: m.cameraZoneId, points: m.roiPolygon, color: zoneById(m.zoneId)?.colorHex ?? '#3B82F6' }))} />
+    <aside className={s.controls}>
+      <label className={s.field}>Target zone<select value={target} disabled={!previewUrl || busy || loading} onChange={e => {
+        if (!confirmChange()) return;
+        setTarget(e.target.value); setActive(''); setDraft(emptyDraft()); setDirty(false); setError(''); setMessage('');
+      }}><option value="">Select a zone</option>{zones.map(z => <option key={z.zoneId} value={z.zoneId}>{z.name} ({z.code})</option>)}</select></label>
+      {(active || draft.points.length > 0) && <Button disabled={!draft.complete || draft.points.length < 3 || busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save ROI'}</Button>}
+      <p className={s.hint}>Map a floor zone to its visible region in this camera. This does not project floor-map geometry.</p>
+      <div className={s.mappingHeader}><strong>Mapped zones</strong><Chip tone="neutral">{mappings.length}</Chip></div>
+      {loading ? <p className={s.muted}>Loading mappings…</p> : mappings.length === 0 ? <p className={s.muted}>No zones are mapped to this camera yet.</p>
+        : <ul className={s.mappingList}>{mappings.map(mapping => {
+          const zone = zoneById(mapping.zoneId), name = zone?.name ?? 'Unknown zone';
+          return <li key={mapping.cameraZoneId}>
+            <span className={s.zoneDot} style={{ backgroundColor: zone?.colorHex ?? '#3B82F6' }} aria-hidden="true" /><span><strong>{name}</strong><small>{mapping.roiPolygon.length} points</small></span>
+            {mapping.status === 'ACTIVE' && <a href={`/admin/ai-config?zoneId=${encodeURIComponent(mapping.zoneId)}`} onClick={e => { if (!confirmChange()) e.preventDefault(); }}>Configure monitoring for {name}</a>}
+            <button type="button" disabled={!previewUrl || busy} onClick={() => edit(mapping)}>Edit ROI for {name}</button>
+            <button type="button" className={s.remove} disabled={busy} onClick={() => void remove(mapping)}>Remove ROI for {name}</button>
+          </li>;
+        })}</ul>}
+      {error && <p className={s.error} role="alert">{error}</p>}{message && <p className={s.success} role="status">{message}</p>}
+    </aside>
+  </div>;
 }

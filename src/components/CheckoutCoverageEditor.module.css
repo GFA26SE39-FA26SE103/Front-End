@@ -1,0 +1,27 @@
+.editor { display: flex; flex-direction: column; gap: 14px; min-width: 0; color: var(--color-text); }
+.header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.header h2 { margin: 0 0 6px; font-size: 16px; }
+.header p, .help { color: var(--color-text-muted); font-size: 12px; line-height: 1.6; }
+.notice { padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-warning-tint); color: var(--color-text); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.selectors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.layout { display: grid; grid-template-columns: minmax(240px, 320px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.panel, .roiPanel { display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 16px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface); }
+.panel h3, .roiPanel h3 { margin: 0; font-size: 13px; }
+.panel a { color: var(--color-primary); line-height: 1.5; }
+.fields { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 0; margin: 0; border: 0; }
+.field { display: flex; flex-direction: column; gap: 6px; font-weight: 600; font-size: 12px; }
+.field input, .field select { width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 7px; background: var(--color-surface); color: var(--color-text); }
+.check { display: flex; align-items: center; gap: 8px; min-height: 30px; font-size: 12px; }
+.check input { width: 16px; height: 16px; accent-color: var(--color-primary); }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 12px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 12px; height: 12px; border-radius: 3px; }
+.actions button[aria-pressed='true'] { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+.sources { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--color-border); }
+.sources ul { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.error { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border-radius: 7px; color: var(--color-danger); background: var(--color-danger-tint); line-height: 1.6; overflow-wrap: anywhere; }
+.success { color: var(--color-success); line-height: 1.5; }
+.editor :disabled { cursor: not-allowed; opacity: .65; }
+@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 540px) { .selectors { grid-template-columns: minmax(0, 1fr); } .panel, .roiPanel { padding: 12px; } .header > button { width: 100%; } }

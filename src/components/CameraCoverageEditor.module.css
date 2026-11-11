@@ -6,6 +6,24 @@
   gap: 16px;
 }
 
+.modeBar,
+.polygonTools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.polygonTools { margin-top: 12px; }
+.roiLabel {
+  fill: white;
+  stroke: #111827;
+  stroke-width: 3px;
+  paint-order: stroke;
+  font-size: 25px;
+  pointer-events: none;
+}
+
 .header,
 .layout,
 .editActions,
