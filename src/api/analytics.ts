@@ -18,6 +18,7 @@ export type AnalyticsSummary = {
 export type AnalyticsOverview = { period: AnalyticsPeriod; summary: AnalyticsSummary };
 export type AnalyticsTrends = { period: AnalyticsPeriod; days: { date: string; summary: AnalyticsSummary }[] };
 export type AnalyticsZones = { period: AnalyticsPeriod; zones: { zoneId: string; zoneName: string; summary: AnalyticsSummary }[] };
+export type AnalyticsExportFormat = 'csv' | 'xlsx' | 'pdf';
 
 function read<T>(path: string, query: AnalyticsQuery, signal?: AbortSignal) {
   const params = new URLSearchParams();
@@ -30,3 +31,14 @@ function read<T>(path: string, query: AnalyticsQuery, signal?: AbortSignal) {
 export const getAnalyticsOverview = (query: AnalyticsQuery = {}, signal?: AbortSignal) => read<AnalyticsOverview>('overview', query, signal);
 export const getAnalyticsTrends = (query: AnalyticsQuery = {}, signal?: AbortSignal) => read<AnalyticsTrends>('trends', query, signal);
 export const getAnalyticsZones = (query: AnalyticsQuery = {}, signal?: AbortSignal) => read<AnalyticsZones>('zones', query, signal);
+
+export async function exportAnalyticsReport(query: AnalyticsQuery, format: AnalyticsExportFormat): Promise<{ blob: Blob; fileName: string }> {
+  const params = new URLSearchParams({ format });
+  if (query.from) params.set('from', query.from);
+  if (query.to) params.set('to', query.to);
+  if (query.zoneId) params.set('zoneId', query.zoneId);
+  const blob = await apiFetch<Blob>(`/api/manager/analytics/export?${params}`, { responseType: 'blob', timeoutMs: 60000 });
+  const from = query.from ?? 'start';
+  const to = query.to ?? 'today';
+  return { blob, fileName: `operational-analytics-${from}-to-${to}.${format}` };
+}

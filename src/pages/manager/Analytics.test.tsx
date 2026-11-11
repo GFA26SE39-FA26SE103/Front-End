@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { saveSession } from '../../auth/session';
 import type { AnalyticsPeriod, AnalyticsSummary } from '../../api/analytics';
 import Analytics from './Analytics';
@@ -21,11 +21,20 @@ const period: AnalyticsPeriod = { from: '2026-10-31', to: '2026-11-06', timeZone
 let fail: string;
 let stats: AnalyticsSummary;
 let calls: { url: URL; headers: Headers; signal: AbortSignal | null | undefined }[];
+let downloaded: { url: string; name: string }[];
 
 beforeEach(() => {
   fail = '';
   stats = summary();
   calls = [];
+  downloaded = [];
+  vi.stubGlobal('URL', class extends globalThis.URL {
+    static createObjectURL = vi.fn(() => 'blob:analytics-report');
+    static revokeObjectURL = vi.fn();
+  });
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+    downloaded.push({ url: this.href, name: this.download });
+  });
   saveSession({ accessToken: 'manager-token', expiresAt: '2099-01-01T00:00:00Z', user: { userId: 'manager', email: 'manager@test.example', fullName: 'Manager', roleId: 'mgr', role: 'MANAGER', status: 'ACTIVE' } }, true);
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = new URL(String(input));
@@ -38,8 +47,14 @@ beforeEach(() => {
       { zoneId: 'checkout', zoneName: 'Checkout', summary: stats },
       { zoneId: 'old-zone', zoneName: 'Old zone (inactive)', summary: stats },
     ].filter(zone => !metadata.zoneId || zone.zoneId === metadata.zoneId) });
+    if (url.pathname.endsWith('/export')) return new Response(new Blob(['report']), { headers: { 'Content-Type': 'application/octet-stream' } });
     return json({}, 404);
   });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 function show() { return render(<MemoryRouter><Analytics /></MemoryRouter>); }
@@ -89,6 +104,33 @@ describe('Manager analytics', () => {
     fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-01-01' } });
     fireEvent.click(screen.getByRole('button', { name: 'Apply filters' }));
     expect(calls).toHaveLength(3);
+  });
+
+  it('exports the applied period and zone in the selected format without replacing dashboard data', async () => {
+    show(); await screen.findByRole('heading', { name: 'Daily activity' });
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-11-01' } });
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-11-04' } });
+    fireEvent.change(screen.getByLabelText('Zone'), { target: { value: 'checkout' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply filters' }));
+    await waitFor(() => expect(calls).toHaveLength(6));
+    fireEvent.change(screen.getByLabelText('Export format'), { target: { value: 'pdf' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Export report' }));
+    await waitFor(() => expect(downloaded).toEqual([{ url: 'blob:analytics-report', name: 'operational-analytics-2026-11-01-to-2026-11-04.pdf' }]));
+    const request = calls.at(-1)!;
+    expect(request.url.pathname).toBe('/api/manager/analytics/export');
+    expect(Object.fromEntries(request.url.searchParams)).toEqual({ format: 'pdf', from: '2026-11-01', to: '2026-11-04', zoneId: 'checkout' });
+    expect(request.headers.get('Authorization')).toBe('Bearer manager-token');
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:analytics-report');
+    expect(screen.getByRole('heading', { name: 'Daily activity' })).toBeInTheDocument();
+  });
+
+  it('shows an export-only error while keeping the loaded dashboard visible', async () => {
+    show(); await screen.findByRole('heading', { name: 'Daily activity' });
+    fail = '/export';
+    fireEvent.click(screen.getByRole('button', { name: 'Export report' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not export the report');
+    expect(screen.getByRole('heading', { name: 'Daily activity' })).toBeInTheDocument();
+    expect(downloaded).toHaveLength(0);
   });
 
   it('hides earlier figures when any refresh endpoint fails and restores them only after retry succeeds', async () => {

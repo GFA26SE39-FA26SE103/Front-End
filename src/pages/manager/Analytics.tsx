@@ -2,7 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import {
-  getAnalyticsOverview, getAnalyticsTrends, getAnalyticsZones,
+  exportAnalyticsReport, getAnalyticsOverview, getAnalyticsTrends, getAnalyticsZones,
+  type AnalyticsExportFormat,
   type AnalyticsDuration, type AnalyticsOverview, type AnalyticsQuery, type AnalyticsSla,
   type AnalyticsTrends, type AnalyticsZones,
 } from '../../api/analytics';
@@ -55,6 +56,9 @@ export default function Analytics() {
   const [result, setResult] = useState<Result | null>(null);
   const [validation, setValidation] = useState('');
   const [metric, setMetric] = useState<Metric>('events');
+  const [exportFormat, setExportFormat] = useState<AnalyticsExportFormat>('xlsx');
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
   const key = JSON.stringify([query, revision]);
   const loading = result?.key !== key;
   const data = loading ? undefined : result?.data;
@@ -90,6 +94,32 @@ export default function Analytics() {
     setRevision(value => value + 1);
   }
 
+  async function downloadReport() {
+    if (!period || exporting) return;
+    setExporting(true);
+    setExportError('');
+    try {
+      const { blob, fileName } = await exportAnalyticsReport({
+        from: period.from,
+        to: period.to,
+        ...(period.zoneId ? { zoneId: period.zoneId } : {}),
+      }, exportFormat);
+      const url = URL.createObjectURL(blob);
+      try {
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = fileName;
+        anchor.click();
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    } catch (reason: unknown) {
+      setExportError(errorMessage(reason));
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const summary = data?.overview.summary;
   const period = data?.overview.period;
   const days = data?.trends.days ?? [];
@@ -121,8 +151,15 @@ export default function Analytics() {
       {data && summary && period && <>
         <div className={s.context}>
           <p><strong>{period.from} — {period.to}</strong><span> · {selectedZone}</span></p>
-          <span>Updated {new Date(period.generatedAt).toLocaleString('en-GB', { timeZone: 'UTC' })} UTC</span>
+          <div className={s.contextActions}>
+            <span>Updated {new Date(period.generatedAt).toLocaleString('en-GB', { timeZone: 'UTC' })} UTC</span>
+            <label className={s.exportFormat}>Export format<select aria-label="Export format" value={exportFormat} disabled={exporting} onChange={event => setExportFormat(event.target.value as AnalyticsExportFormat)}>
+              <option value="xlsx">Excel (.xlsx)</option><option value="pdf">PDF</option><option value="csv">CSV</option>
+            </select></label>
+            <Button type="button" disabled={loading || exporting} onClick={() => void downloadReport()}>{exporting ? 'Exporting…' : 'Export report'}</Button>
+          </div>
         </div>
+        {exportError && <p className={s.error} role="alert">Could not export the report. {exportError}</p>}
         {empty && <p className={s.emptyNotice} role="status">No records in this period. Try a different date range or zone. Missing averages and SLA rates appear as —.</p>}
         <div className={s.kpis}>
           <Card className={s.kpi}><p>Events detected</p><strong><Link className={s.eventLink} to={`/manager/events?${eventFilters}`} aria-label={`View ${summary.events.total} events in this period`}>{number(summary.events.total)}</Link></strong><span>{number(summary.events.active)} currently active · {number(summary.events.latestCritical)} latest critical</span></Card>
