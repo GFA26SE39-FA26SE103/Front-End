@@ -9,6 +9,8 @@ export type AutomaticTaskPolicy = {
   taskTypeCode: string | null;
   title: string | null;
   instructions: string | null;
+  /** WARNING only: OPERATOR (default) or MANAGER. */
+  targetRoleCode?: string | null;
 };
 export type ResponsePolicy = {
   policyId: string;
@@ -24,7 +26,7 @@ export type ResponsePolicy = {
 export type ResponsePolicySaveRequest = {
   isEnabled: boolean;
   expectedVersion: number | null;
-  action: { isEnabled: boolean; taskTypeCode: string | null; title: string | null; instructions: string | null };
+  action: { isEnabled: boolean; taskTypeCode: string | null; title: string | null; instructions: string | null; targetRoleCode?: string | null };
 };
 
 const id = encodeURIComponent;

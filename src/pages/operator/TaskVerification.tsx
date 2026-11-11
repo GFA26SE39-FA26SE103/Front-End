@@ -41,6 +41,7 @@ function Submission({ submission }: { submission: TaskSubmission }) {
     <p className={s.instructions}>{submission.note}</p>
     {submission.photos.length > 0 ? <div className={s.photos}>{submission.photos.map(photo => <EvidenceThumb key={photo.evidenceId} photo={photo} />)}</div>
       : <p className={s.muted}>No photos attached.</p>}
+    {submission.missingPhotoReason && <p className={s.info}>No photo · reason: {submission.missingPhotoReason}</p>}
     {submission.rejectReason && <p className={s.error}>Rejection reason: {submission.rejectReason}</p>}
   </div>;
 }
@@ -73,6 +74,9 @@ export function TaskVerification({ task, canReview, onDecided }: { task: Operati
   const has = (type: EvidencePhoto['evidenceType']) => !!pending?.photos.some(p => p.evidenceType === type);
   const missing = [evidence.requiresBeforePhoto && !has('BEFORE_PHOTO') && 'before photo', evidence.requiresAfterPhoto && !has('AFTER_PHOTO') && 'after photo'].filter(Boolean);
   const priorRejections = pending ? evidence.submissions.filter(x => x.reviewStatus === 'REJECTED' && x.submittedByUserId === pending.submittedByUserId).length : 0;
+  // BR-36: rejection 2 re-dispatches automatically; a rejected replacement goes back to the Operator.
+  const isReplacement = !!pending && evidence.submissions.some(x => x.submittedByUserId !== pending.submittedByUserId);
+  const mode = evidence.verificationMode ?? task.verificationMode;
 
   async function decide(action: 'verify' | 'reject') {
     if (action === 'reject' && !reason.trim()) return setError('Write why the work is rejected so the Staff member can fix it.');
@@ -80,9 +84,11 @@ export function TaskVerification({ task, canReview, onDecided }: { task: Operati
     try {
       const result = action === 'verify' ? await verifyTask(task.taskId, task.updatedAt) : await rejectTask(task.taskId, reason.trim(), task.updatedAt);
       setEvidence(result.evidence); setRejecting(false); setReason('');
-      onDecided(action === 'verify' ? 'Task verified.' : result.status === 'OFFERED'
-        ? 'Rejected twice: the task now needs a different Staff member. Assign it below.'
-        : 'Task returned to the Staff member for rework.');
+      onDecided(action === 'verify' ? 'Task verified.' : result.status !== 'OFFERED'
+        ? 'Task returned to the Staff member for rework.'
+        : isReplacement
+          ? 'The replacement Staff member\'s work was rejected. Automatic dispatch stopped; assign a different Staff member below.'
+          : 'Rejected twice: the task is being offered to a different Staff member with the same specialty.');
     } catch (cause) {
       setError(cause instanceof ApiError && cause.code === 'TASK_CHANGED' ? 'This task changed while you were reviewing. Refresh it and review again.' : problem(cause));
     } finally {
@@ -97,11 +103,15 @@ export function TaskVerification({ task, canReview, onDecided }: { task: Operati
       <div className={s.badges}>
         {evidence.requiresBeforePhoto && <Chip tone={has('BEFORE_PHOTO') ? 'success' : 'danger'}>Before photo required</Chip>}
         {evidence.requiresAfterPhoto && <Chip tone={has('AFTER_PHOTO') ? 'success' : 'danger'}>After photo required</Chip>}
-        {!evidence.requiresBeforePhoto && !evidence.requiresAfterPhoto && <Chip tone="neutral">Completion note required · photos optional</Chip>}
+        {mode && <Chip tone={mode === 'AUTO' ? 'primary' : 'purple'}>{mode} verification</Chip>}
+        {!evidence.requiresBeforePhoto && !evidence.requiresAfterPhoto && <Chip tone="neutral">{task.origin === 'INCIDENT' ? 'After photo or completion note · before photo optional' : 'Completion note required · photos optional'}</Chip>}
       </div>
       <Submission submission={pending} />
       {missing.length > 0 && <p className={s.error}>Missing {missing.join(' and ')}. Reject the submission so the Staff member can add it.</p>}
-      {priorRejections > 0 && <p className={s.info}>This Staff member's work was rejected {priorRejections === 1 ? 'once' : `${priorRejections} times`} before. Another rejection sends the task to a different Staff member.</p>}
+      {mode === 'AUTO' && <p className={s.info}>This task is AUTO-eligible but reached manual review because its metrics or checklist could not confirm completion.</p>}
+      {isReplacement
+        ? <p className={s.info}>This is the replacement Staff member's work. Rejecting it stops automatic dispatch and returns the task to you for manual assignment.</p>
+        : priorRejections > 0 && <p className={s.info}>This Staff member's work was rejected {priorRejections === 1 ? 'once' : `${priorRejections} times`} before. Another rejection sends the task to a different Staff member automatically.</p>}
       {canReview ? <>
         {rejecting && <label className={s.form}>Rejection reason (required)<textarea rows={3} maxLength={2000} value={reason} disabled={busy} onChange={event => setReason(event.target.value)} placeholder="What still needs to be done?" /></label>}
         {error && <p className={s.error} role="alert">{error}</p>}

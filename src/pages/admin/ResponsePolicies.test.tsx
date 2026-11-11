@@ -85,7 +85,7 @@ describe('Response policy administration', () => {
     expect(await screen.findByText('Critical task dispatch saved.')).toBeInTheDocument();
     await waitFor(() => expect(requests.find((request) => request.method === 'PUT')).toEqual({
       path: `/api/monitoring-rules/${ruleId}/response-policies/CRITICAL`, method: 'PUT',
-      body: { isEnabled: true, expectedVersion: 1, action: { isEnabled: true, taskTypeCode: 'TT-04', title: 'Urgent congestion response', instructions: 'Open a safe route and assist customers.' } },
+      body: { isEnabled: true, expectedVersion: 1, action: { isEnabled: true, taskTypeCode: 'TT-04', title: 'Urgent congestion response', instructions: 'Open a safe route and assist customers.', targetRoleCode: null } },
     }));
   });
 
@@ -111,8 +111,18 @@ describe('Response policy administration', () => {
     await screen.findByText('Critical task dispatch saved.');
     const puts = requests.filter(r => r.method === 'PUT');
     expect(puts[0].body).toEqual({ isEnabled: true, expectedVersion: 1,
-      action: { isEnabled: true, taskTypeCode: null, title: null, instructions: null } });
+      action: { isEnabled: true, taskTypeCode: null, title: null, instructions: null, targetRoleCode: 'OPERATOR' } });
     expect(puts[1].body).toMatchObject({ expectedVersion: 2 });
+  });
+
+  it('lets the warning notification target Managers', async () => {
+    show();
+    const warningGroup = await screen.findByRole('group', { name: 'WARNING policy' });
+    fireEvent.change(within(warningGroup).getByLabelText('Warning recipient'), { target: { value: 'MANAGER' } });
+    expect(within(warningGroup).getByText(/Notify the Manager/)).toBeInTheDocument();
+    fireEvent.click(within(warningGroup).getByRole('button', { name: 'Save warning notification' }));
+    await screen.findByText('Warning notification saved.');
+    expect(requests.find(r => r.method === 'PUT')?.body).toMatchObject({ action: { targetRoleCode: 'MANAGER' } });
   });
 
   it('validates critical TaskType before sending a request', async () => {

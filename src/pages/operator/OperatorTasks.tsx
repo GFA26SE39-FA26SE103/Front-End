@@ -18,7 +18,26 @@ const workload = (count: number) => count === 0 ? 'No active tasks' : `${count} 
 function Status({ task }: { task: OperationalTask }) {
   return <Chip tone={task.status === 'VERIFIED' ? 'success' : task.status === 'IN_PROGRESS' ? 'primary' : task.status === 'SUBMITTED' ? 'purple' : 'neutral'}>{labels[task.status] ?? task.status}</Chip>;
 }
-function Priority({ value }: { value: string }) { return <Chip tone={value === 'CRITICAL' ? 'danger' : value === 'WARNING' ? 'warning' : 'neutral'}>{value}</Chip>; }
+function Priority({ value }: { value: string }) { return <Chip tone={value === 'CRITICAL' ? 'danger' : value === 'HIGH' || value === 'WARNING' ? 'warning' : 'neutral'}>{value}</Chip>; }
+/** L4: how completion is verified. AUTO falls back to MANUAL when metrics/checklist are missing or invalid. */
+function Verification({ task }: { task: Pick<OperationalTask, 'verificationMode'> }) {
+  if (!task.verificationMode) return null;
+  return task.verificationMode === 'AUTO' ? <Chip tone="primary">AUTO verification</Chip> : <Chip tone="purple">MANUAL verification</Chip>;
+}
+const endReason: Record<string, string> = {
+  REJECTED_TWICE: 'Re-dispatched after 2 rejections',
+  REJECTED_AFTER_REASSIGNMENT: 'Replacement rejected · Operator must assign',
+};
+function AssignmentFlags({ task }: { task: OperationalTask }) {
+  return <>
+    {!!task.rejectionCount && <Chip tone="danger">Rejected {task.rejectionCount}×</Chip>}
+    {task.lastAssignmentEndReason && endReason[task.lastAssignmentEndReason] && <Chip tone="warning">{endReason[task.lastAssignmentEndReason]}</Chip>}
+    {task.pendingManualStaffName && <Chip tone="neutral">Waiting for {task.pendingManualStaffName}</Chip>}
+  </>;
+}
+const assignmentMethod = (task: OperationalTask) => task.assigneeUserId
+  ? task.assignmentType === 'MANUAL' ? 'Operator request accepted by Staff' : 'Staff accepted offer'
+  : task.pendingManualStaffName ? `Operator request sent · waiting for ${task.pendingManualStaffName} to accept` : 'Awaiting acceptance';
 const offerTone = (offer: TaskOffer) => offer.status === 'ACCEPTED' ? 'success' : offer.status === 'PENDING' ? 'primary' : offer.status === 'DECLINED' ? 'warning' : 'neutral';
 
 export default function OperatorTasks() {
@@ -45,7 +64,7 @@ export default function OperatorTasks() {
           <tbody>{tasks.map(task => <tr key={task.taskId}>
             <td><Link className={s.taskLink} to={`/operator/tasks/${encodeURIComponent(task.taskId)}`}>{task.title}</Link><p className={s.muted}>{source(task.origin)} · {task.sourceCode}</p>{task.eventClearedAt && <p className={s.muted}>Source event cleared</p>}</td>
             <td>{task.zoneName}<p className={s.muted}>{task.cameraCode ?? '—'}</p></td>
-            <td><Priority value={task.priority} /></td><td><div className={s.badges}><Status task={task} />{task.needsAssignment && <Chip tone="warning">Needs assignment</Chip>}</div></td>
+            <td><Priority value={task.priority} /></td><td><div className={s.badges}><Status task={task} /><Verification task={task} />{task.needsAssignment && <Chip tone="warning">Needs assignment</Chip>}<AssignmentFlags task={task} /></div></td>
             <td>{task.assigneeName ?? 'Unassigned'}</td><td>{date(task.plannedStartAt)}</td>
           </tr>)}</tbody>
         </table></div>}
@@ -74,7 +93,10 @@ function TaskDetail({ taskId }: { taskId: string }) {
       {!task && !error && <p className={s.message} role="status">Loading task…</p>}
       <div className={s.heading}><div><h2>{task?.title ?? 'Task unavailable'}</h2><p className={s.muted}>Task ID: {taskId}</p></div><Button variant="secondary" onClick={refresh}>Refresh task</Button></div>
       {task && <>
-        <div className={s.badges}><Priority value={task.priority} /><Status task={task} />{task.needsAssignment && <Chip tone="warning">Needs assignment</Chip>}</div>
+        <div className={s.badges}><Priority value={task.priority} /><Status task={task} /><Verification task={task} />{task.needsAssignment && <Chip tone="warning">Needs assignment</Chip>}<AssignmentFlags task={task} /></div>
+        {task.needsAssignment && <p className={s.error}>Operator exception: {task.lastAssignmentEndReason === 'REJECTED_AFTER_REASSIGNMENT'
+          ? 'the replacement Staff member\'s work was rejected, so automatic dispatch stopped.'
+          : 'every eligible Staff member in the dispatch rings declined or let the offer expire.'} Assign the task manually; it is assigned only after the Staff member accepts.</p>}
         {task.eventClearedAt && <p className={s.info}>The source event cleared at {date(task.eventClearedAt)}. Work already accepted remains with its assignee until the task workflow is completed.</p>}
         <div className={s.detail}><div className={s.stack}>
           <Card><CardHeader title="Work instructions" /><p className={s.instructions}>{task.instructions || 'No additional instructions.'}</p><dl className={s.kv}>
@@ -91,12 +113,14 @@ function TaskDetail({ taskId }: { taskId: string }) {
           </dl>{!task.slaPolicyId && <p className={s.info}>No SLA policy snapshot is available. The UI does not invent a deadline.</p>}</Card>
           <TaskVerification task={task} canReview={canAssign} onDecided={message => { setNotice(message); refresh(); }} />
         </div><div className={s.stack}><Card><CardHeader title="Assignment" />
-          <dl className={s.kv}><dt>Staff</dt><dd>{task.assigneeName ?? 'Unassigned'}</dd><dt>Method</dt><dd>{task.assigneeUserId ? task.assignmentType === 'MANUAL' ? 'Operator assigned' : 'Staff accepted offer' : 'Awaiting acceptance'}</dd><dt>Updated</dt><dd>{date(task.updatedAt)}</dd></dl>
+          <dl className={s.kv}><dt>Staff</dt><dd>{task.assigneeName ?? 'Unassigned'}</dd><dt>Method</dt><dd>{assignmentMethod(task)}</dd><dt>Verification</dt><dd>{task.verificationMode ? `${task.verificationMode}${task.verificationMethod ? ` · ${task.verificationMethod.replaceAll('_', ' ').toLowerCase()}` : ''}` : '—'}</dd><dt>Updated</dt><dd>{date(task.updatedAt)}</dd></dl>
           {canAssign && ['OFFERED', 'ACCEPTED'].includes(task.status) ? <Button disabled={!!error} onClick={() => setAssigning(true)}>{task.assigneeUserId ? 'Reassign task' : 'Assign task'}</Button>
             : <p className={s.muted}>{!canAssign ? 'Assignment actions require an Operator account.' : 'Assignment is available for offered or accepted tasks before work starts.'}</p>}
         </Card><TaskOffers taskId={task.taskId} /></div></div>
         {assigning && <AssignDialog key={task.taskId} task={task} onClose={() => setAssigning(false)} onConflict={refresh} onSaved={saved => {
-          setAssigning(false); setNotice(`Task assigned to ${saved.assigneeName ?? 'Staff'}.`); refresh();
+          setAssigning(false);
+          setNotice(saved.assigneeUserId ? `Task assigned to ${saved.assigneeName ?? 'Staff'}.` : `Assignment request sent to ${saved.pendingManualStaffName ?? 'the Staff member'}. The task is assigned only after they accept.`);
+          refresh();
         }} />}
       </>}
     </div>
@@ -153,7 +177,7 @@ function AssignDialog({ task, onClose, onSaved, onConflict }: { task: Operationa
   }
   return <Dialog title={task.assigneeUserId ? 'Reassign task' : 'Assign task'} busy={busy} onClose={onClose}>
     <form className={s.form} onSubmit={event => void save(event)}>
-      <p className={s.muted}>Checked-in, on-shift Staff below the workload limit. Assignment enters Accepted; Staff starts the work.</p>
+      <p className={s.muted}>Checked-in, on-shift Staff with the required specialty and below the workload limit. The Staff member receives an assignment request; the task is assigned only after they accept it.</p>
       <label>Staff member<select value={userId} disabled={busy || !staff || conflict} onChange={event => setUserId(event.target.value)}><option value="">{staff ? 'Choose Staff…' : 'Loading Staff…'}</option>
         {staff?.map(row => <option key={row.userId} value={row.userId}>{row.fullName} · {row.assignedToZone ? 'Assigned to this zone' : 'Assigned to another zone'} · {workload(row.activeTasks)}</option>)}</select></label>
       {staff?.length === 0 && <p className={s.info}>No eligible Staff available. Check shift, check-in and workload, then refresh candidates.</p>}

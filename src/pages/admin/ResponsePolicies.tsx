@@ -21,10 +21,11 @@ type Draft = {
   taskTypeCode: string;
   title: string;
   instructions: string;
+  targetRoleCode: 'OPERATOR' | 'MANAGER';
   ready: boolean;
   issues: string[];
 };
-const emptyDraft = (): Draft => ({ policyId: null, version: null, policyEnabled: true, actionEnabled: true, taskTypeCode: '', title: '', instructions: '', ready: false, issues: [] });
+const emptyDraft = (): Draft => ({ policyId: null, version: null, policyEnabled: true, actionEnabled: true, taskTypeCode: '', title: '', instructions: '', targetRoleCode: 'OPERATOR', ready: false, issues: [] });
 const fromPolicy = (policy: ResponsePolicy): Draft => ({
   policyId: policy.policyId,
   version: policy.version,
@@ -33,6 +34,7 @@ const fromPolicy = (policy: ResponsePolicy): Draft => ({
   taskTypeCode: policy.action?.taskTypeCode ?? '',
   title: policy.action?.title ?? '',
   instructions: policy.action?.instructions ?? '',
+  targetRoleCode: policy.action?.targetRoleCode === 'MANAGER' ? 'MANAGER' : 'OPERATOR',
   ready: policy.readyForAutomaticTask,
   issues: policy.issues,
 });
@@ -153,6 +155,7 @@ export default function ResponsePolicies() {
           taskTypeCode: priority === 'CRITICAL' ? draft.taskTypeCode.trim().toUpperCase() || null : null,
           title: priority === 'CRITICAL' ? draft.title.trim() || null : null,
           instructions: priority === 'CRITICAL' ? draft.instructions.trim() || null : null,
+          targetRoleCode: priority === 'WARNING' ? draft.targetRoleCode : null,
         },
       });
       // Alert actions share the EventType policy version. Preserve the other draft while
@@ -190,7 +193,7 @@ export default function ResponsePolicies() {
       {error && !loadError && <div className={s.feedback} role="alert"><p>{error}</p>{needsReload && <Button variant="secondary" onClick={retry}>Reload saved state</Button>}</div>}
       {notice && <p className={s.success} role="status">{notice}</p>}
       {ruleId && !loading && !loadError && configurationInactive && <p className={s.configurationNotice} role="status"><strong>Configuration inactive.</strong> Activate it in AI configuration for responses to run.</p>}
-      {ruleId && !loading && !loadError && !hasPolicy && <p className={s.issues} role="alert">No shared operational SLA policy exists for this event type. Ask the policy administrator to configure it before editing response actions.</p>}
+      {ruleId && !loading && !loadError && !hasPolicy && <p className={s.issues} role="alert">No shared operational SLA policy exists for this event type. <Link to="/admin/sla-policies">Create it in SLA policies</Link> before editing response actions.</p>}
       {loading ? <p className={s.loading} role="status">Loading response policies…</p> : ruleId && !loadError && <div className={s.grid}>
         {priorities.map((priority) => {
           const draft = drafts[priority];
@@ -199,7 +202,7 @@ export default function ResponsePolicies() {
           return <Card className={`${s.policy} ${priority === 'WARNING' ? s.warning : s.critical}`} key={priority}>
             <fieldset aria-label={`${priority} policy`} disabled={Boolean(busy) || needsReload || !hasPolicy}>
               <div className={s.heading}>
-                <div><legend>{priority === 'WARNING' ? 'Warning response' : 'Critical response'}</legend><p>{priority === 'WARNING' ? 'Notify the Operator to monitor the condition. No task is created.' : 'Create one task for the event and offer it to eligible Staff.'}</p></div>
+                <div><legend>{priority === 'WARNING' ? 'Warning response' : 'Critical response'}</legend><p>{priority === 'WARNING' ? `Notify the ${draft.targetRoleCode === 'MANAGER' ? 'Manager' : 'Operator'} to monitor the condition. No task is created.` : 'Create one task for the event and offer it to eligible Staff.'}</p></div>
                 {draft.policyId === null ? <Chip tone="neutral">Not configured</Chip>
                   : draft.issues.some(issue => !['CONFIGURATION_NOT_ACTIVE', 'RULE_DISABLED', 'POLICY_DISABLED', 'ACTION_DISABLED'].includes(issue)) ? <Chip tone="warning">Needs attention</Chip>
                     : !draft.policyEnabled ? <Chip tone="neutral">Disabled</Chip>
@@ -209,6 +212,8 @@ export default function ResponsePolicies() {
               </div>
 
               <label className={s.toggle}><input type="checkbox" checked={draft.policyEnabled} onChange={(event) => update(priority, { policyEnabled: event.target.checked })} />{priority === 'WARNING' ? 'Enable warning notification' : 'Enable critical task dispatch'}</label>
+              {priority === 'WARNING' && <label>Notify<select aria-label="Warning recipient" value={draft.targetRoleCode} onChange={event => update(priority, { targetRoleCode: event.target.value === 'MANAGER' ? 'MANAGER' : 'OPERATOR' })}>
+                <option value="OPERATOR">Operators</option><option value="MANAGER">Managers</option></select></label>}
               {priority === 'CRITICAL' && <div className={s.taskFields}>
               <div className={s.taskTypeField}>
                 <label htmlFor="response-task-type">Task type (required when enabled)</label>

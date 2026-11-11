@@ -9,9 +9,11 @@ import StoreLayout from './pages/StoreLayout';
 import SystemHealth from './pages/SystemHealth';
 import UsersRoles from './pages/UsersRoles';
 import ResponsePolicies from './pages/admin/ResponsePolicies';
+import SlaPolicies from './pages/admin/SlaPolicies';
 import OperatorCameraLive from './pages/operator/OperatorCameraLive';
 import OperatorFloorMap from './pages/operator/OperatorFloorMap';
 import OperatorTasks, { OperatorTaskDetail } from './pages/operator/OperatorTasks';
+import OperatorIncidents from './pages/operator/OperatorIncidents';
 import Login from './pages/auth/Login';
 import { ForgotPassword, PasswordUpdated, ResetLinkExpired, ResetLinkSent, SetNewPassword } from './pages/auth/Recovery';
 import { ProtectedRoute } from './auth/ProtectedRoute';
@@ -45,6 +47,7 @@ export default function App() {
         <Route path="/admin/incident-types" element={<IncidentTypes />} />
         <Route path="/admin/routing" element={<Routing />} />
         <Route path="/admin/response-policies/:ruleId" element={<ResponsePolicies />} />
+        <Route path="/admin/sla-policies" element={<SlaPolicies />} />
         <Route path="/admin/users" element={<UsersRoles />} />
         <Route path="/admin/audit-logs" element={<AuditLog />} />
         <Route path="/admin/system-health" element={<SystemHealth />} />
@@ -57,6 +60,7 @@ export default function App() {
         <Route path="/operator/floor-map" element={<OperatorFloorMap />} />
         <Route path="/operator/tasks" element={<OperatorTasks />} />
         <Route path="/operator/events" element={<OperationalEvents />} />
+        <Route path="/operator/incidents" element={<OperatorIncidents />} />
         <Route path="/operator/events/:eventId" element={<OperationalEventDetail />} />
         <Route path="/operator/tasks/:taskId" element={<OperatorTaskDetail />} />
         <Route path="/operator/cameras/:cameraId" element={<OperatorCameraLive />} />

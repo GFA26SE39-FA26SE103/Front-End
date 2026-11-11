@@ -164,4 +164,26 @@ describe('Operator Task Board', () => {
     expect(await dialog.findByText(/No eligible Staff available/)).toBeInTheDocument();
     expect(dialog.getByRole('button', { name: 'Confirm assignment' })).toBeDisabled();
   });
+  it('shows AUTO/MANUAL verification, rejection history and the Operator exception', async () => {
+    vi.mocked(getTask).mockResolvedValue({ ...task, verificationMode: 'MANUAL', verificationMethod: 'OPERATOR_EVIDENCE', rejectionCount: 3, lastAssignmentEndReason: 'REJECTED_AFTER_REASSIGNMENT' });
+    page('/operator/tasks/task-1');
+    expect(await screen.findByText('MANUAL verification')).toBeInTheDocument();
+    expect(screen.getByText('Rejected 3×')).toBeInTheDocument();
+    expect(screen.getByText('Replacement rejected · Operator must assign')).toBeInTheDocument();
+    expect(screen.getByText(/Operator exception: the replacement Staff member/)).toBeInTheDocument();
+  });
+  it('waits for Staff acceptance after a manual assignment request', async () => {
+    const user = userEvent.setup();
+    const pending = { ...task, needsAssignment: false, pendingManualStaffUserId: 'staff-1', pendingManualStaffName: 'Linh' };
+    vi.mocked(assignTask).mockImplementation(async () => { vi.mocked(getTask).mockResolvedValue(pending); return pending; });
+    page('/operator/tasks/task-1');
+    await user.click(await screen.findByRole('button', { name: 'Assign task' }));
+    const dialog = within(screen.getByRole('dialog'));
+    expect(dialog.getByText(/assigned only after they accept it/)).toBeInTheDocument();
+    await dialog.findByRole('option', { name: /Linh/ });
+    await user.selectOptions(dialog.getByLabelText('Staff member'), 'staff-1');
+    await user.click(dialog.getByRole('button', { name: 'Confirm assignment' }));
+    expect(await screen.findByText('Assignment request sent to Linh. The task is assigned only after they accept.')).toBeInTheDocument();
+    expect(await screen.findByText('Operator request sent · waiting for Linh to accept')).toBeInTheDocument();
+  });
 });

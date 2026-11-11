@@ -12,7 +12,13 @@ export type OperationalTask = {
   needsAssignment: boolean; updatedAt: string;
   slaPolicyId?: string | null; slaPriorityCode?: string | null; slaPolicyVersion?: number | null;
   responseDeadlineAt?: string | null; resolutionDeadlineAt?: string | null;
+  /** AUTO verifies from validated metrics/checklist and falls back to MANUAL; MANUAL needs an Operator decision. */
+  verificationMode?: VerificationMode | null; verificationMethod?: string | null;
+  rejectionCount?: number; pendingManualStaffUserId?: string | null; pendingManualStaffName?: string | null;
+  /** Why the previous assignment ended, e.g. REJECTED_TWICE (auto re-dispatch) or REJECTED_AFTER_REASSIGNMENT (Operator). */
+  lastAssignmentEndReason?: string | null;
 };
+export type VerificationMode = 'AUTO' | 'MANUAL';
 export type TaskOffer = {
   offerId: string; taskId: string; origin: string; sourceCode: string; eventTypeCode: string | null; title: string; instructions: string | null;
   priority: string; zoneId: string; zoneName: string; cameraCode: string | null; cameraName: string | null; metricValue: number | null;
@@ -49,10 +55,10 @@ export type EvidencePhoto = { evidenceId: string; evidenceType: 'BEFORE_PHOTO' |
 export type ReviewStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
 export type TaskSubmission = {
   submissionId: string; submittedByUserId: string; submittedByName: string | null; note: string; submittedAt: string;
-  reviewStatus: ReviewStatus; rejectReason: string | null; photos: EvidencePhoto[];
+  reviewStatus: ReviewStatus; rejectReason: string | null; missingPhotoReason?: string | null; photos: EvidencePhoto[];
 };
 export type TaskEvidence = {
-  taskId: string; taskStatus: TaskStatus; requiresBeforePhoto: boolean; requiresAfterPhoto: boolean; rejectionCount: number;
+  taskId: string; taskStatus: TaskStatus; verificationMode?: VerificationMode | null; verificationMethod?: string | null; requiresBeforePhoto: boolean; requiresAfterPhoto: boolean; rejectionCount: number;
   drafts: EvidencePhoto[]; submissions: TaskSubmission[];
 };
 export type TaskCompletionResult = {

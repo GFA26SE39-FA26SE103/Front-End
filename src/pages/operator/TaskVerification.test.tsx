@@ -85,4 +85,19 @@ describe('Operator evidence verification', () => {
     expect(await screen.findByText('Verification requires an Operator account.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Verify task' })).not.toBeInTheDocument();
   });
+  it('warns that rejecting a replacement returns the task to the Operator', async () => {
+    const user = userEvent.setup(); const decided = vi.fn();
+    const earlier = [{ submissionId: 'sub-0', submittedByUserId: 'staff-9', submittedByName: 'An', note: 'First try', submittedAt: '2026-10-25T04:05:00Z',
+      reviewStatus: 'REJECTED' as const, rejectReason: 'Not clean', missingPhotoReason: 'Camera broken', photos: [] }];
+    vi.mocked(getTaskEvidence).mockResolvedValue({ ...evidence(undefined, earlier), verificationMode: 'MANUAL' });
+    vi.mocked(rejectTask).mockResolvedValue(result('OFFERED'));
+    render(<TaskVerification task={task} canReview onDecided={decided} />);
+    expect(await screen.findByText(/replacement Staff member's work/)).toBeInTheDocument();
+    expect(screen.getByText('MANUAL verification')).toBeInTheDocument();
+    expect(screen.getByText('No photo · reason: Camera broken')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Reject' }));
+    await user.type(screen.getByLabelText(/Rejection reason/), 'Still dirty');
+    await user.click(screen.getByRole('button', { name: 'Confirm rejection' }));
+    expect(decided).toHaveBeenCalledWith(expect.stringContaining('Automatic dispatch stopped'));
+  });
 });
