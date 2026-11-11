@@ -90,4 +90,40 @@ describe('CameraCoverageEditor', () => {
     await waitFor(() => expect(removeCameraMapping).toHaveBeenCalledWith('camera-1', 'zone-checkout'));
     expect(await screen.findByText('Checkout area mapping removed.')).toBeInTheDocument();
   });
+
+  it('asks before discarding a dirty polygon when switching mode or closing', async () => {
+    const user = userEvent.setup(); const close = vi.fn();
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<CameraCoverageEditor camera={camera} zones={zones} onClose={close} />);
+    await screen.findByRole('img', { name: 'Camera preview for CAM-01' });
+    await user.selectOptions(screen.getByLabelText('Target zone'), 'zone-frozen');
+    await user.click(screen.getByRole('button', { name: 'Draw polygon ROI' }));
+    await user.click(screen.getByRole('button', { name: 'Checkout counter ROI' }));
+    expect(confirm).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Zone monitoring ROI' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: 'Back to floor plan' })); expect(close).not.toHaveBeenCalled();
+    confirm.mockReturnValue(true);
+    await user.click(screen.getByRole('button', { name: 'Back to floor plan' })); expect(close).toHaveBeenCalledOnce();
+  });
+
+  it('does not offer zones on another floor in the shared editor', async () => {
+    render(<CameraCoverageEditor camera={camera} zones={[...zones, { ...zones[0], zoneId: 'other-floor', floorId: 'floor-2', name: 'Upstairs' }]} onClose={vi.fn()} />);
+    await screen.findByRole('img', { name: 'Camera preview for CAM-01' });
+    expect(screen.queryByRole('option', { name: /Upstairs/ })).not.toBeInTheDocument();
+  });
+
+  it('resets undo history when reloading the same mapping after discarding edits', async () => {
+    vi.mocked(listCameraMappings).mockResolvedValue([{
+      cameraZoneId: 'mapping-1', cameraId: 'camera-1', zoneId: 'zone-frozen', status: 'ACTIVE',
+      roiPolygon: [{ x: .2, y: .2 }, { x: .8, y: .2 }, { x: .7, y: .8 }],
+    }]);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const user = userEvent.setup(); render(<CameraCoverageEditor camera={camera} zones={zones} onClose={vi.fn()} />);
+    const edit = await screen.findByRole('button', { name: 'Edit ROI for Frozen aisle' }); await user.click(edit);
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Resize ROI point 1' }), { key: 'ArrowRight' });
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled();
+    await user.click(edit);
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Resize ROI point 1' })).toHaveStyle({ left: '20%' });
+  });
 });

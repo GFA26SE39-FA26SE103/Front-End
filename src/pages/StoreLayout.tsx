@@ -66,6 +66,8 @@ export default function StoreLayout() {
   const [zoneEditing, setZoneEditing] = useState(false);
   const [zoneSaving, setZoneSaving] = useState(false);
   const [coverageEditing, setCoverageEditing] = useState(false);
+  const [coverageDirty, setCoverageDirty] = useState(false);
+  const [coverageBusy, setCoverageBusy] = useState(false);
   const [adjacencyOpen, setAdjacencyOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -187,9 +189,16 @@ export default function StoreLayout() {
   const selectedDraft = selectedCameraId ? drafts[selectedCameraId] : undefined;
   const dirtyCameraIds = useMemo(() => new Set(Object.keys(drafts)), [drafts]);
   const storeName = stores.find((store) => store.supermarketId === selectedFloor?.supermarketId)?.name ?? stores[0]?.name;
-  const floorChangesBlocked = uploading || saving || zoneSaving || zoneEditing || coverageEditing || adjacencyOpen || dirtyCameraIds.size > 0;
+  const otherFloorChangesBlocked = uploading || saving || zoneSaving || zoneEditing || adjacencyOpen || dirtyCameraIds.size > 0;
+  const floorChangesBlocked = otherFloorChangesBlocked || coverageEditing;
+
+  // Checking permission must not clear flags: another guard may still reject dismissal.
+  // The editor's stable notification setters receive false from its unmount cleanup.
+  const canDismissCoverage = () => !coverageEditing || !coverageBusy
+    && (!coverageDirty || window.confirm('Discard unsaved ROI or counter changes?'));
 
   const selectFloor = (floorId: string) => {
+    if (otherFloorChangesBlocked || !canDismissCoverage()) return;
     setSelectedFloorId(floorId);
     setMapState(initialMapState);
     setActionError('');
@@ -273,6 +282,7 @@ export default function StoreLayout() {
   };
 
   const placeCamera = (camera: CameraRecord) => {
+    if (!canDismissCoverage()) return;
     setSelectedCameraId(camera.cameraId);
     setDrafts((current) => ({ ...current, [camera.cameraId]: { x: 0.5, y: 0.5, rotationDeg: camera.mapRotationDeg ?? 0 } }));
     setPickerOpen(false);
@@ -389,6 +399,7 @@ export default function StoreLayout() {
               key={camera.cameraId}
               className={`${s.cameraRow} ${selectedCameraId === camera.cameraId ? s.activeRow : ''}`}
               onClick={() => {
+                if (!canDismissCoverage()) return;
                 setSelectedCameraId(camera.cameraId);
                 setCameraSelectionError('');
                 setCoverageEditing(false);
@@ -405,6 +416,7 @@ export default function StoreLayout() {
           {!detailsLoading && cameras.length === 0 && <p className={s.state}>No cameras registered on this floor.</p>}
         </div>
         <Button variant="secondary" icon="plus-primary" block disabled={!selectedFloor || zoneEditing || mapState.status !== 'ready'} onClick={() => {
+          if (!canDismissCoverage()) return;
           setCoverageEditing(false);
           setPickerOpen((open) => !open);
         }}>
@@ -477,7 +489,8 @@ export default function StoreLayout() {
         )}
         <Card className={s.canvas}>
           {coverageEditing && selectedCamera ? (
-            <CameraCoverageEditor camera={selectedCamera} zones={zones} onClose={() => setCoverageEditing(false)} />
+            <CameraCoverageEditor camera={selectedCamera} zones={zones} onClose={() => setCoverageEditing(false)}
+              onDirtyChange={setCoverageDirty} onBusyChange={setCoverageBusy} />
           ) : <>
           <div className={s.canvasHeader}>
             <CardHeader

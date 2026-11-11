@@ -20,6 +20,26 @@ npm run lint
 npm test -- --run
 ```
 
+## Checkout counter ROI configuration
+
+In **Store Layout**, select a camera and open **Camera coverage → Checkout counter ROI**.
+Choose a Checkout Zone on that camera's floor, create/select its physical counter, and draw
+both **Lane ROI** and **Staff ROI** on the camera image. Switch the drawing target to edit
+either polygon; the other remains visible. Both valid, closed polygons are saved together.
+They do not have to touch or contain one another. **Zone monitoring ROI** keeps the existing
+generic camera-to-zone mapping workflow, using the same drawing/move/resize controls.
+
+Create counters disabled, save an enabled mapping and explicitly select exactly one queue
+source per counter, then enable the counter. Other cameras may contribute staff observations
+but must not also count that counter's queue. Queue-source switching is explicit; the UI does
+not disable another camera or invent automatic fallback. Deactivate Zone monitoring before
+changing checkout configuration. Saved counter/mapping timestamps are sent unchanged for
+optimistic concurrency; reload explicitly after a conflict rather than overwriting newer data.
+
+These controls require the matching Backend checkout API/schema. They do not implement the
+AI-Service perception changes, enable its runtime feature flag, establish transaction/POS
+utilization, or complete Waiting Time. Configuration/HTTP tests are not real-camera acceptance.
+
 ## Operator Task Board — 25/10/2026
 
 Policy UI alignment (06/11/2026): the Manage policy page follows the operational SLA compatibility API: WARNING notifies Operator; CRITICAL creates a Task and requires an explicit TaskType when enabled. Each action has one enable switch. Saves propagate the shared EventType policy version across both drafts; failures require reloading saved state before another write. No policy delete control is presented: disable the selected action instead. Changes apply across Zones using the same EventType; existing Task snapshots stay unchanged. Event/Zone context is shown when opened from AI Configuration. A TaskType picker still requires a backend catalog API; the approved code input remains available.

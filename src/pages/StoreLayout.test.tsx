@@ -1,8 +1,8 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getCameraPreview, listCameraMappings, listCameras, updateCamera } from '../api/cameras';
+import { getCameraPreview, listCameraMappings, listCameras, saveCameraMapping, updateCamera, type CameraZoneMapping } from '../api/cameras';
 import { createFloor, createZone, getFloorMap, listFloors, listSupermarkets, listZoneAdjacency, listZones, replaceZoneAdjacency, updateFloorDetails, updateZone, uploadFloorMap } from '../api/floors';
 import StoreLayout from './StoreLayout';
 import { ApiError } from '../api/client';
@@ -247,6 +247,93 @@ describe('StoreLayout', () => {
     expect(await screen.findByRole('heading', { name: 'Camera coverage' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Frozen aisle (FROZEN)' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Camera placement' })).not.toBeInTheDocument();
+  });
+
+  describe('coverage dismissal guards', () => {
+    const upperFloor = { ...floor, floorId: 'floor-2', floorNumber: 2, name: 'Upper floor' };
+    const secondCamera = { ...camera, cameraId: 'camera-2', code: 'CAM-02', name: 'Aisle camera' };
+    const zone = {
+      zoneId: 'zone-1', floorId: floor.floorId, code: 'FROZEN', name: 'Frozen aisle', zoneType: 'AISLES',
+      mapPolygon: [{ x: .1, y: .1 }, { x: .5, y: .1 }, { x: .5, y: .5 }],
+      colorHex: '#3B82F6', areaM2: null, minStaff: 0, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
+    };
+    const dismissals = [
+      { action: 'camera selection', name: 'CAM-02 Aisle camera' },
+      { action: 'floor selection', name: /Upper floor.*Floor 2/ },
+      { action: 'camera picker', name: 'Place camera on map' },
+    ];
+
+    const openCoverage = async (placementDirty = false) => {
+      vi.mocked(listFloors).mockResolvedValue([floor, upperFloor]);
+      vi.mocked(listZones).mockResolvedValue([zone]);
+      vi.mocked(listCameras).mockImplementation(async floorId => floorId === floor.floorId ? [camera, secondCamera] : []);
+      const user = userEvent.setup(); renderPage();
+      const sprite = await screen.findByRole('button', { name: /place cam-01/i });
+      if (placementDirty) fireEvent.keyDown(sprite, { key: 'ArrowRight' });
+      await user.click(screen.getByRole('button', { name: 'CAM-01 Entrance camera' }));
+      await user.click(screen.getByRole('button', { name: 'Configure coverage' }));
+      await screen.findByRole('img', { name: 'Camera preview for CAM-01' });
+      await user.selectOptions(screen.getByLabelText('Target zone'), zone.zoneId);
+      await user.click(screen.getByRole('button', { name: 'Draw polygon ROI' }));
+      return user;
+    };
+
+    it.each(dismissals)('confirms dirty ROI dismissal through $action without losing a rejected draft', async ({ name }) => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      const user = await openCoverage();
+      await user.click(screen.getByRole('button', { name }));
+      expect(confirm).toHaveBeenCalledOnce();
+      expect(screen.getByRole('heading', { name: 'Camera coverage' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'CAM-01 Entrance camera' })).toHaveAttribute('aria-pressed', 'true');
+
+      confirm.mockReturnValue(true);
+      await user.click(screen.getByRole('button', { name }));
+      expect(confirm).toHaveBeenCalledTimes(2);
+      await waitFor(() => expect(screen.queryByRole('heading', { name: 'Camera coverage' })).not.toBeInTheDocument());
+    });
+
+    it.each(dismissals)('blocks $action during ROI save and allows clean dismissal once saving completes', async ({ name }) => {
+      let finishSave!: (mapping: CameraZoneMapping) => void;
+      vi.mocked(saveCameraMapping).mockReturnValueOnce(new Promise(resolve => { finishSave = resolve; }));
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      const user = await openCoverage();
+      const layer = screen.getByTestId('roi-drawing-layer');
+      vi.spyOn(layer, 'getBoundingClientRect').mockReturnValue({
+        x: 0, y: 0, left: 0, top: 0, right: 100, bottom: 100, width: 100, height: 100, toJSON: () => ({}),
+      });
+      for (const [clientX, clientY] of [[10, 10], [80, 10], [70, 80]]) fireEvent.click(layer, { clientX, clientY });
+      await user.click(screen.getByRole('button', { name: 'Close polygon' }));
+      await user.click(screen.getByRole('button', { name: 'Save ROI' }));
+      await waitFor(() => expect(saveCameraMapping).toHaveBeenCalledOnce());
+
+      await user.click(screen.getByRole('button', { name }));
+      expect(confirm).not.toHaveBeenCalled();
+      expect(screen.getByRole('heading', { name: 'Camera coverage' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'CAM-01 Entrance camera' })).toHaveAttribute('aria-pressed', 'true');
+
+      await act(async () => finishSave({ cameraZoneId: 'mapping-1', cameraId: camera.cameraId,
+        zoneId: zone.zoneId, roiPolygon: [{ x: .1, y: .1 }, { x: .8, y: .1 }, { x: .7, y: .8 }], status: 'ACTIVE' }));
+      expect(await screen.findByText('Frozen aisle mapped.')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name }));
+      await waitFor(() => expect(screen.queryByRole('heading', { name: 'Camera coverage' })).not.toBeInTheDocument());
+      expect(confirm).not.toHaveBeenCalled();
+    });
+
+    it('preserves placement drafts and coverage dirty state when another floor guard rejects dismissal', async () => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      const user = await openCoverage(true);
+      await user.click(screen.getByRole('button', { name: /Upper floor.*Floor 2/ }));
+      expect(screen.getByRole('heading', { name: 'Camera coverage' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Ground floor.*Floor 1/ })).toHaveAttribute('aria-pressed', 'true');
+      expect(confirm).not.toHaveBeenCalled();
+
+      await user.click(screen.getByRole('button', { name: 'CAM-02 Aisle camera' }));
+      expect(confirm).toHaveBeenCalledOnce();
+      expect(screen.getByRole('heading', { name: 'Camera coverage' })).toBeInTheDocument();
+      expect(screen.getByText('Unsaved')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Create floor' })).toBeDisabled();
+      expect(updateCamera).not.toHaveBeenCalled();
+    });
   });
 
   it('opens zone adjacency management for the selected floor', async () => {
