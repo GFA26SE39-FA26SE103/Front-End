@@ -15,7 +15,11 @@ export const dismissIncident = (incidentId: string, reason: string) =>
   });
 
 // L3: Operator Incident board. Mitigation (BR-21) and closure (BR-22) are separate milestones.
-export type IncidentTask = { taskId: string; title: string; status: string; isMandatory: boolean; verificationMode: string | null; assigneeName: string | null; verifiedAt: string | null };
+export type IncidentTask = {
+  taskId: string; title: string; status: string; isMandatory: boolean; verificationMode: string | null; assigneeName: string | null; verifiedAt: string | null;
+  /** K5 / BR-21: TT-12 is the designated mitigation Task; its MANUAL verification records mitigatedAt. */
+  taskTypeCode?: string | null; isMitigation?: boolean;
+};
 export type IncidentRow = {
   incidentId: string; title: string; description: string | null; sourceType: string; incidentTypeCode: string | null; incidentTypeName: string | null;
   zoneId: string; zoneName: string; status: string; statusReason: string | null; createdAt: string; updatedAt: string; closedAt: string | null;
