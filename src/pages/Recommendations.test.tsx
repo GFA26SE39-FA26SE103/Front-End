@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -31,6 +31,8 @@ function view(initial: string) {
     <Route path="/manager/recommendations" element={<Recommendations workspace="manager" />} />
     <Route path="/manager/recommendations/:id" element={<RecommendationDetail workspace="manager" />} />
     <Route path="/operator/notifications" element={<OperatorNotifications />} />
+    <Route path="/operator/events/:eventId" element={<OperationalEventDetail />} />
+    <Route path="/operator/recommendations" element={<Recommendations workspace="operator" />} />
     <Route path="/operator/recommendations/:id" element={<RecommendationDetail workspace="operator" />} />
   </Routes></MemoryRouter>);
 }
@@ -89,14 +91,45 @@ describe('D14 recommendation screens', () => {
 
   it('opens the accepted recommendation from the Operator inbox without Manager actions', async () => {
     signIn('OPERATOR');
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async url => String(url).endsWith('/api/me/notifications')
-      ? json([{ notificationId: 'n-1', type: 'RECOMMENDATION_ACCEPTED', title: 'Recommendation accepted',
-        message: `Review recommendation ${id}: ${row.title}`, createdAt: now, readAt: null, taskId: null, eventId: event.eventId }])
-      : json({ ...row, status: 'ACCEPTED' }));
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async url => {
+      if (String(url).endsWith('/api/me/notifications')) return json([{ notificationId: 'n-1', type: 'RECOMMENDATION_ACCEPTED', title: 'Recommendation accepted',
+        message: `Review recommendation ${id}: ${row.title}`, createdAt: now, readAt: null, taskId: null, eventId: event.eventId }]);
+      if (String(url).endsWith(`/api/operational-events/${event.eventId}`)) return json({ event: { ...event, status: 'CLEARED', metricValue: 2 }, tasks: [], hasMoreTasks: false });
+      return json({ ...row, status: 'ACCEPTED' });
+    });
     view('/operator/notifications');
     await userEvent.click(await screen.findByRole('link', { name: /Recommendation accepted/ }));
     expect(await screen.findByRole('heading', { name: row.title })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open task board' })).toHaveAttribute('href', '/operator/tasks');
+    expect(await screen.findByText('2 (QUEUE_LENGTH)')).toBeInTheDocument();
+    expect(screen.getByText('7 PEOPLE')).toBeInTheDocument();
+    expect(screen.getByText('CLEARED')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save decision' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('link', { name: 'Open operational event' }));
+    await userEvent.click(await screen.findByRole('link', { name: /Back to recommendation$/ }));
+    await userEvent.click(await screen.findByRole('link', { name: /Back to Notifications/ }));
+    expect(await screen.findByText('Recommendation accepted')).toBeInTheDocument();
+  });
+
+  it('keeps the Operator on the same recommendation page while opening and closing a review', async () => {
+    signIn('OPERATOR');
+    const accepted = { ...row, status: 'ACCEPTED' };
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      const url = new URL(String(input));
+      if (url.pathname === '/api/operator/recommendations') return json({ items: [accepted], page: Number(url.searchParams.get('page')), hasMore: false });
+      if (url.pathname === `/api/operational-events/${event.eventId}`) return json({ event, tasks: [], hasMoreTasks: false });
+      return json(accepted);
+    });
+    view('/operator/recommendations?page=2');
+    const trigger = await screen.findByRole('button', { name: row.title });
+    await userEvent.click(trigger);
+    const panel = screen.getByRole('complementary', { name: 'Recommendation details' });
+    expect(await within(panel).findByRole('heading', { name: row.title })).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: 'Recommendations' })).toBeInTheDocument();
+    await userEvent.click(within(panel).getByRole('link', { name: 'Open operational event' }));
+    await userEvent.click(await screen.findByRole('link', { name: /Back to recommendation$/ }));
+    const restored = await screen.findByRole('complementary', { name: 'Recommendation details' });
+    await userEvent.click(within(restored).getByRole('button', { name: 'Close' }));
+    expect(screen.getByText('Page 2')).toBeInTheDocument();
+    expect(screen.queryByRole('complementary', { name: 'Recommendation details' })).not.toBeInTheDocument();
   });
 });

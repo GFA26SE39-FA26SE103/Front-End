@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
-import type { OperationalEvent } from '../api/operationalEvents';
+import { getOperationalEvent, type OperationalEvent } from '../api/operationalEvents';
 import { decideRecommendation, generateRecommendation, getRecommendation, listRecommendations,
   type Recommendation, type RecommendationDecision, type RecommendationStatus, type RecommendationWorkspace } from '../api/recommendations';
 import { ManagerLayout } from '../components/ManagerLayout';
@@ -57,11 +57,31 @@ function useResource<T>(load: (signal: AbortSignal) => Promise<T>) {
 
 export function Recommendations({ workspace }: { workspace: RecommendationWorkspace }) {
   const [status, setStatus] = useState<RecommendationStatus | ''>('');
-  const [page, setPage] = useState(1);
+  const [managerPage, setManagerPage] = useState(1);
+  const [params, setParams] = useSearchParams();
+  const trigger = useRef<HTMLButtonElement>(null);
+  const operator = workspace === 'operator';
+  const requestedPage = Number(params.get('page') ?? '1');
+  const page = operator ? (Number.isSafeInteger(requestedPage) && requestedPage >= 1 && requestedPage <= 10000 ? requestedPage : 1) : managerPage;
+  const selected = operator ? params.get('review') : null;
+  function select(id: string | null) {
+    const next = new URLSearchParams(params);
+    if (id) next.set('review', id);
+    else next.delete('review');
+    setParams(next, { replace: true, preventScrollReset: true });
+    if (!id) trigger.current?.focus({ preventScroll: true });
+  }
+  function setPage(nextPage: number) {
+    if (!operator) { setManagerPage(nextPage); return; }
+    const next = new URLSearchParams(params);
+    next.set('page', String(nextPage));
+    next.delete('review');
+    setParams(next, { preventScrollReset: true });
+  }
   const load = useCallback((signal: AbortSignal) => listRecommendations(workspace, page, status, signal), [workspace, page, status]);
   const { value, error, refresh } = useResource(load);
   return <Layout workspace={workspace}>
-    <Card>
+    <div className={selected ? s.splitReview : undefined}><Card>
       <div className={s.toolbar}>
         <div><h2>{workspace === 'manager' ? 'Recommendation history' : 'Accepted recommendations'}</h2>
           <p className={s.muted}>{workspace === 'manager' ? 'Open an active event to request a recommendation.' : 'Open a recommendation to review its evidence and the source event.'}</p></div>
@@ -82,8 +102,12 @@ export function Recommendations({ workspace }: { workspace: RecommendationWorksp
         {value.items.length === 0 ? <p className={s.muted}>No recommendations on this page.</p> : <div className={s.tableWrap}>
           <table className={s.table} aria-label="Recommendations">
             <thead><tr><th scope="col">Recommendation</th><th scope="col">Status</th><th scope="col">Generated · Vietnam time</th></tr></thead>
-            <tbody>{value.items.map(item => <tr key={item.recommendationId}>
-              <th scope="row"><Link to={`${path(workspace)}/${encodeURIComponent(item.recommendationId)}`}>{item.title}</Link></th>
+            <tbody>{value.items.map(item => <tr key={item.recommendationId} className={selected === item.recommendationId ? s.selectedRow : undefined}>
+              <th scope="row">{operator
+                ? <button type="button" className={s.rowLink} aria-expanded={selected === item.recommendationId}
+                    aria-controls={selected === item.recommendationId ? 'operator-recommendation-panel' : undefined}
+                    onClick={event => { trigger.current = event.currentTarget; select(item.recommendationId); }}>{item.title}</button>
+                : <Link to={`${path(workspace)}/${encodeURIComponent(item.recommendationId)}`}>{item.title}</Link>}</th>
               <td><Status status={item.status} /></td><td>{date(item.generatedAt)}</td>
             </tr>)}</tbody>
           </table>
@@ -94,7 +118,23 @@ export function Recommendations({ workspace }: { workspace: RecommendationWorksp
         </div></div>
       </>}
     </Card>
+    {selected && <OperatorRecommendationPanel key={selected} id={selected} onClose={() => select(null)} />}</div>
   </Layout>;
+}
+
+function OperatorRecommendationPanel({ id, onClose }: { id: string; onClose: () => void }) {
+  const close = useRef<HTMLButtonElement>(null);
+  const load = useCallback((signal: AbortSignal) => getRecommendation('operator', id, signal), [id]);
+  const { value, error, refresh } = useResource(load);
+  useEffect(() => { close.current?.focus({ preventScroll: true }); }, []);
+  return <aside id="operator-recommendation-panel" aria-labelledby="operator-recommendation-heading" className={`${s.page} ${s.eventPanel}`}
+    onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); onClose(); } }}>
+    <div className={s.toolbar}><h2 id="operator-recommendation-heading">Recommendation details</h2>
+      <button type="button" ref={close} className={s.closePanel} onClick={onClose}>Close</button></div>
+    {error && <><p className={s.error} role="alert">{error}</p><Button variant="secondary" onClick={refresh}>Retry</Button></>}
+    {!value && !error && <p role="status">Loading recommendation…</p>}
+    {value && <RecommendationReview workspace="operator" value={value} />}
+  </aside>;
 }
 
 export function RecommendationDetail({ workspace }: { workspace: RecommendationWorkspace }) {
@@ -103,17 +143,19 @@ export function RecommendationDetail({ workspace }: { workspace: RecommendationW
 }
 
 function Detail({ workspace, id }: { workspace: RecommendationWorkspace; id: string }) {
+  const [params] = useSearchParams();
+  const fromNotifications = workspace === 'operator' && params.get('from') === 'notifications';
   const load = useCallback((signal: AbortSignal) => getRecommendation(workspace, id, signal), [workspace, id]);
   const { value, error, refresh, replace } = useResource(load);
   return <Layout workspace={workspace} detail>
-    <div className={s.toolbar}><Link to={path(workspace)}>← Recommendations</Link><Button variant="secondary" onClick={refresh}>Refresh</Button></div>
+    <div className={s.toolbar}><Link to={fromNotifications ? '/operator/notifications' : path(workspace)}>{fromNotifications ? '← Back to Notifications' : '← Recommendations'}</Link><Button variant="secondary" onClick={refresh}>Refresh</Button></div>
     {error && <p className={s.error} role="alert">{error}</p>}
     {!value && !error && <p role="status">Loading recommendation…</p>}
     {value && <RecommendationReview workspace={workspace} value={value} onSaved={replace} />}
   </Layout>;
 }
 
-function RecommendationReview({ workspace, value, onSaved }: { workspace: RecommendationWorkspace; value: Recommendation; onSaved: (item: Recommendation) => void }) {
+function RecommendationReview({ workspace, value, onSaved }: { workspace: RecommendationWorkspace; value: Recommendation; onSaved?: (item: Recommendation) => void }) {
   return <>
       <Card>
         <div className={s.toolbar}><h2>{value.title}</h2><Status status={value.status} /></div>
@@ -122,7 +164,7 @@ function RecommendationReview({ workspace, value, onSaved }: { workspace: Recomm
           <div><dt>Generated · Vietnam time</dt><dd>{date(value.generatedAt)}</dd></div>
           <div><dt>Review deadline</dt><dd>{date(value.expiresAt)}</dd></div>
           {value.reviewedAt && <div><dt>Last reviewed</dt><dd>{date(value.reviewedAt)}</dd></div>}
-          {value.eventId && <div><dt>Source</dt><dd><Link to={`/${workspace}/events/${encodeURIComponent(value.eventId)}`}>Open operational event</Link></dd></div>}
+          {workspace === 'manager' && value.eventId && <div><dt>Source</dt><dd><Link to={`/manager/events/${encodeURIComponent(value.eventId)}`}>Open operational event</Link></dd></div>}
         </dl>
       </Card>
       {value.evidence && <Card><h3>Evidence at generation</h3>
@@ -138,10 +180,37 @@ function RecommendationReview({ workspace, value, onSaved }: { workspace: Recomm
           {value.evidence.slaPolicyVersion != null && <div><dt>SLA policy version</dt><dd>{value.evidence.slaPolicyVersion}</dd></div>}
         </dl>
       </Card>}
-      {workspace === 'manager' && (value.status === 'AVAILABLE' || value.status === 'DEFERRED') && <DecisionForm item={value} onSaved={onSaved} />}
+      {workspace === 'manager' && onSaved && (value.status === 'AVAILABLE' || value.status === 'DEFERRED') && <DecisionForm item={value} onSaved={onSaved} />}
       {workspace === 'manager' && value.status === 'ACCEPTED' && <p className={s.notice} role="status">Accepted and available for Operator review.</p>}
-      {workspace === 'operator' && <Card><h3>Operator review</h3><p>Check the current event before taking action.</p><Link to="/operator/tasks">Open task board</Link></Card>}
+      {workspace === 'operator' && (value.eventId ? <CurrentEvent key={value.eventId} eventId={value.eventId} />
+        : <Card><h3>Current event</h3><p className={s.muted}>No source event is linked to this recommendation.</p></Card>)}
   </>;
+}
+
+function CurrentEvent({ eventId }: { eventId: string }) {
+  const location = useLocation();
+  const returnState = { recommendationReturn: location.pathname + location.search };
+  const load = useCallback((signal: AbortSignal) => getOperationalEvent(eventId, signal), [eventId]);
+  const { value, error, refresh } = useResource(load);
+  return <Card>
+    <div className={s.toolbar}><h3>Current event</h3><Button variant="secondary" onClick={refresh}>Refresh event</Button></div>
+    {error && <p className={s.error} role="alert">{error}</p>}
+    {!value && !error && <p role="status">Loading current event…</p>}
+    {value && <>
+      <p>{value.event.eventTypeName} · {value.event.zoneName} · {value.event.sourceCode}</p>
+      <dl className={s.facts}>
+        <div><dt>Event status</dt><dd>{value.event.status}</dd></div>
+        <div><dt>Alert level</dt><dd>{value.event.priority}</dd></div>
+        <div><dt>Latest recorded metric</dt><dd>{value.event.metricValue.toLocaleString()} ({value.event.measurementType})</dd></div>
+        <div><dt>Last observed · Vietnam time</dt><dd>{date(value.event.lastObservedAt)}</dd></div>
+      </dl>
+      <h3 className={s.linkedTasks}>Linked tasks</h3>
+      {value.tasks.length === 0 ? <p className={s.muted}>No tasks are linked to this event.</p> : <ul className={s.taskList}>
+        {value.tasks.map(task => <li key={task.taskId}><Link to={`/operator/tasks/${encodeURIComponent(task.taskId)}`} state={returnState}>{task.title}</Link> · {task.status}</li>)}
+      </ul>}
+    </>}
+    <Link className={s.sourceLink} to={`/operator/events/${encodeURIComponent(eventId)}`} state={returnState}>Open operational event</Link>
+  </Card>;
 }
 
 function DecisionForm({ item, onSaved }: { item: Recommendation; onSaved: (item: Recommendation) => void }) {

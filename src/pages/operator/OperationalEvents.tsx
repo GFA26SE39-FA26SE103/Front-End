@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { getOperationalEvent, listEventZones, listOperationalEvents, type EventQuery, type EventZone, type OperationalEvent } from '../../api/operationalEvents';
 import { ManagerLayout } from '../../components/ManagerLayout';
 import { OperatorLayout } from '../../components/OperatorLayout';
 import { Button, Card, Chip } from '../../components/ui';
 import { useTaskPolling } from './useTaskPolling';
+import { recommendationReturnPath } from './recommendationNavigation';
 import { EventRecommendationPanel, GenerateFromEvent } from '../Recommendations';
 import s from './OperationalEvents.module.css';
 
@@ -92,7 +93,7 @@ export default function OperationalEvents({ workspace = 'operator' }: { workspac
         <tbody>{visible.items.map(event => <tr key={event.eventId} className={panelEvent?.eventId === event.eventId ? s.selectedRow : undefined}>
           <th scope="row"><Link to={`${base}/${encodeURIComponent(event.eventId)}${search ? `?${search}` : ''}`}>{event.eventTypeName}</Link><p className={s.note}>{event.sourceCode}</p></th>
           <td>{event.zoneName}<p className={s.note}>{event.cameraCode}</p></td><td><Badges event={event} /></td><td>{date(event.detectedAt)}</td><td>{date(event.clearedAt)}</td><td>{event.taskCount}</td>
-          {workspace === 'manager' && <td>{event.status === 'ACTIVE' && <Button variant="secondary" size="sm"
+          {workspace === 'manager' && <td>{event.status === 'ACTIVE' && <Button variant="secondary"
             aria-label={`AI recommendation for ${event.sourceCode}`} aria-expanded={panelEvent?.eventId === event.eventId}
             aria-controls={panelEvent ? 'event-recommendation-panel' : undefined}
             onClick={click => { panelTrigger.current = click.currentTarget; setSelected(event); }}>AI recommendation</Button>}</td>}
@@ -108,12 +109,14 @@ export default function OperationalEvents({ workspace = 'operator' }: { workspac
 export function OperationalEventDetail({ workspace = 'operator' }: { workspace?: Workspace }) {
   const { eventId = '' } = useParams();
   const [params] = useSearchParams();
+  const location = useLocation();
+  const returnTo = workspace === 'operator' ? recommendationReturnPath(location.state) : undefined;
   const load = useCallback((signal: AbortSignal) => getOperationalEvent(eventId, signal), [eventId]);
   const { data, error, refresh } = useTaskPolling(load);
   const visible = error ? undefined : data;
   const event = visible?.event;
   return <Layout workspace={workspace} detail><div className={`${s.page} ${workspace === 'manager' ? s.managerPage : ''}`}>
-    <div className={s.heading}><Link to={`/${workspace}/events${params.size ? `?${params}` : ''}`}>← Event history</Link><Button variant="secondary" onClick={refresh}>Refresh event</Button></div>
+    <div className={s.heading}><Link to={returnTo ?? `/${workspace}/events${params.size ? `?${params}` : ''}`}>{returnTo ? '← Back to recommendation' : '← Event history'}</Link><Button variant="secondary" onClick={refresh}>Refresh event</Button></div>
     {error && <Card><p className={s.error} role="alert">{error}</p><Button variant="secondary" onClick={refresh}>Retry event</Button></Card>}
     {!data && !error && <p role="status">Loading event…</p>}
     {visible && event && <>
@@ -123,7 +126,7 @@ export function OperationalEventDetail({ workspace = 'operator' }: { workspace?:
       </Card>
       {workspace === 'manager' && event.status === 'ACTIVE' && <GenerateFromEvent key={event.eventId} eventId={event.eventId} />}
       <Card><h3>Timeline · Vietnam time</h3><dl className={s.facts}><div><dt>Detected</dt><dd>{date(event.detectedAt)}</dd></div><div><dt>Last observed</dt><dd>{date(event.lastObservedAt)}</dd></div><div><dt>Cleared</dt><dd>{date(event.clearedAt)}</dd></div><div><dt>Last updated</dt><dd>{date(event.updatedAt)}</dd></div></dl></Card>
-      <Card><h3>Linked tasks · {event.taskCount}</h3>{visible.tasks.length === 0 ? <p className={s.empty}>No linked tasks. An event does not always create a task.</p> : <div className={s.tableWrap}><table className={s.table}><thead><tr><th scope="col">Task</th><th scope="col">Status</th><th scope="col">Assignee</th><th scope="col">Created</th></tr></thead><tbody>{visible.tasks.map(task => <tr key={task.taskId}><th scope="row">{workspace === 'operator' ? <Link to={`/operator/tasks/${encodeURIComponent(task.taskId)}`}>{task.title}</Link> : task.title}</th><td>{task.status}</td><td>{task.assigneeName || 'Unassigned'}</td><td>{date(task.createdAt)}</td></tr>)}</tbody></table></div>}{visible.hasMoreTasks && <p className={s.note}>Showing the 100 most recent linked tasks.</p>}</Card>
+      <Card><h3>Linked tasks · {event.taskCount}</h3>{visible.tasks.length === 0 ? <p className={s.empty}>No linked tasks. An event does not always create a task.</p> : <div className={s.tableWrap}><table className={s.table}><thead><tr><th scope="col">Task</th><th scope="col">Status</th><th scope="col">Assignee</th><th scope="col">Created</th></tr></thead><tbody>{visible.tasks.map(task => <tr key={task.taskId}><th scope="row">{workspace === 'operator' ? <Link to={`/operator/tasks/${encodeURIComponent(task.taskId)}`} state={returnTo ? { recommendationReturn: returnTo } : undefined}>{task.title}</Link> : task.title}</th><td>{task.status}</td><td>{task.assigneeName || 'Unassigned'}</td><td>{date(task.createdAt)}</td></tr>)}</tbody></table></div>}{visible.hasMoreTasks && <p className={s.note}>Showing the 100 most recent linked tasks.</p>}</Card>
     </>}
   </div></Layout>;
 }

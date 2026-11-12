@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
+import { recommendationReturnPath } from './recommendationNavigation';
 import { ApiError } from '../../api/client';
 import { assignTask, getTask, listAssignableStaff, listTaskOffers, listTasks, taskStatuses, type AssignableStaff, type OperationalTask, type TaskOffer, type TaskStatus } from '../../api/tasks';
 import { loadSession } from '../../auth/session';
@@ -80,6 +81,7 @@ export function OperatorTaskDetail() {
 }
 
 function TaskDetail({ taskId }: { taskId: string }) {
+  const returnTo = recommendationReturnPath(useLocation().state);
   const [assigning, setAssigning] = useState(false);
   const [notice, setNotice] = useState('');
   const load = useCallback((signal: AbortSignal) => getTask(taskId, signal), [taskId]);
@@ -87,7 +89,7 @@ function TaskDetail({ taskId }: { taskId: string }) {
   const canAssign = loadSession()?.user.role === 'OPERATOR';
   return <OperatorLayout title="Task detail" subtitle="Assignment, source and staff progress">
     <div className={s.page}>
-      <Link className={s.back} to="/operator/tasks">← Task board</Link>
+      <Link className={s.back} to={returnTo ?? '/operator/tasks'}>{returnTo ? '← Back to recommendation' : '← Task board'}</Link>
       {notice && <p className={s.success} role="status">{notice}</p>}
       {error && <p className={s.error} role="alert">{error}{task ? ' Details may be stale; assignment is disabled until refreshed.' : ''}</p>}
       {!task && !error && <p className={s.message} role="status">Loading task…</p>}

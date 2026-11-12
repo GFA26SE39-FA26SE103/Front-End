@@ -67,7 +67,7 @@ function NotificationRow({ item, role }: { item: NotificationItem; role: 'operat
     : undefined;
   const destination = role === 'operator'
     ? item.type === 'RECOMMENDATION_ACCEPTED'
-      ? `/operator/recommendations${recommendationId ? `/${recommendationId}` : ''}`
+      ? `/operator/recommendations${recommendationId ? `/${recommendationId}?from=notifications` : ''}`
       : item.taskId ? `/operator/tasks/${item.taskId}` : '/operator/tasks'
     : item.type.startsWith('SWAP_') ? '/manager/swaps' : '/manager/schedule';
   const time = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(item.createdAt));
