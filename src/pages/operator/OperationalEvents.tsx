@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { getOperationalEvent, listEventZones, listOperationalEvents, type EventQuery, type EventZone, type OperationalEvent } from '../../api/operationalEvents';
 import { ManagerLayout } from '../../components/ManagerLayout';
 import { OperatorLayout } from '../../components/OperatorLayout';
 import { Button, Card, Chip } from '../../components/ui';
 import { useTaskPolling } from './useTaskPolling';
-import { GenerateFromEvent } from '../Recommendations';
+import { EventRecommendationPanel, GenerateFromEvent } from '../Recommendations';
 import s from './OperationalEvents.module.css';
 
 type Workspace = 'operator' | 'manager';
@@ -55,6 +55,14 @@ export default function OperationalEvents({ workspace = 'operator' }: { workspac
   const [zones, setZones] = useState<EventZone[]>([]);
   const [zoneError, setZoneError] = useState('');
   const [attempt, setAttempt] = useState(0);
+  const [selected, setSelected] = useState<OperationalEvent>();
+  const panelTrigger = useRef<HTMLButtonElement | null>(null);
+  const panelEvent = workspace === 'manager' && selected
+    ? data?.items.find(event => event.eventId === selected.eventId) ?? selected : undefined;
+  function closePanel() {
+    setSelected(undefined);
+    panelTrigger.current?.focus({ preventScroll: true });
+  }
   const base = `/${workspace}/events`;
   useEffect(() => {
     const controller = new AbortController();
@@ -68,7 +76,7 @@ export default function OperationalEvents({ workspace = 'operator' }: { workspac
     setParams(next);
   }
   const pageCount = visible ? Math.max(1, Math.ceil(visible.totalCount / visible.pageSize)) : 1;
-  return <Layout workspace={workspace}><div className={`${s.page} ${workspace === 'manager' ? s.managerPage : ''}`}>
+  return <Layout workspace={workspace}><div className={panelEvent ? s.withPanel : s.workspace}><div className={`${s.page} ${workspace === 'manager' ? s.managerPage : ''}`}>
     <div className={s.heading}><div><h2>Event history</h2><p>Each row is one detected episode. Events and tasks have independent lifecycles.</p></div><Button variant="secondary" onClick={refresh}>Refresh events</Button></div>
     <Card>
       <Filters key={search} query={query} zones={zones} onApply={apply} />
@@ -80,11 +88,20 @@ export default function OperationalEvents({ workspace = 'operator' }: { workspac
     {visible && <Card>
       <div className={s.heading}><h3>{visible.totalCount.toLocaleString()} matching events</h3><span className={s.note}>Updated {date(checkedAt?.toISOString() || null)} · Vietnam time</span></div>
       {visible.items.length === 0 ? <p className={s.empty}>No events match these filters. Clear filters to include all statuses and history.</p> : <div className={s.tableWrap}><table className={s.table}>
-        <caption className={s.srOnly}>Operational event history</caption><thead><tr><th scope="col">Event</th><th scope="col">Zone / camera</th><th scope="col">Priority / status</th><th scope="col">Detected</th><th scope="col">Cleared</th><th scope="col">Linked tasks</th></tr></thead>
-        <tbody>{visible.items.map(event => <tr key={event.eventId}><th scope="row"><Link to={`${base}/${encodeURIComponent(event.eventId)}${search ? `?${search}` : ''}`}>{event.eventTypeName}</Link><p className={s.note}>{event.sourceCode}</p></th><td>{event.zoneName}<p className={s.note}>{event.cameraCode}</p></td><td><Badges event={event} /></td><td>{date(event.detectedAt)}</td><td>{date(event.clearedAt)}</td><td>{event.taskCount}</td></tr>)}</tbody>
+        <caption className={s.srOnly}>Operational event history</caption><thead><tr><th scope="col">Event</th><th scope="col">Zone / camera</th><th scope="col">Priority / status</th><th scope="col">Detected</th><th scope="col">Cleared</th><th scope="col">Linked tasks</th>{workspace === 'manager' && <th scope="col">Actions</th>}</tr></thead>
+        <tbody>{visible.items.map(event => <tr key={event.eventId} className={panelEvent?.eventId === event.eventId ? s.selectedRow : undefined}>
+          <th scope="row"><Link to={`${base}/${encodeURIComponent(event.eventId)}${search ? `?${search}` : ''}`}>{event.eventTypeName}</Link><p className={s.note}>{event.sourceCode}</p></th>
+          <td>{event.zoneName}<p className={s.note}>{event.cameraCode}</p></td><td><Badges event={event} /></td><td>{date(event.detectedAt)}</td><td>{date(event.clearedAt)}</td><td>{event.taskCount}</td>
+          {workspace === 'manager' && <td>{event.status === 'ACTIVE' && <Button variant="secondary" size="sm"
+            aria-label={`AI recommendation for ${event.sourceCode}`} aria-expanded={panelEvent?.eventId === event.eventId}
+            aria-controls={panelEvent ? 'event-recommendation-panel' : undefined}
+            onClick={click => { panelTrigger.current = click.currentTarget; setSelected(event); }}>AI recommendation</Button>}</td>}
+        </tr>)}</tbody>
       </table></div>}
       <div className={s.pagination}><span className={s.note}>Page {visible.page}{visible.page <= pageCount ? ` of ${pageCount}` : ' · no rows'} · {visible.items.length} shown</span><div><Button variant="secondary" disabled={visible.page <= 1} onClick={() => apply({ ...query, page: visible.page - 1 })}>Previous</Button><Button variant="secondary" disabled={visible.page >= pageCount} onClick={() => apply({ ...query, page: visible.page + 1 })}>Next</Button></div></div>
     </Card>}
+  </div>
+    {panelEvent && <EventRecommendationPanel key={panelEvent.eventId} event={panelEvent} onClose={closePanel} />}
   </div></Layout>;
 }
 

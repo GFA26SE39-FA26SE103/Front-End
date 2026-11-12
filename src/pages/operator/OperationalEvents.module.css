@@ -1,6 +1,10 @@
 .page { position: relative; width: 100%; min-width: 0; overflow: auto; padding: 24px; display: flex; flex-direction: column; gap: 18px; }
 .page > * { flex-shrink: 0; }
 .managerPage { padding: 0; align-self: flex-start; overflow: visible; }
+.workspace { display: contents; }
+.withPanel { width: 100%; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(330px, 420px); gap: 16px; align-items: start; }
+.selectedRow { background: var(--color-surface-2); }
+@media (max-width: 1100px) { .withPanel { grid-template-columns: minmax(0, 1fr); } }
 .page h2, .page h3, .page p { margin: 0; }
 .page h2 { font-size: 21px; margin-bottom: 5px; }
 .page h3 { font-size: 14px; }

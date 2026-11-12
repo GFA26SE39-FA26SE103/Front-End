@@ -26,6 +26,44 @@ function show(path = '/operator/events', workspace: 'operator' | 'manager' = 'op
   </Routes></MemoryRouter>);
 }
 describe('Operational Event history', () => {
+  it.each([false, true])('lets Manager review inline and keeps the selected event page (existing: %s)', async existing => {
+    const active = { ...event, status: 'ACTIVE', clearedAt: null };
+    const recommendation = { recommendationId: 'recommendation-1', eventId: event.eventId, status: 'AVAILABLE',
+      title: 'Monitor the condition', description: 'Review the queue.', generatedAt: event.updatedAt, expiresAt: null };
+    const generate = vi.fn();
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, options) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/zones')) return json([]);
+      if (url.pathname.endsWith('/generate')) {
+        generate(JSON.parse(String(options?.body)));
+        return json({ recommendation, reason: null });
+      }
+      if (url.pathname.endsWith('/decision')) {
+        expect(JSON.parse(String(options?.body))).toEqual({ decision: 'ACCEPTED', reason: null });
+        return json({ ...recommendation, status: 'ACCEPTED' });
+      }
+      if (url.pathname.endsWith('/recommendation-1')) return json(recommendation);
+      if (url.pathname.endsWith('/recommendations')) return json({ items: existing && url.searchParams.get('status') === 'AVAILABLE' ? [recommendation] : [], hasMore: false });
+      return json({ items: [active], totalCount: 21, page: 2, pageSize: 20, generatedAt: event.updatedAt, timeZone: 'Asia/Ho_Chi_Minh' });
+    });
+    show('/manager/events?status=ACTIVE&page=2', 'manager');
+    const trigger = await screen.findByRole('button', { name: `AI recommendation for ${event.sourceCode}` });
+    fireEvent.click(trigger);
+    const panel = screen.getByRole('complementary', { name: 'AI recommendation' });
+    expect(screen.getByRole('table', { name: 'Operational event history' })).toBeInTheDocument();
+    if (!existing) fireEvent.click(await within(panel).findByRole('button', { name: 'Generate recommendation' }));
+    expect(await within(panel).findByRole('heading', { name: recommendation.title })).toBeInTheDocument();
+    if (existing) expect(generate).not.toHaveBeenCalled();
+    else expect(generate).toHaveBeenCalledWith({ eventId: event.eventId });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Save decision' }));
+    expect(await within(panel).findByText('Accepted and available for Operator review.')).toBeInTheDocument();
+    fireEvent.keyDown(within(panel).getByRole('button', { name: 'Close' }), { key: 'Escape' });
+    expect(panel).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    expect(screen.getByLabelText('Event status')).toHaveValue('ACTIVE');
+    expect(screen.getByText(/Page 2 of 2/)).toBeInTheDocument();
+  });
+
   it('defaults to All statuses, priorities, dates and zones and opens the linked task from detail', async () => {
     show();
     expect(await screen.findByRole('link', { name: 'Long queue' })).toBeInTheDocument();

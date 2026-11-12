@@ -28,9 +28,10 @@ type RecommendationPage = { items: Recommendation[]; page: number; pageSize: num
 type GenerationResult = { recommendation: Recommendation | null; reason: string | null };
 const base = (workspace: RecommendationWorkspace) => `/api/${workspace}/recommendations`;
 
-export function listRecommendations(workspace: RecommendationWorkspace, page: number, status: RecommendationStatus | '', signal: AbortSignal) {
+export function listRecommendations(workspace: RecommendationWorkspace, page: number, status: RecommendationStatus | '', signal: AbortSignal, zoneId?: string) {
   const params = new URLSearchParams({ page: String(page), pageSize: '20' });
   if (workspace === 'manager' && status) params.set('status', status);
+  if (zoneId) params.set('zoneId', zoneId);
   return apiFetch<RecommendationPage>(`${base(workspace)}?${params}`, { signal });
 }
 

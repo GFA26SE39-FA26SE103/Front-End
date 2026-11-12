@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
+import type { OperationalEvent } from '../api/operationalEvents';
 import { decideRecommendation, generateRecommendation, getRecommendation, listRecommendations,
   type Recommendation, type RecommendationDecision, type RecommendationStatus, type RecommendationWorkspace } from '../api/recommendations';
 import { ManagerLayout } from '../components/ManagerLayout';
@@ -108,7 +109,12 @@ function Detail({ workspace, id }: { workspace: RecommendationWorkspace; id: str
     <div className={s.toolbar}><Link to={path(workspace)}>← Recommendations</Link><Button variant="secondary" onClick={refresh}>Refresh</Button></div>
     {error && <p className={s.error} role="alert">{error}</p>}
     {!value && !error && <p role="status">Loading recommendation…</p>}
-    {value && <>
+    {value && <RecommendationReview workspace={workspace} value={value} onSaved={replace} />}
+  </Layout>;
+}
+
+function RecommendationReview({ workspace, value, onSaved }: { workspace: RecommendationWorkspace; value: Recommendation; onSaved: (item: Recommendation) => void }) {
+  return <>
       <Card>
         <div className={s.toolbar}><h2>{value.title}</h2><Status status={value.status} /></div>
         <p>{value.description}</p>
@@ -132,11 +138,10 @@ function Detail({ workspace, id }: { workspace: RecommendationWorkspace; id: str
           {value.evidence.slaPolicyVersion != null && <div><dt>SLA policy version</dt><dd>{value.evidence.slaPolicyVersion}</dd></div>}
         </dl>
       </Card>}
-      {workspace === 'manager' && (value.status === 'AVAILABLE' || value.status === 'DEFERRED') && <DecisionForm item={value} onSaved={replace} />}
+      {workspace === 'manager' && (value.status === 'AVAILABLE' || value.status === 'DEFERRED') && <DecisionForm item={value} onSaved={onSaved} />}
       {workspace === 'manager' && value.status === 'ACCEPTED' && <p className={s.notice} role="status">Accepted and available for Operator review.</p>}
       {workspace === 'operator' && <Card><h3>Operator review</h3><p>Check the current event before taking action.</p><Link to="/operator/tasks">Open task board</Link></Card>}
-    </>}
-  </Layout>;
+  </>;
 }
 
 function DecisionForm({ item, onSaved }: { item: Recommendation; onSaved: (item: Recommendation) => void }) {
@@ -172,7 +177,42 @@ function DecisionForm({ item, onSaved }: { item: Recommendation; onSaved: (item:
   </Card>;
 }
 
-export function GenerateFromEvent({ eventId }: { eventId: string }) {
+async function findPendingRecommendation(eventId: string, zoneId: string, signal: AbortSignal) {
+  const candidates = await Promise.all((['AVAILABLE', 'DEFERRED'] as const).map(async status => {
+    for (let page = 1; ; page++) {
+      const result = await listRecommendations('manager', page, status, signal, zoneId);
+      const match = result.items.find(item => item.eventId === eventId && item.status === status);
+      if (match || !result.hasMore) return match;
+    }
+  }));
+  const match = candidates.filter(item => item !== undefined).sort((a, b) => Date.parse(b.generatedAt) - Date.parse(a.generatedAt))[0];
+  return match ? getRecommendation('manager', match.recommendationId, signal) : null;
+}
+
+export function EventRecommendationPanel({ event, onClose }: { event: OperationalEvent; onClose: () => void }) {
+  const close = useRef<HTMLButtonElement>(null);
+  const { eventId, zoneId } = event;
+  const load = useCallback((signal: AbortSignal) => findPendingRecommendation(eventId, zoneId, signal), [eventId, zoneId]);
+  const { value, error, refresh, replace } = useResource(load);
+  useEffect(() => { close.current?.focus({ preventScroll: true }); }, []);
+
+  return <aside id="event-recommendation-panel" aria-labelledby="event-recommendation-heading" className={`${s.page} ${s.eventPanel}`}
+    onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); onClose(); } }}>
+    <div className={s.toolbar}>
+      <h2 id="event-recommendation-heading">AI recommendation</h2>
+      <button type="button" ref={close} className={s.closePanel} onClick={onClose}>Close</button>
+    </div>
+    <p className={s.muted}>{event.eventTypeName} · {event.zoneName} · {event.sourceCode}</p>
+    <p>Latest observation: {event.metricValue.toLocaleString()} · {date(event.lastObservedAt)}</p>
+    {error && <><p className={s.error} role="alert">{error}</p><Button variant="secondary" onClick={refresh}>Retry</Button></>}
+    {value === undefined && !error && <p role="status">Checking for an existing recommendation…</p>}
+    {value && <RecommendationReview workspace="manager" value={value} onSaved={replace} />}
+    {(value === null || value?.status === 'EXPIRED' || value?.status === 'DISMISSED') && event.status === 'ACTIVE' &&
+      <GenerateFromEvent eventId={eventId} onGenerated={replace} />}
+  </aside>;
+}
+
+export function GenerateFromEvent({ eventId, onGenerated }: { eventId: string; onGenerated?: (item: Recommendation) => void }) {
   const navigate = useNavigate();
   const request = useRef<AbortController | null>(null);
   const [busy, setBusy] = useState(false);
@@ -187,8 +227,10 @@ export function GenerateFromEvent({ eventId }: { eventId: string }) {
     try {
       const result = await generateRecommendation(eventId, controller.signal);
       if (controller.signal.aborted) return;
-      if (result.recommendation) navigate(`${path('manager')}/${encodeURIComponent(result.recommendation.recommendationId)}`);
-      else setNotice(noRecommendation[result.reason ?? ''] ?? 'No recommendation was generated.');
+      if (result.recommendation) {
+        if (onGenerated) onGenerated(result.recommendation);
+        else navigate(`${path('manager')}/${encodeURIComponent(result.recommendation.recommendationId)}`);
+      } else setNotice(noRecommendation[result.reason ?? ''] ?? 'No recommendation was generated.');
     } catch (error: unknown) { if (!controller.signal.aborted) setError(message(error)); }
     finally {
       request.current = null;
