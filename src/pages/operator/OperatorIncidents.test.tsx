@@ -13,7 +13,7 @@ const open: IncidentRow = {
   incidentId: 'inc-1', title: 'Spill at entrance', description: null, sourceType: 'STAFF_REPORTED', incidentTypeCode: 'SPILL', incidentTypeName: 'Spill',
   zoneId: 'zone-1', zoneName: 'Entrance', status: 'IN_PROGRESS', statusReason: null, createdAt: '2026-11-11T03:00:00Z', updatedAt: '2026-11-11T03:00:00Z',
   closedAt: null, mitigatedAt: '2026-11-11T03:05:00Z', resolutionDeadlineAt: '2026-11-11T04:00:00Z', slaPriorityCode: 'HIGH', isOpen: true,
-  mandatoryTasks: 2, verifiedMandatoryTasks: 1, tasks: [{ taskId: 'task-1', title: 'Clean spill', status: 'VERIFIED', isMandatory: true, verificationMode: 'MANUAL', assigneeName: 'Linh', verifiedAt: null }],
+  mandatoryTasks: 2, verifiedMandatoryTasks: 1, tasks: [{ taskId: 'task-1', title: 'Clean spill', status: 'VERIFIED', isMandatory: true, verificationMode: 'MANUAL', assigneeName: 'Linh', verifiedAt: null, taskTypeCode: 'TT-12', isMitigation: true }],
 };
 const closed: IncidentRow = { ...open, incidentId: 'inc-2', title: 'Old spill', status: 'CLOSED', statusReason: 'ALL_MANDATORY_TASKS_VERIFIED', closedAt: '2026-11-11T02:00:00Z', isOpen: false, verifiedMandatoryTasks: 2, mitigatedAt: null, tasks: [] };
 
@@ -30,9 +30,11 @@ describe('Operator incident board', () => {
     const row = await screen.findByRole('row', { name: /Spill at entrance/ });
     expect(within(row).getByText('1/2 verified')).toBeInTheDocument();
     expect(within(row).getByRole('link', { name: 'Clean spill' })).toHaveAttribute('href', '/operator/tasks/task-1');
-    expect(within(row).queryByText('Not yet')).not.toBeInTheDocument();
+    expect(within(row).getByText(/mandatory · mitigation/)).toBeInTheDocument();
+    expect(within(row).queryByText(/Not yet/)).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText('Show'), 'ended');
     expect(await screen.findByText('Closed automatically: every mandatory task was verified')).toBeInTheDocument();
+    expect(screen.getByText('No mitigation task')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Dismiss' })).not.toBeInTheDocument();
     expect(listIncidents).toHaveBeenLastCalledWith('ended', expect.any(AbortSignal));
   });
