@@ -27,6 +27,7 @@ import Analytics from './pages/manager/Analytics';
 import OperationalEvents, { OperationalEventDetail } from './pages/operator/OperationalEvents';
 import GlobalSettings from './pages/GlobalSettings';
 import { ManagerNotifications, OperatorNotifications } from './pages/NotificationInbox';
+import { RecommendationDetail, Recommendations } from './pages/Recommendations';
 
 export default function App() {
   return (
@@ -65,6 +66,8 @@ export default function App() {
         <Route path="/operator/tasks/:taskId" element={<OperatorTaskDetail />} />
         <Route path="/operator/cameras/:cameraId" element={<OperatorCameraLive />} />
         <Route path="/operator/notifications" element={<OperatorNotifications />} />
+        <Route path="/operator/recommendations" element={<Recommendations workspace="operator" />} />
+        <Route path="/operator/recommendations/:id" element={<RecommendationDetail workspace="operator" />} />
       </Route>
       <Route element={<ProtectedRoute allowedRoles={['MANAGER']} />}>
         <Route path="/manager/dashboard" element={<Navigate to="/manager/analytics" replace />} />
@@ -79,6 +82,8 @@ export default function App() {
         <Route path="/manager/leave" element={<Leave />} />
         <Route path="/manager/shifts" element={<WorkShifts />} />
         <Route path="/manager/notifications" element={<ManagerNotifications />} />
+        <Route path="/manager/recommendations" element={<Recommendations workspace="manager" />} />
+        <Route path="/manager/recommendations/:id" element={<RecommendationDetail workspace="manager" />} />
       </Route>
       <Route element={<ProtectedRoute allowedRoles={['STAFF']} />}>
         <Route path="/staff/dashboard" element={<RoleWorkspace />} />

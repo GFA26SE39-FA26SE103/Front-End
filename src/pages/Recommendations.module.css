@@ -1,0 +1,26 @@
+.page { width: 100%; min-width: 0; align-self: flex-start; display: grid; gap: 16px; }
+.operatorPage { padding: 24px; }
+.page h2, .page h3, .page p { margin: 0; }
+.page h2 { font-size: 20px; }
+.page h3 { font-size: 15px; }
+.page a { color: var(--color-primary); font-weight: 600; }
+.toolbar, .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.toolbar { justify-content: space-between; }
+.muted { color: var(--color-text-muted); font-size: 13px; line-height: 1.6; }
+.field { display: grid; gap: 6px; max-width: 540px; margin: 12px 0; font-size: 13px; font-weight: 600; }
+.field select, .field textarea { padding: 8px 10px; color: var(--color-text); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 7px; font: inherit; font-weight: 400; }
+.field textarea { resize: vertical; }
+.field :focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.form { margin-top: 12px; }
+.error, .notice { padding: 10px 12px; border-radius: 7px; font-size: 13px; line-height: 1.6; }
+.error { color: var(--color-danger); background: var(--color-danger-tint); }
+.notice { background: var(--color-surface-2); }
+.form button, .toolbar + .notice, .toolbar + .error { margin-top: 10px; }
+.tableWrap { overflow-x: auto; margin: 12px 0; }
+.table { width: 100%; text-align: left; border-collapse: collapse; font-size: 13px; }
+.table th, .table td { padding: 12px 10px; border-bottom: 1px solid var(--color-border); }
+.table thead { color: var(--color-text-muted); background: var(--color-surface-2); }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 14px; margin: 16px 0 0; }
+.facts dt { color: var(--color-text-muted); font-size: 12px; margin-bottom: 4px; }
+.facts dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+@media (max-width: 640px) { .operatorPage { padding: 12px; } }

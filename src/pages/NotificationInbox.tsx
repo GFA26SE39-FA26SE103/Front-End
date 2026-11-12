@@ -7,7 +7,7 @@ import { Button } from '../components/ui';
 import s from './NotificationCenter.module.css';
 
 export function OperatorNotifications() {
-  return <OperatorLayout title="Notifications" subtitle="Task assignments and escalations"><Inbox role="operator" /></OperatorLayout>;
+  return <OperatorLayout title="Notifications" subtitle="Tasks, escalations and accepted recommendations"><Inbox role="operator" /></OperatorLayout>;
 }
 
 export function ManagerNotifications() {
@@ -62,8 +62,13 @@ function Inbox({ role }: { role: 'operator' | 'manager' }) {
 }
 
 function NotificationRow({ item, role }: { item: NotificationItem; role: 'operator' | 'manager' }) {
+  const recommendationId = item.type === 'RECOMMENDATION_ACCEPTED'
+    ? /^Review recommendation ([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}):/i.exec(item.message)?.[1]
+    : undefined;
   const destination = role === 'operator'
-    ? item.taskId ? `/operator/tasks/${item.taskId}` : '/operator/tasks'
+    ? item.type === 'RECOMMENDATION_ACCEPTED'
+      ? `/operator/recommendations${recommendationId ? `/${recommendationId}` : ''}`
+      : item.taskId ? `/operator/tasks/${item.taskId}` : '/operator/tasks'
     : item.type.startsWith('SWAP_') ? '/manager/swaps' : '/manager/schedule';
   const time = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(item.createdAt));
   return <li className={`${s.notification} ${item.readAt ? '' : s.unread}`}>

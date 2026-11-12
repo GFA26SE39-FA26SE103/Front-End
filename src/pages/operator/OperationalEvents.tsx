@@ -5,6 +5,7 @@ import { ManagerLayout } from '../../components/ManagerLayout';
 import { OperatorLayout } from '../../components/OperatorLayout';
 import { Button, Card, Chip } from '../../components/ui';
 import { useTaskPolling } from './useTaskPolling';
+import { GenerateFromEvent } from '../Recommendations';
 import s from './OperationalEvents.module.css';
 
 type Workspace = 'operator' | 'manager';
@@ -103,6 +104,7 @@ export function OperationalEventDetail({ workspace = 'operator' }: { workspace?:
         <dl className={s.facts}><div><dt>Zone</dt><dd>{event.zoneName}</dd></div><div><dt>Camera</dt><dd>{workspace === 'operator' ? <Link to={`/operator/cameras/${encodeURIComponent(event.cameraId)}`}>{event.cameraName} · {event.cameraCode}</Link> : `${event.cameraName} · ${event.cameraCode}`}</dd></div><div><dt>Latest recorded metric</dt><dd>{event.metricValue.toLocaleString()} <span className={s.note}>({event.measurementType})</span></dd></div><div><dt>Event type</dt><dd>{event.eventTypeCode}</dd></div></dl>
         <p className={s.note}>Event priority is an alert level, independent of Task SLA priority. Clearing an event does not verify its linked tasks.</p>
       </Card>
+      {workspace === 'manager' && event.status === 'ACTIVE' && <GenerateFromEvent key={event.eventId} eventId={event.eventId} />}
       <Card><h3>Timeline · Vietnam time</h3><dl className={s.facts}><div><dt>Detected</dt><dd>{date(event.detectedAt)}</dd></div><div><dt>Last observed</dt><dd>{date(event.lastObservedAt)}</dd></div><div><dt>Cleared</dt><dd>{date(event.clearedAt)}</dd></div><div><dt>Last updated</dt><dd>{date(event.updatedAt)}</dd></div></dl></Card>
       <Card><h3>Linked tasks · {event.taskCount}</h3>{visible.tasks.length === 0 ? <p className={s.empty}>No linked tasks. An event does not always create a task.</p> : <div className={s.tableWrap}><table className={s.table}><thead><tr><th scope="col">Task</th><th scope="col">Status</th><th scope="col">Assignee</th><th scope="col">Created</th></tr></thead><tbody>{visible.tasks.map(task => <tr key={task.taskId}><th scope="row">{workspace === 'operator' ? <Link to={`/operator/tasks/${encodeURIComponent(task.taskId)}`}>{task.title}</Link> : task.title}</th><td>{task.status}</td><td>{task.assigneeName || 'Unassigned'}</td><td>{date(task.createdAt)}</td></tr>)}</tbody></table></div>}{visible.hasMoreTasks && <p className={s.note}>Showing the 100 most recent linked tasks.</p>}</Card>
     </>}
