@@ -17,10 +17,20 @@ export type CheckoutMapping = {
   checkoutCounterId: string;
   laneRoi: MapPoint[];
   staffRoi: MapPoint[];
+  serviceRoi?: MapPoint[] | null;
   isEnabled: boolean;
   isQueueSource: boolean;
   createdAt: string;
   updatedAt: string;
+};
+
+export type CheckoutCounterRuntime = { counterId: string; presence: 'PRESENT' | 'ABSENT' | 'UNKNOWN'; queueCount: number | null; disagreement: boolean };
+export type CheckoutRuntime = {
+  zoneId: string; configId: string; configVersion: string; generatedAt: string;
+  state: 'NOT_ACTIVE' | 'UNAVAILABLE' | 'READY'; issueCode: string | null;
+  queueCount: number | null; staffedCounterCount: number | null; queuePerStaffedCounter: number | null;
+  noStaffedCapacity: boolean; counters: CheckoutCounterRuntime[];
+  maxWaitSeconds?: number | null;
 };
 
 export type CheckoutCounterRequest = {
@@ -33,6 +43,7 @@ export type CheckoutCounterRequest = {
 export type CheckoutMappingRequest = {
   laneRoi: MapPoint[];
   staffRoi: MapPoint[];
+  serviceRoi?: MapPoint[] | null;
   isEnabled: boolean;
   isQueueSource: boolean;
   expectedUpdatedAt?: string;
@@ -45,6 +56,9 @@ const expectedUpdatedAtQuery = (expectedUpdatedAt?: string) => expectedUpdatedAt
 
 export const listCheckoutCounters = (zoneId: string, signal?: AbortSignal) =>
   apiFetch<CheckoutCounter[]>(`/api/zones/${encodeURIComponent(zoneId)}/checkout-counters`, { signal });
+
+export const getCheckoutRuntime = (zoneId: string, signal?: AbortSignal) =>
+  apiFetch<CheckoutRuntime>(`/api/zones/${encodeURIComponent(zoneId)}/checkout-runtime`, { signal });
 
 export const createCheckoutCounter = (zoneId: string, request: CheckoutCounterRequest) =>
   apiFetch<CheckoutCounter>(`/api/zones/${encodeURIComponent(zoneId)}/checkout-counters`, {

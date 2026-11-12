@@ -26,7 +26,7 @@ vi.mock('./PolygonRoiEditor', async (importOriginal) => {
     <div aria-label={`${label} polygon editor`}>
       <output data-testid="active-draft">{JSON.stringify(draft)}</output>
       <output data-testid="background-rois">{JSON.stringify(backgroundRois)}</output>
-      <button type="button" disabled={disabled} onClick={() => onChange({ points: label === 'Lane ROI' ? lane : staff, complete: true, editing: true })}>Complete {label}</button>
+      <button type="button" disabled={disabled} onClick={() => onChange({ points: label === 'Lane ROI' ? lane : label === 'Service ROI' ? service : staff, complete: true, editing: true })}>Complete {label}</button>
       <button type="button" disabled={disabled} onClick={() => onChange({ points: [{ x: 0, y: 0 }, { x: .5, y: .5 }, { x: 1, y: 1 }], complete: true, editing: true })}>Invalid {label}</button>
     </div>
   ) };
@@ -36,6 +36,7 @@ const version = '2026-11-11T10:15:30.1234567+07:00';
 const nextVersion = '2026-11-11T10:15:31.7654321+07:00';
 const lane: MapPoint[] = [{ x: 0, y: 0 }, { x: .2, y: 0 }, { x: 0, y: .2 }];
 const staff: MapPoint[] = [{ x: .7, y: .7 }, { x: .9, y: .7 }, { x: .7, y: .9 }];
+const service: MapPoint[] = [{ x: .1, y: .1 }, { x: .2, y: .1 }, { x: .1, y: .2 }];
 const camera: CameraRecord = {
   cameraId: 'cam-1', floorId: 'floor-1', code: 'CAM-01', name: 'Checkout camera', manufacturer: null, model: null,
   serialNumber: null, installedAt: null, warrantyExpiresAt: null, mapX: null, mapY: null, mapRotationDeg: null,
@@ -119,7 +120,7 @@ describe('CheckoutCoverageEditor', () => {
     expect(saveCheckoutMapping).not.toHaveBeenCalled();
   });
 
-  it('requires two complete valid polygons and permits independent, non-adjacent lane/staff geometry', async () => {
+  it('requires Service ROI for the queue source and permits independent lane/staff geometry', async () => {
     const user = userEvent.setup();
     render(<CheckoutCoverageEditor camera={camera} zones={zones} />);
     await chooseCounter(user);
@@ -138,8 +139,12 @@ describe('CheckoutCoverageEditor', () => {
     await user.click(screen.getByLabelText('Mapping enabled'));
     await user.click(screen.getByLabelText('Use as queue source'));
     await user.click(screen.getByRole('button', { name: 'Save checkout mapping' }));
+    expect(screen.getByRole('alert')).toHaveTextContent(/Service ROI.*close/i);
+    await user.click(screen.getByRole('button', { name: 'Edit Service ROI' }));
+    await user.click(screen.getByRole('button', { name: 'Complete Service ROI' }));
+    await user.click(screen.getByRole('button', { name: 'Save checkout mapping' }));
     await waitFor(() => expect(saveCheckoutMapping).toHaveBeenCalledWith('counter-1', 'cam-1', {
-      laneRoi: lane, staffRoi: staff, isEnabled: true, isQueueSource: true,
+      laneRoi: lane, staffRoi: staff, serviceRoi: service, isEnabled: true, isQueueSource: true,
     }));
     await user.click(screen.getByRole('button', { name: 'Save checkout mapping' }));
     await waitFor(() => expect(vi.mocked(saveCheckoutMapping).mock.calls[1][2].expectedUpdatedAt).toBe(nextVersion));
