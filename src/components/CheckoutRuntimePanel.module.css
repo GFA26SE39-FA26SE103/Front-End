@@ -1,0 +1,7 @@
+.panel { display: grid; gap: 12px; min-width: 0; }
+.selector { display: grid; gap: 6px; max-width: 320px; font-size: 13px; font-weight: 600; }
+.selector select { min-height: 38px; padding: 8px; border: 1px solid var(--color-border); border-radius: 7px; background: var(--color-surface); color: var(--color-text); }
+.summary { margin: 0; color: var(--color-text-muted); overflow-wrap: anywhere; }
+.scroll { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
+.table th, .table td { padding: 10px; border-bottom: 1px solid var(--color-border); }

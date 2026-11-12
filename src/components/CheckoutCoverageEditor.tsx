@@ -18,7 +18,7 @@ export type CheckoutCoverageEditorProps = {
   onBusyChange?: (busy: boolean) => void;
 };
 type CounterForm = { code: string; name: string; isEnabled: boolean };
-type MappingForm = { lane: RoiDraft; staff: RoiDraft; isEnabled: boolean; isQueueSource: boolean };
+type MappingForm = { lane: RoiDraft; staff: RoiDraft; service: RoiDraft; isEnabled: boolean; isQueueSource: boolean };
 const emptyRoi = (): RoiDraft => ({ points: [], complete: false, editing: false });
 const counterForm = (counter: CheckoutCounter | null): CounterForm => ({
   code: counter?.code ?? '', name: counter?.name ?? '', isEnabled: counter?.isEnabled ?? false,
@@ -26,11 +26,13 @@ const counterForm = (counter: CheckoutCounter | null): CounterForm => ({
 const mappingForm = (mapping: CheckoutMapping | null): MappingForm => ({
   lane: mapping ? { points: mapping.laneRoi.map(p => ({ ...p })), complete: true, editing: true } : emptyRoi(),
   staff: mapping ? { points: mapping.staffRoi.map(p => ({ ...p })), complete: true, editing: true } : emptyRoi(),
+  service: mapping?.serviceRoi ? { points: mapping.serviceRoi.map(p => ({ ...p })), complete: true, editing: true } : emptyRoi(),
   isEnabled: mapping?.isEnabled ?? false, isQueueSource: mapping?.isQueueSource ?? false,
 });
 const mappingValue = (form: MappingForm) => JSON.stringify({
   lane: form.lane.points, laneComplete: form.lane.complete, staff: form.staff.points,
-  staffComplete: form.staff.complete, isEnabled: form.isEnabled, isQueueSource: form.isQueueSource,
+  staffComplete: form.staff.complete, service: form.service.points, serviceComplete: form.service.complete,
+  isEnabled: form.isEnabled, isQueueSource: form.isQueueSource,
 });
 const queueSources = (mappings: CheckoutMapping[]) => mappings.filter(m => m.isEnabled && m.isQueueSource);
 function errorMessage(reason: unknown) {
@@ -55,7 +57,7 @@ function CheckoutSession({ camera, zones, onDirtyChange, onBusyChange }: Checkou
   const [mappingBaseline, setMappingBaseline] = useState<CheckoutMapping | null>(null);
   const [mapping, setMapping] = useState<MappingForm>(() => mappingForm(null));
   const [sources, setSources] = useState<CheckoutMapping[]>([]);
-  const [target, setTarget] = useState<'lane' | 'staff'>('lane');
+  const [target, setTarget] = useState<'lane' | 'staff' | 'service'>('lane');
   const [reloadKey, setReloadKey] = useState(0);
   const [editorKey, setEditorKey] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -193,18 +195,21 @@ function CheckoutSession({ camera, zones, onDirtyChange, onBusyChange }: Checkou
   };
   const saveMapping = () => {
     if (blocked || busyLock.current || !counterId || !baseline) return;
-    for (const [label, roi] of [['Lane ROI', mapping.lane], ['Staff ROI', mapping.staff]] as const) {
+    const count = queueSources(sources.filter(m => m.cameraId !== camera.cameraId)).length
+      + Number(mapping.isEnabled && mapping.isQueueSource);
+    if (count > 1) { setError('Another camera is already the queue source. Keep only one enabled queue source and switch manually.'); return; }
+    for (const [label, roi] of [['Lane ROI', mapping.lane], ['Staff ROI', mapping.staff],
+      ...(mapping.isQueueSource ? [['Service ROI', mapping.service] as const] : [])] as const) {
       if (!roi.complete) { setError(`${label}: close the polygon before saving.`); return; }
       const problem = validateRoiPolygon(roi.points);
       if (problem) { setError(`${label}: ${problem}`); return; }
     }
     if (mapping.isQueueSource && !mapping.isEnabled) { setError('A queue source must be an enabled mapping.'); return; }
-    const count = queueSources(sources.filter(m => m.cameraId !== camera.cameraId)).length
-      + Number(mapping.isEnabled && mapping.isQueueSource);
-    if (count > 1) { setError('Another camera is already the queue source. Keep only one enabled queue source and switch manually.'); return; }
     if (baseline.isEnabled && count !== 1) { setError('Disable the counter and save it before removing or switching its queue source.'); return; }
     const request: CheckoutMappingRequest = {
       laneRoi: mapping.lane.points.map(p => ({ ...p })), staffRoi: mapping.staff.points.map(p => ({ ...p })),
+      ...(mapping.service.complete ? { serviceRoi: mapping.service.points.map(p => ({ ...p })) }
+        : mappingBaseline?.serviceRoi ? { serviceRoi: null } : {}),
       isEnabled: mapping.isEnabled, isQueueSource: mapping.isQueueSource,
       ...(mappingBaseline ? { expectedUpdatedAt: mappingBaseline.updatedAt } : {}),
     };
@@ -213,7 +218,7 @@ function CheckoutSession({ camera, zones, onDirtyChange, onBusyChange }: Checkou
         throw new Error('The server returned a different camera mapping. Reload saved checkout data.');
       setMappingBaseline(saved); setMapping(mappingForm(saved));
       setSources(rows => [...rows.filter(m => m.cameraId !== camera.cameraId), saved]);
-      setEditorKey(k => k + 1); setMessage('Lane and Staff ROI saved together.');
+      setEditorKey(k => k + 1); setMessage('Checkout ROIs saved together.');
     });
   };
   const otherSources = sources.filter(m => m.cameraId !== camera.cameraId);
@@ -241,9 +246,9 @@ function CheckoutSession({ camera, zones, onDirtyChange, onBusyChange }: Checkou
     if (busyLock.current || !confirmDiscard()) event.preventDefault();
   };
   const activeZone = availableZones.find(z => z.zoneId === zoneId);
-  const otherTarget = target === 'lane' ? 'staff' : 'lane';
-  const label = target === 'lane' ? 'Lane ROI' : 'Staff ROI';
-  const otherLabel = target === 'lane' ? 'Staff ROI' : 'Lane ROI';
+  const label = target === 'lane' ? 'Lane ROI' : target === 'staff' ? 'Staff ROI' : 'Service ROI';
+  const roiColor = (key: 'lane' | 'staff' | 'service') => key === 'lane' ? 'var(--color-info)'
+    : key === 'staff' ? 'var(--color-purple)' : 'var(--color-success)';
 
   return <section className={s.editor} aria-label={`Checkout coverage for ${camera.code}`} aria-busy={busy || loading}>
     <header className={s.header}>
@@ -296,21 +301,24 @@ function CheckoutSession({ camera, zones, onDirtyChange, onBusyChange }: Checkou
       </form>
       <form className={s.roiPanel} noValidate onSubmit={event => { event.preventDefault(); saveMapping(); }}>
         <h3>{activeZone?.name} · {baseline?.code ?? 'Select or create a counter'}</h3>
-        <p className={s.help}>Lane ROI measures the queue; Staff ROI observes the cashier position. Both are required, but need not touch, overlap or contain one another.</p>
+        <p className={s.help}>Lane ROI measures the queue; Staff ROI observes the cashier position. The queue-source camera also needs Service ROI at the counter entrance to measure waiting time.</p>
         <div className={s.legend} aria-label="Checkout ROI legend">
           <span><i style={{ backgroundColor: 'var(--color-info)' }} />Lane ROI · {mapping.lane.complete ? 'Closed' : 'Not closed'}</span>
           <span><i style={{ backgroundColor: 'var(--color-purple)' }} />Staff ROI · {mapping.staff.complete ? 'Closed' : 'Not closed'}</span>
+          <span><i style={{ backgroundColor: 'var(--color-success)' }} />Service ROI · {mapping.service.complete ? 'Closed' : 'Not closed'}</span>
         </div>
         <p className={s.help}>Map separate physical queues: overlapping Lane ROIs across counters can count the same person twice. This editor does not deduplicate people between counters.</p>
         <div className={s.actions}>
           <Button variant="secondary" aria-pressed={target === 'lane'} disabled={blocked || !counterId} onClick={() => setTarget('lane')}>Edit Lane ROI</Button>
           <Button variant="secondary" aria-pressed={target === 'staff'} disabled={blocked || !counterId} onClick={() => setTarget('staff')}>Edit Staff ROI</Button>
+          <Button variant="secondary" aria-pressed={target === 'service'} disabled={blocked || !counterId} onClick={() => setTarget('service')}>Edit Service ROI</Button>
         </div>
         <PolygonRoiEditor key={`${counterId}:${target}:${editorKey}`} cameraCode={camera.code} previewUrl={previewUrl} previewLoading={previewLoading}
-          label={label} color={target === 'lane' ? 'var(--color-info)' : 'var(--color-purple)'} draft={mapping[target]}
+          label={label} color={roiColor(target)} draft={mapping[target]}
           disabled={blocked || !counterId} onChange={draft => setMapping(v => ({ ...v, [target]: draft }))}
-          backgroundRois={mapping[otherTarget].points.length ? [{ id: otherTarget, points: mapping[otherTarget].points,
-            color: otherTarget === 'lane' ? 'var(--color-info)' : 'var(--color-purple)', label: `${otherLabel}${mapping[otherTarget].complete ? '' : ' (incomplete)'}` }] : []} />
+          backgroundRois={(['lane', 'staff', 'service'] as const).filter(key => key !== target && mapping[key].points.length)
+            .map(key => ({ id: key, points: mapping[key].points, color: roiColor(key),
+              label: `${key === 'lane' ? 'Lane' : key === 'staff' ? 'Staff' : 'Service'} ROI${mapping[key].complete ? '' : ' (incomplete)'}` }))} />
         {previewError && <div className={s.error} role="alert">Preview unavailable: {previewError} <Button variant="secondary" disabled={busy || previewLoading} onClick={() => { setPreviewLoading(true); setPreviewUrl(undefined); setPreviewError(''); setPreviewKey(k => k + 1); }}>Retry camera preview</Button></div>}
         <fieldset className={s.fields} disabled={blocked || !counterId}>
           <label className={s.check}><input type="checkbox" checked={mapping.isEnabled} onChange={e => setMapping(v => ({ ...v, isEnabled: e.target.checked }))} />Mapping enabled</label>

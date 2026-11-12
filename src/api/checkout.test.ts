@@ -6,6 +6,7 @@ import {
   createCheckoutCounter,
   deleteCheckoutCounter,
   deleteCheckoutMapping,
+  getCheckoutRuntime,
   listCameraCheckoutMappings,
   listCheckoutCounters,
   listCounterCheckoutMappings,
@@ -46,6 +47,11 @@ const endpoints = [
   {
     name: 'list counters', run: () => listCheckoutCounters('zone/one ?#'),
     path: '/api/zones/zone%2Fone%20%3F%23/checkout-counters', method: 'GET', result: [counter],
+  },
+  {
+    name: 'checkout runtime', run: () => getCheckoutRuntime('zone/one ?#'),
+    path: '/api/zones/zone%2Fone%20%3F%23/checkout-runtime', method: 'GET',
+    result: { zoneId: 'zone-1', state: 'UNAVAILABLE', queueCount: null, counters: [] },
   },
   {
     name: 'create counter', run: () => createCheckoutCounter('zone/one ?#', counterRequest),
@@ -102,13 +108,15 @@ describe('checkout API', () => {
     }>();
     expectTypeOf<CheckoutMapping>().toEqualTypeOf<{
       mappingId: string; cameraId: string; checkoutCounterId: string; laneRoi: MapPoint[]; staffRoi: MapPoint[];
+      serviceRoi?: MapPoint[] | null;
       isEnabled: boolean; isQueueSource: boolean; createdAt: string; updatedAt: string;
     }>();
     expectTypeOf<CheckoutCounterRequest>().toEqualTypeOf<{
       code: string; name: string; isEnabled: boolean; expectedUpdatedAt?: string;
     }>();
     expectTypeOf<CheckoutMappingRequest>().toEqualTypeOf<{
-      laneRoi: MapPoint[]; staffRoi: MapPoint[]; isEnabled: boolean; isQueueSource: boolean; expectedUpdatedAt?: string;
+      laneRoi: MapPoint[]; staffRoi: MapPoint[]; serviceRoi?: MapPoint[] | null;
+      isEnabled: boolean; isQueueSource: boolean; expectedUpdatedAt?: string;
     }>();
     expectTypeOf<ReturnType<typeof listCheckoutCounters>>().toEqualTypeOf<Promise<CheckoutCounter[]>>();
     expectTypeOf<ReturnType<typeof createCheckoutCounter>>().toEqualTypeOf<Promise<CheckoutCounter>>();
