@@ -26,7 +26,7 @@ export function PolygonRoiEditor({ previewUrl, previewLoading = false, cameraCod
   const remember = () => setHistory(h => [...h, copy(draft)].slice(-HISTORY_LIMIT));
   const at = (x: number, y: number) => clientToNormalized(layerRef.current!.getBoundingClientRect(), x, y);
   const startDrag = (event: PointerEvent<SVGPolygonElement | HTMLButtonElement>, index?: number) => {
-    if (disabled || !editing) return;
+    if (disabled || !editing || !canDraw) return;
     event.stopPropagation();
     drag.current = { pointerId: event.pointerId, original: copy(draft), start: at(event.clientX, event.clientY), index, remembered: false };
     event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -60,10 +60,14 @@ export function PolygonRoiEditor({ previewUrl, previewLoading = false, cameraCod
   };
 
   return <div className={s.previewColumn} aria-label={`${label} polygon editor`}>
+    {previewUrl && <p className={s.drawingHint}>{!canDraw ? 'Select a zone or counter to draw its ROI.'
+      : complete ? 'Shape complete. Drag the area or its corner points to adjust it.'
+        : points.length < 3 ? 'Click around the area on the image to place at least 3 points.'
+          : 'Add more points or select Finish shape to close the outline.'}</p>}
     <div className={s.previewFrame}>
       {previewUrl ? <img className={s.preview} src={previewUrl} alt={`Camera preview for ${cameraCode}`} />
         : <div className={s.previewState}>{previewLoading ? 'Loading camera preview…' : 'Camera preview unavailable.'}</div>}
-      {previewUrl && <svg ref={layerRef} className={s.drawingLayer} data-testid="roi-drawing-layer" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-label={`${label} drawing area`}
+      {previewUrl && <svg ref={layerRef} className={`${s.drawingLayer} ${canDraw && !disabled && !complete ? s.drawing : ''}`} data-testid="roi-drawing-layer" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-label={`${label} drawing area`}
         onClick={event => {
           if (disabled || complete || editing || !canDraw) return;
           if (points.length >= MAX_POINTS) { setError(`An ROI can contain at most ${MAX_POINTS} points.`); return; }
@@ -73,7 +77,8 @@ export function PolygonRoiEditor({ previewUrl, previewLoading = false, cameraCod
           <polygon points={attributes(roi.points)} fill={roi.color} stroke={roi.color} className={s.savedRoi}><title>{roi.label}</title></polygon>
           {roi.label && roi.points.length > 0 && <text className={s.roiLabel} x={roi.points.reduce((n, p) => n + p.x, 0) / roi.points.length * 1000} y={roi.points.reduce((n, p) => n + p.y, 0) / roi.points.length * 1000} textAnchor="middle">{roi.label}</text>}
         </g>)}
-        {points.length >= 2 && <polygon points={attributes(points)} fill={color} stroke={color} data-testid="active-roi" className={`${s.activeRoi} ${editing && !disabled ? s.movable : ''}`}
+        {!complete && points.length >= 2 && <polyline points={attributes(points)} fill="none" stroke={color} className={s.openRoi} />}
+        {complete && points.length >= 3 && <polygon points={attributes(points)} fill={color} stroke={color} data-testid="active-roi" className={`${s.activeRoi} ${editing && !disabled ? s.movable : ''}`}
           onPointerDown={e => startDrag(e)} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={cancelDrag} onLostPointerCapture={cancelDrag}><title>{label}</title></polygon>}
       </svg>}
       {previewUrl && points.map((point, i) => editing ? <button key={i} type="button" className={s.resizeHandle}
@@ -87,16 +92,16 @@ export function PolygonRoiEditor({ previewUrl, previewLoading = false, cameraCod
         }} /> : <span key={i} className={s.point} style={{ left: `${point.x * 100}%`, top: `${point.y * 100}%`, backgroundColor: color }} aria-hidden="true" />)}
     </div>
     <div className={s.polygonTools}>
-      <Button variant="secondary" disabled={!previewUrl || disabled || !canDraw} onClick={() => {
-        remember(); onChange({ points: [], complete: false, editing: false }); setError('');
-      }}>Draw polygon ROI</Button>
-      {!complete && <Button variant="secondary" disabled={disabled || points.length < 3} onClick={() => {
+      {!complete && <Button disabled={!previewUrl || disabled || !canDraw || points.length < 3} onClick={() => {
         const issue = validateRoiPolygon(points); if (issue) { setError(issue); return; }
         remember(); onChange({ ...draft, complete: true, editing: true }); setError('');
-      }}>Close polygon</Button>}
-      <Button variant="secondary" disabled={disabled || history.length === 0 && (complete || points.length === 0)} onClick={undo}>Undo</Button>
+      }}>Finish shape</Button>}
+      <Button variant="secondary" disabled={disabled || !canDraw || history.length === 0 && (complete || points.length === 0)} onClick={undo}>Undo</Button>
+      {points.length > 0 && <Button variant="secondary" disabled={!previewUrl || disabled || !canDraw} onClick={() => {
+        remember(); onChange({ points: [], complete: false, editing: false }); setError('');
+      }}>Start over</Button>}
     </div>
-    <p className={s.hint}>{complete ? 'Drag the area to move it, or drag a vertex to resize. Arrow keys move a focused vertex; Shift moves farther.' : 'Click points on the camera image, then close the polygon.'}</p>
+    {complete && <p className={s.hint}>Use arrow keys to move a focused corner point. Hold Shift for larger steps.</p>}
     {error && <p role="alert" className={s.error}>{error}</p>}
   </div>;
 }

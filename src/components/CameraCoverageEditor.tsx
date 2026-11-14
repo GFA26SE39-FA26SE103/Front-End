@@ -85,12 +85,12 @@ function ZoneCoverageEditor({ camera, zones, onDirtyChange, onBusyChange }: Omit
   const save = async () => {
     const zoneId = active || target;
     const issue = validateRoiPolygon(draft.points);
-    if (!zoneId || !draft.complete || issue) { setError(issue ?? 'Close the ROI polygon before saving.'); return; }
+    if (!zoneId || !draft.complete || issue) { setError(issue ?? 'Finish the shape before saving.'); return; }
     setBusy(true); setError(''); setMessage('');
     try {
       const saved = await saveCameraMapping(camera.cameraId, zoneId, { roiPolygon: draft.points, status: 'ACTIVE' });
       setMappings(rows => [...rows.filter(m => m.zoneId !== saved.zoneId), saved]);
-      setActive(saved.zoneId); setDirty(false); setMessage(`${zoneById(zoneId)?.name ?? 'Zone'} mapped.`);
+      setActive(saved.zoneId); setDirty(false); setMessage(`ROI saved for ${zoneById(zoneId)?.name ?? 'this zone'}.`);
     } catch (e) { setError(messageOf(e, 'Could not save the ROI.')); }
     finally { setBusy(false); }
   };
@@ -112,11 +112,16 @@ function ZoneCoverageEditor({ camera, zones, onDirtyChange, onBusyChange }: Omit
       backgroundRois={mappings.filter(m => m.zoneId !== active).map(m => ({ id: m.cameraZoneId, points: m.roiPolygon, color: zoneById(m.zoneId)?.colorHex ?? '#3B82F6' }))} />
     <aside className={s.controls}>
       <label className={s.field}>Target zone<select value={target} disabled={!previewUrl || busy || loading} onChange={e => {
+        const mapping = mappings.find(row => row.zoneId === e.target.value);
+        if (mapping) { edit(mapping); return; }
         if (!confirmChange()) return;
         setTarget(e.target.value); setActive(''); setDraft(emptyDraft()); setDirty(false); setError(''); setMessage('');
       }}><option value="">Select a zone</option>{zones.map(z => <option key={z.zoneId} value={z.zoneId}>{z.name} ({z.code})</option>)}</select></label>
-      {(active || draft.points.length > 0) && <Button disabled={!draft.complete || draft.points.length < 3 || busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save ROI'}</Button>}
-      <p className={s.hint}>Map a floor zone to its visible region in this camera. This does not project floor-map geometry.</p>
+      <Button disabled={!target || !draft.complete || !dirty || busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save ROI to zone'}</Button>
+      <p className={s.hint}>{!target ? 'Select the zone you want this camera to monitor.'
+        : !draft.complete ? 'Place points on the camera image and select Finish shape to unlock Save.'
+          : dirty ? 'The shape is ready. Save it to link this area to the selected zone.'
+            : 'The saved ROI is shown on the camera image.'}</p>
       <div className={s.mappingHeader}><strong>Mapped zones</strong><Chip tone="neutral">{mappings.length}</Chip></div>
       {loading ? <p className={s.muted}>Loading mappings…</p> : mappings.length === 0 ? <p className={s.muted}>No zones are mapped to this camera yet.</p>
         : <ul className={s.mappingList}>{mappings.map(mapping => {

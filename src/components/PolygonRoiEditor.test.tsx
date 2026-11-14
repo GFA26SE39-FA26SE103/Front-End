@@ -17,11 +17,13 @@ function Editor({ initial = { points: [], complete: false, editing: false } }: {
 describe('normalized ROI polygon editor', () => {
   it('draws, closes and undoes normalized geometry', async () => {
     const user = userEvent.setup(); render(<Editor />);
-    await user.click(screen.getByRole('button', { name: 'Draw polygon ROI' }));
     const layer = screen.getByTestId('roi-drawing-layer');
     vi.spyOn(layer, 'getBoundingClientRect').mockReturnValue(rect);
     for (const [clientX, clientY] of [[180, 90], [740, 90], [660, 370]]) fireEvent.click(layer, { clientX, clientY });
-    await user.click(screen.getByRole('button', { name: 'Close polygon' }));
+    await user.click(screen.getByRole('button', { name: 'Start over' }));
+    expect(JSON.parse(screen.getByTestId('draft').textContent!).points).toEqual([]);
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+    await user.click(screen.getByRole('button', { name: 'Finish shape' }));
     expect(JSON.parse(screen.getByTestId('draft').textContent!)).toEqual({ points: [{ x: .1, y: .1 }, { x: .8, y: .1 }, { x: .7, y: .8 }], complete: true, editing: true });
     expect(screen.getAllByRole('button', { name: /Resize ROI point/ })).toHaveLength(3);
     await user.click(screen.getByRole('button', { name: 'Undo' }));
@@ -44,7 +46,7 @@ describe('normalized ROI polygon editor', () => {
   it('does not close an intersecting polygon', async () => {
     const user = userEvent.setup();
     render(<Editor initial={{ points: [{ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 1, y: 0 }, { x: 0, y: 1 }], complete: false, editing: false }} />);
-    await user.click(screen.getByRole('button', { name: 'Close polygon' }));
+    await user.click(screen.getByRole('button', { name: 'Finish shape' }));
     expect(screen.getByRole('alert')).toHaveTextContent(/intersect/i);
     expect(JSON.parse(screen.getByTestId('draft').textContent!).complete).toBe(false);
   });

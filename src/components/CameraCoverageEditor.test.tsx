@@ -58,20 +58,25 @@ describe('CameraCoverageEditor', () => {
 
     expect(await screen.findByRole('img', { name: 'Camera preview for CAM-01' })).toHaveAttribute('src', 'blob:camera-preview');
     await user.selectOptions(screen.getByLabelText('Target zone'), 'zone-frozen');
-    await user.click(screen.getByRole('button', { name: 'Draw polygon ROI' }));
     const layer = screen.getByTestId('roi-drawing-layer');
     vi.spyOn(layer, 'getBoundingClientRect').mockReturnValue(previewRect);
     fireEvent.click(layer, { clientX: 180, clientY: 90 });
     fireEvent.click(layer, { clientX: 740, clientY: 90 });
     fireEvent.click(layer, { clientX: 660, clientY: 370 });
-    await user.click(screen.getByRole('button', { name: 'Close polygon' }));
-    await user.click(screen.getByRole('button', { name: 'Save ROI' }));
+    const save = screen.getByRole('button', { name: 'Save ROI to zone' });
+    expect(save).toBeDisabled();
+    expect(screen.queryByTestId('active-roi')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Finish shape' }));
+    expect(screen.getByTestId('active-roi')).toBeInTheDocument();
+    expect(saveCameraMapping).not.toHaveBeenCalled();
+    await user.click(save);
 
     await waitFor(() => expect(saveCameraMapping).toHaveBeenCalledWith('camera-1', 'zone-frozen', {
       roiPolygon: [{ x: 0.1, y: 0.1 }, { x: 0.8, y: 0.1 }, { x: 0.7, y: 0.8 }],
       status: 'ACTIVE',
     }));
-    expect(await screen.findByText('Frozen aisle mapped.')).toBeInTheDocument();
+    expect(await screen.findByText('ROI saved for Frozen aisle.')).toBeInTheDocument();
+    expect(screen.getByTestId('active-roi')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Configure monitoring for Frozen aisle' })).toHaveAttribute('href', '/admin/ai-config?zoneId=zone-frozen');
   });
 
@@ -97,7 +102,9 @@ describe('CameraCoverageEditor', () => {
     render(<CameraCoverageEditor camera={camera} zones={zones} onClose={close} />);
     await screen.findByRole('img', { name: 'Camera preview for CAM-01' });
     await user.selectOptions(screen.getByLabelText('Target zone'), 'zone-frozen');
-    await user.click(screen.getByRole('button', { name: 'Draw polygon ROI' }));
+    const layer = screen.getByTestId('roi-drawing-layer');
+    vi.spyOn(layer, 'getBoundingClientRect').mockReturnValue(previewRect);
+    fireEvent.click(layer, { clientX: 180, clientY: 90 });
     await user.click(screen.getByRole('button', { name: 'Checkout counter ROI' }));
     expect(confirm).toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Zone monitoring ROI' })).toHaveAttribute('aria-pressed', 'true');

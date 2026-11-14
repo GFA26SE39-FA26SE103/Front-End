@@ -274,13 +274,17 @@ describe('StoreLayout', () => {
       await user.click(screen.getByRole('button', { name: 'Configure coverage' }));
       await screen.findByRole('img', { name: 'Camera preview for CAM-01' });
       await user.selectOptions(screen.getByLabelText('Target zone'), zone.zoneId);
-      await user.click(screen.getByRole('button', { name: 'Draw polygon ROI' }));
       return user;
     };
 
     it.each(dismissals)('confirms dirty ROI dismissal through $action without losing a rejected draft', async ({ name }) => {
       const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
       const user = await openCoverage();
+      const layer = screen.getByTestId('roi-drawing-layer');
+      vi.spyOn(layer, 'getBoundingClientRect').mockReturnValue({
+        x: 0, y: 0, left: 0, top: 0, right: 100, bottom: 100, width: 100, height: 100, toJSON: () => ({}),
+      });
+      fireEvent.click(layer, { clientX: 10, clientY: 10 });
       await user.click(screen.getByRole('button', { name }));
       expect(confirm).toHaveBeenCalledOnce();
       expect(screen.getByRole('heading', { name: 'Camera coverage' })).toBeInTheDocument();
@@ -302,8 +306,8 @@ describe('StoreLayout', () => {
         x: 0, y: 0, left: 0, top: 0, right: 100, bottom: 100, width: 100, height: 100, toJSON: () => ({}),
       });
       for (const [clientX, clientY] of [[10, 10], [80, 10], [70, 80]]) fireEvent.click(layer, { clientX, clientY });
-      await user.click(screen.getByRole('button', { name: 'Close polygon' }));
-      await user.click(screen.getByRole('button', { name: 'Save ROI' }));
+      await user.click(screen.getByRole('button', { name: 'Finish shape' }));
+      await user.click(screen.getByRole('button', { name: 'Save ROI to zone' }));
       await waitFor(() => expect(saveCameraMapping).toHaveBeenCalledOnce());
 
       await user.click(screen.getByRole('button', { name }));
@@ -313,7 +317,7 @@ describe('StoreLayout', () => {
 
       await act(async () => finishSave({ cameraZoneId: 'mapping-1', cameraId: camera.cameraId,
         zoneId: zone.zoneId, roiPolygon: [{ x: .1, y: .1 }, { x: .8, y: .1 }, { x: .7, y: .8 }], status: 'ACTIVE' }));
-      expect(await screen.findByText('Frozen aisle mapped.')).toBeInTheDocument();
+      expect(await screen.findByText('ROI saved for Frozen aisle.')).toBeInTheDocument();
       await user.click(screen.getByRole('button', { name }));
       await waitFor(() => expect(screen.queryByRole('heading', { name: 'Camera coverage' })).not.toBeInTheDocument());
       expect(confirm).not.toHaveBeenCalled();
@@ -322,6 +326,11 @@ describe('StoreLayout', () => {
     it('preserves placement drafts and coverage dirty state when another floor guard rejects dismissal', async () => {
       const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
       const user = await openCoverage(true);
+      const layer = screen.getByTestId('roi-drawing-layer');
+      vi.spyOn(layer, 'getBoundingClientRect').mockReturnValue({
+        x: 0, y: 0, left: 0, top: 0, right: 100, bottom: 100, width: 100, height: 100, toJSON: () => ({}),
+      });
+      fireEvent.click(layer, { clientX: 10, clientY: 10 });
       await user.click(screen.getByRole('button', { name: /Upper floor.*Floor 2/ }));
       expect(screen.getByRole('heading', { name: 'Camera coverage' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Ground floor.*Floor 1/ })).toHaveAttribute('aria-pressed', 'true');
