@@ -29,6 +29,7 @@ export type FloorPlanSurfaceProps = {
     zones: ZoneRecord[];
     saving: boolean;
     onSave: (zone: ZoneEditorSave) => Promise<void> | void;
+    onDelete: (zoneId: string) => Promise<void> | void;
     onCancel: () => void;
   };
 };

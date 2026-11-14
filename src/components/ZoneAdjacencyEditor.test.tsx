@@ -14,7 +14,7 @@ vi.mock('../api/floors', () => ({
 
 const zone = (zoneId: string, code: string, name: string, floorId = 'floor-1'): ZoneRecord => ({
   zoneId, floorId, code, name, zoneType: null, mapPolygon: [], colorHex: null,
-  areaM2: null, minStaff: 0, status: 'ACTIVE', updatedAt: '2026-11-09T00:00:00Z',
+  minStaff: 0, status: 'ACTIVE', updatedAt: '2026-11-09T00:00:00Z',
 });
 
 const queue = zone('zone-queue', 'QUEUE', 'Queue');

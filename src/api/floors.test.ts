@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { saveSession } from '../auth/session';
-import { createFloor, createZone, getFloorMap, listZoneAdjacency, replaceZoneAdjacency, updateFloorDetails, uploadFloorMap } from './floors';
+import { createFloor, createZone, deleteZone, getFloorMap, listZoneAdjacency, replaceZoneAdjacency, updateFloorDetails, uploadFloorMap } from './floors';
 
 const user = {
   userId: '00000000-0000-0000-0000-000000000001',
@@ -85,7 +85,7 @@ describe('floor API', () => {
     expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get('Authorization')).toBe('Bearer jwt-token');
   });
 
-  it('creates a zone with normalized polygon, color, and optional area', async () => {
+  it('creates a zone with a normalized rectangle and color', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ zoneId: 'zone-1' }), {
       headers: { 'Content-Type': 'application/json' },
     }));
@@ -95,7 +95,6 @@ describe('floor API', () => {
       zoneType: null,
       mapPolygon: [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.1 }, { x: 0.5, y: 0.5 }, { x: 0.1, y: 0.5 }],
       colorHex: '#22C55E',
-      areaM2: 125.5,
       minStaff: 2,
       status: 'ACTIVE',
     };
@@ -105,6 +104,15 @@ describe('floor API', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:5080/api/floors/floor-1/zones');
     expect(fetchMock.mock.calls[0][1]?.method).toBe('POST');
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual(request);
+  });
+
+  it('deletes a zone through the encoded backend route', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
+
+    await deleteZone('zone/one');
+
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:5080/api/zones/zone%2Fone');
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('DELETE');
   });
 
   it('reads and replaces a zone adjacency set through the backend contract', async () => {

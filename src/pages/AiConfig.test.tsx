@@ -7,7 +7,7 @@ import { mockNativeDialogs } from '../test/dialog';
 mockNativeDialogs();
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-const zone = { zoneId: 'zone-1', floorId: 'floor-1', code: 'QUEUE', name: 'Actual queue zone', zoneType: 'QUEUE', mapPolygon: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }], colorHex: '#123456', areaM2: 10, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z' };
+const zone = { zoneId: 'zone-1', floorId: 'floor-1', code: 'QUEUE', name: 'Actual queue zone', zoneType: 'QUEUE', mapPolygon: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }], colorHex: '#123456', minStaff: 0, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z' };
 const type = { incidentTypeId: 'type-1', code: 'LONG_QUEUE', name: 'Long Queue', description: null, sourceType: 'AI_DETECTED', measurementType: 'QUEUE_LENGTH', status: 'ACTIVE', supported: true, thresholdUnit: 'PEOPLE', defaultWarningThreshold: 3, defaultCriticalThreshold: 5, unsupportedReason: null };
 const savedConfig = (status = 'DRAFT') => ({ configId: 'config-1', zoneId: 'zone-1', name: 'Queue monitoring', confidenceThreshold: .6, status, updatedAt: '2026-10-03T01:00:00Z', rules: [{ ruleId: 'rule-1', incidentTypeId: 'type-1', warningThreshold: 3, criticalThreshold: 5, thresholdUnit: 'PEOPLE', sustainSec: 30, cooldownSec: 300, enabled: true, parametersJson: '{}' }] });
 let config: Record<string, unknown> | null;
@@ -20,7 +20,7 @@ let multipleFloors: boolean;
 let requests: string[];
 let crowdCatalog: boolean;
 let criticalTaskType: string | null;
-const crowdType = { ...type, incidentTypeId: 'crowd', code: 'OVERCROWDING_CONGESTION', name: 'Overcrowding / Congestion', measurementType: 'CROWD_DENSITY', supported: false, thresholdUnit: 'PEOPLE_PER_M2', defaultWarningThreshold: 2, defaultCriticalThreshold: 3, unsupportedReason: 'Density runtime is deferred.', measurementOptions: [{ mode: 'PEOPLE_COUNT', unit: 'PEOPLE', supported: true, reason: null }] };
+const crowdType = { ...type, incidentTypeId: 'crowd', code: 'OVERCROWDING_CONGESTION', name: 'Overcrowding / Congestion', measurementType: 'PEOPLE_COUNT', supported: true, thresholdUnit: 'PEOPLE', defaultWarningThreshold: 3, defaultCriticalThreshold: 5, unsupportedReason: null, measurementOptions: [{ mode: 'PEOPLE_COUNT', unit: 'PEOPLE', supported: true, reason: null }] };
 function HistoryBack() { const navigate = useNavigate(); return <button onClick={() => navigate(-1)}>Browser back</button>; }
 const show = (path = '/admin/ai-config?zoneId=zone-1') => render(<MemoryRouter initialEntries={[path]}><HistoryBack /><AiConfig /></MemoryRouter>);
 async function create() { show(); fireEvent.click(await screen.findByRole('button', { name: 'Create configuration' })); await screen.findByLabelText('Add a rule'); }
@@ -114,19 +114,15 @@ describe('API-backed monitoring configuration', () => {
     expect(selector).toBeDisabled();
     expect(writes).toHaveLength(0);
     const warning = screen.getByLabelText('Overcrowding / Congestion warning');
-    expect(warning).toHaveValue(null);
+    expect(warning).toHaveValue(3);
     expect(warning).not.toHaveAttribute('aria-invalid');
-    fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
-    expect(warning).toHaveAccessibleDescription('Enter a threshold.');
-    expect(writes).toHaveLength(0);
     expect(screen.queryByRole('button', { name: 'Use people count (temporary)' })).not.toBeInTheDocument();
-    fireEvent.change(warning, { target: { value: '1' } });
-    fireEvent.change(screen.getByLabelText('Overcrowding / Congestion critical'), { target: { value: '2' } });
+    expect(screen.getByLabelText('Overcrowding / Congestion critical')).toHaveValue(5);
     fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
     await screen.findByText('Configuration saved as Draft. Review it before activating.');
     expect(writes[0].body.rules).toEqual([expect.objectContaining({
-      enabled: true, thresholdUnit: 'PEOPLE', warningThreshold: 1, criticalThreshold: 2,
-      parametersJson: '{"measurementMode":"PEOPLE_COUNT"}',
+      enabled: true, thresholdUnit: 'PEOPLE', warningThreshold: 3, criticalThreshold: 5,
+      parametersJson: null,
     })]);
   });
 
@@ -145,38 +141,26 @@ describe('API-backed monitoring configuration', () => {
     expect(writes).toHaveLength(0);
   });
 
-  it('preserves legacy density until explicit count conversion with fresh thresholds', async () => {
+  it('shows a legacy density rule as unsupported instead of converting it implicitly', async () => {
     crowdCatalog = true;
     config = { ...savedConfig(), rules: [{ ...savedConfig().rules[0], incidentTypeId: 'crowd', incidentCode: crowdType.code, thresholdUnit: 'PEOPLE_PER_M2', warningThreshold: 2, criticalThreshold: 3, parametersJson: '{"custom":7}' }] };
     show(); fireEvent.click(await screen.findByRole('button', { name: 'Edit configuration' }));
-    expect(screen.getByLabelText('Overcrowding / Congestion unit')).toHaveValue('people/m²');
+    expect(screen.getByLabelText('Overcrowding / Congestion unit')).toHaveValue('PEOPLE_PER_M2');
     expect(screen.getByLabelText('Overcrowding / Congestion enabled')).toBeEnabled();
     fireEvent.click(screen.getByLabelText('Overcrowding / Congestion enabled'));
     expect(screen.getByLabelText('Overcrowding / Congestion enabled')).toBeDisabled();
-    expect(screen.getByLabelText('New people-count warning')).toHaveValue(null);
-    fireEvent.change(screen.getByLabelText('New people-count warning'), { target: { value: '1' } });
-    fireEvent.change(screen.getByLabelText('New people-count critical'), { target: { value: '2' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Use people count (temporary)' }));
-    expect(screen.getByLabelText('Overcrowding / Congestion unit')).toHaveValue('people');
-    fireEvent.click(screen.getByLabelText('Overcrowding / Congestion enabled'));
-    fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
-    await screen.findByText('Configuration saved as Draft. Review it before activating.');
-    const rule = (writes.find(w => w.method === 'PUT')!.body.rules as Record<string, unknown>[])[0];
-    expect(rule).toMatchObject({ thresholdUnit: 'PEOPLE', warningThreshold: 1, criticalThreshold: 2, enabled: true });
-    expect(JSON.parse(String(rule.parametersJson))).toEqual({ custom: 7, measurementMode: 'PEOPLE_COUNT' });
-    expect(screen.getByRole('table')).toHaveTextContent('People count in ROI');
+    expect(screen.getByText('Runtime unsupported')).toBeInTheDocument();
+    expect(screen.queryByLabelText('New people-count warning')).not.toBeInTheDocument();
+    expect(writes).toHaveLength(0);
   });
 
-  it('does not discard array parameters to convert a legacy rule', async () => {
+  it('does not expose a legacy density conversion control', async () => {
     crowdCatalog = true;
     config = { ...savedConfig(), rules: [{ ...savedConfig().rules[0], incidentTypeId: 'crowd', incidentCode: crowdType.code, thresholdUnit: 'PEOPLE_PER_M2', parametersJson: '[1]' }] };
     show(); fireEvent.click(await screen.findByRole('button', { name: 'Edit configuration' }));
-    fireEvent.change(screen.getByLabelText('New people-count warning'), { target: { value: '1' } });
-    fireEvent.change(screen.getByLabelText('New people-count critical'), { target: { value: '2' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Use people count (temporary)' }));
-    expect(screen.getByRole('alert')).toHaveTextContent('parameters');
+    expect(screen.queryByRole('button', { name: /Use people count/i })).not.toBeInTheDocument();
     expect(writes).toHaveLength(0);
-    expect(screen.getByLabelText('Overcrowding / Congestion unit')).toHaveValue('people/m²');
+    expect(screen.getByLabelText('Overcrowding / Congestion unit')).toHaveValue('PEOPLE_PER_M2');
   });
 
   it('cancels deletion without writing, then deletes the displayed saved version and updates the overview', async () => {

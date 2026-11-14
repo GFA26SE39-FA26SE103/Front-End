@@ -4,6 +4,7 @@ import { listCameras, updateCamera, type CameraRecord, type CreateCameraRequest 
 import { ApiError } from '../api/client';
 import {
   createZone,
+  deleteZone,
   getFloorMap,
   listFloors,
   listSupermarkets,
@@ -340,7 +341,6 @@ export default function StoreLayout() {
       zoneType: draft.zoneType,
       mapPolygon: draft.mapPolygon,
       colorHex: draft.colorHex,
-      areaM2: draft.areaM2,
       status: existing?.status ?? 'ACTIVE',
     };
     setZoneSaving(true);
@@ -354,6 +354,23 @@ export default function StoreLayout() {
       setActionMessage(existing ? 'Zone updated.' : 'Zone saved.');
     } catch (reason) {
       const message = messageOf(reason, 'Could not save the zone.');
+      setActionError(message);
+      throw reason instanceof Error ? reason : new Error(message);
+    } finally {
+      setZoneSaving(false);
+    }
+  };
+
+  const removeZone = async (zoneId: string) => {
+    setZoneSaving(true);
+    setActionError('');
+    setActionMessage('');
+    try {
+      await deleteZone(zoneId);
+      setZones(current => current.filter(zone => zone.zoneId !== zoneId));
+      setActionMessage('Zone deleted.');
+    } catch (reason) {
+      const message = messageOf(reason, 'Could not delete the zone.');
       setActionError(message);
       throw reason instanceof Error ? reason : new Error(message);
     } finally {
@@ -496,7 +513,7 @@ export default function StoreLayout() {
           <div className={s.canvasHeader}>
             <CardHeader
               title={selectedFloor?.name ?? 'Floor plan'}
-              subtitle={zoneEditing ? 'Draw rectangles by dragging, or click points to create a polygon.' : 'Drag the camera body. Use the amber handle to align its muzzle and field of view.'}
+              subtitle={zoneEditing ? 'Draw rectangular zones by dragging. Select an existing zone to move, resize or delete it.' : 'Drag the camera body. Use the amber handle to align its muzzle and field of view.'}
             />
             {selectedFloor && (
               <div className={s.canvasTools}>
@@ -543,7 +560,7 @@ export default function StoreLayout() {
               onSelectCamera={id => { setSelectedCameraId(id); setCameraSelectionError(''); }}
               onChangePlacement={changePlacement}
               zones={zones}
-              zoneEditor={zoneEditing ? { zones, saving: zoneSaving, onSave: saveZone, onCancel: () => setZoneEditing(false) } : undefined}
+              zoneEditor={zoneEditing ? { zones, saving: zoneSaving, onSave: saveZone, onDelete: removeZone, onCancel: () => setZoneEditing(false) } : undefined}
             />
           ) : mapState.status === 'loading' || (mapState.status === 'idle' && Boolean(selectedFloor?.mapAssetUrl)) ? (
             <div className={s.emptyPlan}><Icon name="scan" size={20} /><p>Loading floor plan…</p></div>

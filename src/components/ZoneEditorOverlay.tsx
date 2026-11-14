@@ -9,16 +9,16 @@ export type ZoneEditorSave = {
   name: string;
   zoneType: string;
   colorHex: string;
-  areaM2: number | null;
   mapPolygon: MapPoint[];
 };
 
-type Tool = 'edit' | 'rectangle' | 'polygon';
+type Tool = 'edit' | 'rectangle';
 
 export type ZoneEditorOverlayProps = {
   zones: ZoneRecord[];
   saving: boolean;
   onSave: (zone: ZoneEditorSave) => Promise<void> | void;
+  onDelete: (zoneId: string) => Promise<void> | void;
   onCancel: () => void;
 };
 
@@ -44,7 +44,6 @@ const zoneTypes = [
 const zoneTypeCodes = new Set<string>(zoneTypes.map((zoneType) => zoneType.value));
 
 const DEFAULT_COLOR = '#3B82F6';
-const CLOSE_DISTANCE = 0.025;
 const MIN_ZONE_SPAN = 0.005;
 const HISTORY_LIMIT = 50;
 
@@ -96,7 +95,7 @@ const textColorFor = (color: string) => {
   return red * 0.299 + green * 0.587 + blue * 0.114 > 160 ? '#111827' : '#FFFFFF';
 };
 
-export function ZoneEditorOverlay({ zones, saving, onSave, onCancel }: ZoneEditorOverlayProps) {
+export function ZoneEditorOverlay({ zones, saving, onSave, onDelete, onCancel }: ZoneEditorOverlayProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const drawingLayerRef = useRef<SVGSVGElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -112,7 +111,7 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onCancel }: ZoneEdito
   const [name, setName] = useState('');
   const [zoneType, setZoneType] = useState('');
   const [colorHex, setColorHex] = useState(DEFAULT_COLOR);
-  const [area, setArea] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState('');
   const [toolbarPosition, setToolbarPosition] = useState({ x: 16, y: 16 });
 
@@ -124,12 +123,12 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onCancel }: ZoneEdito
     setName('');
     setZoneType('');
     setColorHex(DEFAULT_COLOR);
-    setArea('');
+    setConfirmDelete(false);
     setError('');
   };
 
   const chooseTool = (next: Tool) => {
-    if (next === 'rectangle' || next === 'polygon' || (!selectedZoneId && points.length > 0)) resetDraft();
+    if (next === 'rectangle' || (!selectedZoneId && points.length > 0)) resetDraft();
     setTool(next);
   };
 
@@ -141,13 +140,16 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onCancel }: ZoneEdito
   const selectZone = (zone: ZoneRecord) => {
     if (selectedZoneId === zone.zoneId) return;
     setSelectedZoneId(zone.zoneId);
-    setPoints(clonePoints(zone.mapPolygon));
+    const xs = zone.mapPolygon.map(point => point.x);
+    const ys = zone.mapPolygon.map(point => point.y);
+    setPoints(isAxisAlignedRectangle(zone.mapPolygon) ? clonePoints(zone.mapPolygon)
+      : rectanglePoints({ x: Math.min(...xs), y: Math.min(...ys) }, { x: Math.max(...xs), y: Math.max(...ys) }));
     setHistory([]);
     setComplete(true);
     setName(zone.name);
     setZoneType(zone.zoneType ?? '');
     setColorHex(zone.colorHex ?? DEFAULT_COLOR);
-    setArea(zone.areaM2 == null ? '' : String(zone.areaM2));
+    setConfirmDelete(false);
     setError('');
   };
 
@@ -263,9 +265,6 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onCancel }: ZoneEdito
     if (history.length > 0) {
       setPoints(clonePoints(history[history.length - 1]));
       setHistory((current) => current.slice(0, -1));
-    } else if (!selectedZoneId && tool === 'polygon') {
-      setPoints((current) => current.slice(0, -1));
-      setComplete(false);
     } else if (!selectedZoneId && tool === 'rectangle') {
       setPoints([]);
       setComplete(false);
@@ -275,15 +274,13 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onCancel }: ZoneEdito
 
   const save = async () => {
     const trimmedName = name.trim();
-    const parsedArea = area.trim() === '' ? null : Number(area);
-    if (!complete || points.length < 3) return setError('Finish the zone shape before saving.');
+    if (!complete || !isAxisAlignedRectangle(points)) return setError('Draw a rectangular zone before saving.');
     if (!trimmedName) return setError('Enter a zone name.');
     if (!zoneTypeCodes.has(zoneType)) return setError('Choose a zone type.');
     if (!/^#[0-9A-F]{6}$/i.test(colorHex)) return setError('Choose a valid zone color.');
-    if (parsedArea !== null && (!Number.isFinite(parsedArea) || parsedArea <= 0 || parsedArea > 9999999999.99 || !/^\d+(\.\d{1,2})?$/.test(area.trim()))) return setError('Area must be positive and use at most two decimal places.');
     setError('');
     try {
-      await onSave({ zoneId: selectedZoneId, name: trimmedName, zoneType, colorHex: colorHex.toUpperCase(), areaM2: parsedArea, mapPolygon: points });
+      await onSave({ zoneId: selectedZoneId, name: trimmedName, zoneType, colorHex: colorHex.toUpperCase(), mapPolygon: points });
       resetDraft();
       setTool('edit');
     } catch (reason) {
@@ -291,7 +288,20 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onCancel }: ZoneEdito
     }
   };
 
-  const canUndo = history.length > 0 || (!selectedZoneId && points.length > 0 && (tool === 'rectangle' || tool === 'polygon'));
+  const remove = async () => {
+    if (!selectedZoneId) return;
+    setError('');
+    try {
+      await onDelete(selectedZoneId);
+      resetDraft();
+      setTool('edit');
+    } catch (reason) {
+      setConfirmDelete(false);
+      setError(reason instanceof Error && reason.message ? reason.message : 'Could not delete the zone.');
+    }
+  };
+
+  const canUndo = history.length > 0 || (!selectedZoneId && points.length > 0 && tool === 'rectangle');
   const toolbar = (
     <div
       ref={toolbarRef}
@@ -320,7 +330,7 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onCancel }: ZoneEdito
       </button>
 
       <div className={s.tools}>
-        {(['edit', 'rectangle', 'polygon'] as const).map((item) => (
+        {(['edit', 'rectangle'] as const).map((item) => (
           <button key={item} type="button" aria-pressed={tool === item} onClick={() => chooseTool(item)}>
             {item[0].toUpperCase() + item.slice(1)}
           </button>
@@ -349,11 +359,17 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onCancel }: ZoneEdito
           {zoneTypes.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
       </label>
-      <label className={s.field}>Area in square metres<input type="number" min="0.01" max="9999999999.99" step="0.01" value={area} onChange={(event) => setArea(event.target.value)} placeholder="Optional" /></label>
-      {tool === 'polygon' && <button type="button" className={s.closePolygon} disabled={points.length < 3 || complete} onClick={() => setComplete(true)}>Close polygon</button>}
       {error && <p className={s.error} role="alert">{error}</p>}
+      {confirmDelete && <div className={s.deleteConfirm} role="alert">
+        <p>Delete <strong>{name}</strong>? This cannot be undone.</p>
+        <div className={s.actions}>
+          <button type="button" disabled={saving} onClick={() => setConfirmDelete(false)}>Keep zone</button>
+          <button type="button" className={s.delete} disabled={saving} onClick={() => void remove()}>{saving ? 'Deleting…' : 'Delete permanently'}</button>
+        </div>
+      </div>}
       <div className={s.actions}>
         <button type="button" disabled={!canUndo || saving} onClick={undo}>Undo</button>
+        {selectedZoneId && !confirmDelete && <button type="button" className={s.delete} disabled={saving} onClick={() => setConfirmDelete(true)}>Delete zone</button>}
         <button type="button" disabled={saving} onClick={onCancel}>Cancel</button>
         <button type="button" className={s.save} disabled={saving || !complete} onClick={() => void save()}>{saving ? 'Saving…' : 'Save zone'}</button>
       </div>
@@ -396,15 +412,6 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onCancel }: ZoneEdito
           setComplete(valid);
         }}
         onPointerCancel={() => { rectangleDrag.current = null; }}
-        onClick={(event) => {
-          if (tool !== 'polygon' || complete) return;
-          const point = pointForClient(event.clientX, event.clientY);
-          const first = points[0];
-          if (points.length >= 3 && first && Math.hypot(point.x - first.x, point.y - first.y) <= CLOSE_DISTANCE) setComplete(true);
-          else if (points.length >= 1000) setError('A zone can contain at most 1000 points.');
-          else setPoints((current) => [...current, point]);
-          setError('');
-        }}
       >
         {zones.map((zone) => {
           const displayPoints = selectedZoneId === zone.zoneId ? points : zone.mapPolygon;

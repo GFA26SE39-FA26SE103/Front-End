@@ -92,7 +92,7 @@ describe('FloorPlanSurface', () => {
   });
 
   it('disables camera placement while the zone editor is active', () => {
-    renderSurface({ zoneEditor: { zones: [], saving: false, onSave: vi.fn(), onCancel: vi.fn() } });
+    renderSurface({ zoneEditor: { zones: [], saving: false, onSave: vi.fn(), onDelete: vi.fn(), onCancel: vi.fn() } });
 
     expect(screen.getByRole('button', { name: /place cam-01/i })).toBeDisabled();
     expect(screen.getByRole('button', { name: /rotate cam-01/i })).toBeDisabled();
@@ -102,7 +102,7 @@ describe('FloorPlanSurface', () => {
     const zone = {
       zoneId: 'zone-1', floorId: 'floor-1', code: 'CHK', name: 'Checkout', zoneType: 'CHECKOUT',
       mapPolygon: [{ x: 0.1, y: 0.1 }, { x: 0.4, y: 0.1 }, { x: 0.4, y: 0.4 }, { x: 0.1, y: 0.4 }],
-      colorHex: '#F97316', areaM2: null, minStaff: 1, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
+      colorHex: '#F97316', minStaff: 1, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
     };
     renderSurface({ zones: [zone] });
 

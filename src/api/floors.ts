@@ -29,7 +29,6 @@ export type ZoneRecord = {
   zoneType: string | null;
   mapPolygon: MapPoint[];
   colorHex: string | null;
-  areaM2: number | null;
   minStaff: number;
   status: string;
   updatedAt: string;
@@ -42,7 +41,6 @@ export type ZoneRequest = {
   mapPolygon: MapPoint[];
   status: string;
   colorHex: string | null;
-  areaM2: number | null;
 };
 
 export type AdjacentZoneRecord = Pick<ZoneRecord, 'zoneId' | 'floorId' | 'code' | 'name' | 'status'>;
@@ -75,6 +73,9 @@ export const createZone = (floorId: string, body: ZoneRequest) =>
 
 export const updateZone = (zoneId: string, body: ZoneRequest) =>
   apiFetch<ZoneRecord>(`/api/zones/${zoneId}`, { method: 'PATCH', body: JSON.stringify(body) });
+
+export const deleteZone = (zoneId: string) =>
+  apiFetch<void>(`/api/zones/${encodeURIComponent(zoneId)}`, { method: 'DELETE' });
 
 export const listZoneAdjacency = (zoneId: string, signal?: AbortSignal) =>
   apiFetch<AdjacentZoneRecord[]>(`/api/zones/${encodeURIComponent(zoneId)}/adjacent-zones`, { signal });
