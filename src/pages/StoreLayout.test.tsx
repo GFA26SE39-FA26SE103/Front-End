@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCameraPreview, listCameraMappings, listCameras, saveCameraMapping, updateCamera, type CameraZoneMapping } from '../api/cameras';
-import { createFloor, createZone, getFloorMap, listFloors, listSupermarkets, listZoneAdjacency, listZones, replaceZoneAdjacency, updateFloorDetails, updateZone, uploadFloorMap } from '../api/floors';
+import { createFloor, createZone, deleteZone, getFloorMap, listFloors, listSupermarkets, listZoneAdjacency, listZones, replaceZoneAdjacency, updateFloorDetails, updateZone, uploadFloorMap } from '../api/floors';
 import StoreLayout from './StoreLayout';
 import { ApiError } from '../api/client';
 import { mockNativeDialogs } from '../test/dialog';
@@ -21,6 +21,7 @@ vi.mock('../api/cameras', () => ({
 vi.mock('../api/floors', () => ({
   createFloor: vi.fn(),
   createZone: vi.fn(),
+  deleteZone: vi.fn(),
   getFloorMap: vi.fn(),
   listFloors: vi.fn(),
   listSupermarkets: vi.fn(),
@@ -68,6 +69,7 @@ describe('StoreLayout', () => {
     vi.mocked(listSupermarkets).mockResolvedValue([{ supermarketId: 'store-1', code: 'STORE', name: 'Central store', address: null, status: 'ACTIVE' }]);
     vi.mocked(listFloors).mockResolvedValue([floor]);
     vi.mocked(createFloor).mockResolvedValue({ ...floor, floorId: 'floor-2', floorNumber: 2, name: 'Upper floor', mapAssetUrl: null, mapWidth: null, mapHeight: null });
+    vi.mocked(deleteZone).mockResolvedValue(undefined);
     vi.mocked(updateFloorDetails).mockResolvedValue({ ...floor, floorNumber: 0, name: 'Lobby' });
     vi.mocked(listZones).mockResolvedValue([]);
     vi.mocked(listZoneAdjacency).mockResolvedValue([]);
@@ -88,7 +90,7 @@ describe('StoreLayout', () => {
     vi.mocked(createZone).mockResolvedValue({
       zoneId: 'zone-1', floorId: floor.floorId, code: 'PRODUCE', name: 'Produce', zoneType: null,
       mapPolygon: [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.1 }, { x: 0.5, y: 0.5 }, { x: 0.1, y: 0.5 }],
-      colorHex: '#22C55E', areaM2: null, minStaff: 0, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
+      colorHex: '#22C55E', minStaff: 0, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
     });
     vi.mocked(updateZone).mockRejectedValue(new Error('Unexpected zone update'));
     URL.createObjectURL = vi.fn(() => 'blob:floor-map');
@@ -235,7 +237,7 @@ describe('StoreLayout', () => {
     vi.mocked(listZones).mockResolvedValueOnce([{
       zoneId: 'zone-1', floorId: floor.floorId, code: 'FROZEN', name: 'Frozen aisle', zoneType: 'AISLES',
       mapPolygon: [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.1 }, { x: 0.5, y: 0.5 }],
-      colorHex: '#3B82F6', areaM2: null, minStaff: 1, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
+      colorHex: '#3B82F6', minStaff: 1, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
     }]);
     const user = userEvent.setup();
     renderPage();
@@ -255,7 +257,7 @@ describe('StoreLayout', () => {
     const zone = {
       zoneId: 'zone-1', floorId: floor.floorId, code: 'FROZEN', name: 'Frozen aisle', zoneType: 'AISLES',
       mapPolygon: [{ x: .1, y: .1 }, { x: .5, y: .1 }, { x: .5, y: .5 }],
-      colorHex: '#3B82F6', areaM2: null, minStaff: 0, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
+      colorHex: '#3B82F6', minStaff: 0, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
     };
     const dismissals = [
       { action: 'camera selection', name: 'CAM-02 Aisle camera' },
@@ -348,7 +350,7 @@ describe('StoreLayout', () => {
   it('opens zone adjacency management for the selected floor', async () => {
     const queue = {
       zoneId: 'zone-queue', floorId: floor.floorId, code: 'QUEUE', name: 'Queue', zoneType: 'CHECKOUT',
-      mapPolygon: [], colorHex: '#3B82F6', areaM2: null, minStaff: 0, status: 'ACTIVE', updatedAt: '2026-11-09T00:00:00Z',
+      mapPolygon: [], colorHex: '#3B82F6', minStaff: 0, status: 'ACTIVE', updatedAt: '2026-11-09T00:00:00Z',
     };
     const checkout = { ...queue, zoneId: 'zone-checkout', code: 'CHECKOUT', name: 'Checkout' };
     vi.mocked(listZones).mockResolvedValueOnce([queue, checkout]);
@@ -495,9 +497,33 @@ describe('StoreLayout', () => {
     await user.click(screen.getByRole('button', { name: 'Save zone' }));
 
     await waitFor(() => expect(createZone).toHaveBeenCalledWith('floor-1', {
-      code: 'PRODUCE', name: 'Produce', zoneType: 'FRESH_FOOD', colorHex: '#22C55E', areaM2: null, status: 'ACTIVE',
+      code: 'PRODUCE', name: 'Produce', zoneType: 'FRESH_FOOD', colorHex: '#22C55E', status: 'ACTIVE',
       mapPolygon: [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.1 }, { x: 0.5, y: 0.5 }, { x: 0.1, y: 0.5 }],
     }));
     expect(await screen.findByText('Zone saved.')).toBeInTheDocument();
+  });
+
+  it('deletes a selected zone only after confirmation', async () => {
+    const user = userEvent.setup();
+    const zone = {
+      zoneId: 'zone-1', floorId: floor.floorId, code: 'PRODUCE', name: 'Produce', zoneType: 'FRESH_FOOD',
+      mapPolygon: [{ x: .1, y: .1 }, { x: .5, y: .1 }, { x: .5, y: .5 }, { x: .1, y: .5 }],
+      colorHex: '#22C55E', minStaff: 0, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
+    };
+    vi.mocked(listZones).mockResolvedValue([zone]);
+    renderPage();
+    await screen.findByRole('img', { name: /uploaded floor plan/i });
+    await user.click(screen.getByRole('button', { name: 'Edit zones' }));
+    vi.spyOn(screen.getByTestId('zone-drawing-layer'), 'getBoundingClientRect').mockReturnValue({
+      left: 100, top: 50, width: 800, height: 400, right: 900, bottom: 450, x: 100, y: 50, toJSON: () => ({}),
+    });
+    await user.click(screen.getByRole('button', { name: 'Edit zone Produce' }));
+    await user.click(screen.getByRole('button', { name: 'Delete zone' }));
+    expect(deleteZone).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Delete permanently' }));
+
+    await waitFor(() => expect(deleteZone).toHaveBeenCalledWith('zone-1'));
+    expect(await screen.findByText('Zone deleted.')).toBeInTheDocument();
   });
 });

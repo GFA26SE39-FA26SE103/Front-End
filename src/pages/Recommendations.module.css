@@ -18,12 +18,13 @@
 .page a { color: var(--color-primary); font-weight: 600; }
 .eyebrow { color: var(--color-primary); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .summary { margin-top: 6px !important; color: var(--color-text-muted); line-height: 1.6; }
-.guidance { display: grid; gap: 16px; margin-top: 20px; }
-.guidance section { display: grid; gap: 6px; }
+.guidance { display: grid; min-width: 0; gap: 16px; margin-top: 20px; }
+.guidance section { display: grid; min-width: 0; gap: 6px; overflow-wrap: anywhere; }
 .guidance p { line-height: 1.6; }
 .guidance ol { margin: 0; padding-left: 22px; display: grid; gap: 8px; line-height: 1.55; }
 .reviewPlan { display: grid; grid-template-columns: minmax(180px, .7fr) minmax(260px, 1.3fr); gap: 12px; }
 .reviewPlan section { padding: 12px; border-radius: 8px; background: var(--color-surface-2); }
+.eventPanel .reviewPlan { grid-template-columns: minmax(0, 1fr); }
 .evidence summary { cursor: pointer; color: var(--color-text); font-size: 15px; font-weight: 700; }
 .evidence > .muted { margin-top: 8px; }
 .toolbar, .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }

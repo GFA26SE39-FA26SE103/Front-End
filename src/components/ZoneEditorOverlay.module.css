@@ -156,6 +156,18 @@
   background: var(--color-surface-2);
   color: var(--color-text);
 }
+.actions .delete {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+.deleteConfirm {
+  display: grid;
+  gap: 8px;
+  padding: 9px;
+  border-radius: 7px;
+  background: var(--color-danger-tint);
+}
+.deleteConfirm p { margin: 0; }
 
 .tools button[aria-pressed='true'] {
   border-color: var(--color-primary);

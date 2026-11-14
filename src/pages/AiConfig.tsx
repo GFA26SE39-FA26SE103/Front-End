@@ -10,7 +10,7 @@ import { deleteMonitoring, getMonitoring, listIncidentTypes, reviewMonitoring, s
 import { listResponsePolicies, type PolicyPriority, type ResponsePolicy } from '../api/responsePolicies';
 import { ResponsePolicyEditor } from './admin/ResponsePolicies';
 import s from './AiConfig.module.css';
-import { convertToPeopleCount, measurementMode, modeLabel } from './monitoringRuleMode';
+import { measurementMode, modeLabel } from './monitoringRuleMode';
 
 type RuleInput = Omit<MonitoringRule, 'warningThreshold' | 'criticalThreshold' | 'sustainSec' | 'cooldownSec' | 'warningExitThreshold' | 'criticalExitThreshold'> & {
   warningThreshold: string; criticalThreshold: string; sustainSec: string; cooldownSec: string;
@@ -32,7 +32,6 @@ function decimal(raw: string, label: string) {
   if (!/^\d+(\.\d{1,4})?$/.test(raw.trim()) || !Number.isFinite(Number(raw))) throw new Error(label + ' must be a non-negative number with at most 4 decimal places.');
   return Number(raw);
 }
-
 const thresholdFields = [
   { level: 'WARNING', entry: 'warningThreshold', exit: 'warningExitThreshold' },
   { level: 'CRITICAL', entry: 'criticalThreshold', exit: 'criticalExitThreshold' },
@@ -86,7 +85,7 @@ const ruleName = (rule: MonitoringRule, types: IncidentType[]) => rule.incidentN
 const ruleMode = (rule: Pick<MonitoringRule, 'incidentTypeId' | 'incidentCode' | 'thresholdUnit' | 'parametersJson'>, types: IncidentType[]) => measurementMode({ ...rule, incidentCode: rule.incidentCode ?? types.find(t => t.incidentTypeId === rule.incidentTypeId)?.code });
 const formatTime = (value: string) => { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString(); };
 
-const units: Record<string, string> = { PEOPLE: 'people', MINUTES: 'minutes', PEOPLE_PER_M2: 'people/m²' };
+const units: Record<string, string> = { PEOPLE: 'people', MINUTES: 'minutes' };
 const unitName = (unit: string) => units[unit] ?? unit;
 
 function responseLabel(summary: PolicySummary, level: PolicyPriority) {
@@ -109,7 +108,6 @@ function RuleResponses({ summary }: { summary: PolicySummary }) {
     <span><strong>CRITICAL</strong> · {responseLabel(summary, 'CRITICAL')}</span>
   </div>;
 }
-
 export default function AiConfig() {
   const [params, setParams] = useSearchParams();
   const zoneId = params.get('zoneId') ?? '';
@@ -268,10 +266,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   const available = types.filter(t => t.status === 'ACTIVE' && !rules.some(r => r.incidentTypeId === t.incidentTypeId));
   const ruleChoices = available.flatMap(type => {
     const peopleCount = type.measurementOptions?.some(option => option.mode === 'PEOPLE_COUNT' && option.supported);
-    if (peopleCount) return [
-      { value: type.incidentTypeId, label: `${type.name} · People count`, type, peopleCount: true },
-      { value: `${type.incidentTypeId}:density`, label: `${type.name} · Density (cannot be enabled here)`, type, peopleCount: false },
-    ];
+    if (peopleCount) return [{ value: type.incidentTypeId, label: `${type.name} · People currently in ROI`, type, peopleCount: true }];
     const supported = type.supported && type.measurementType === 'QUEUE_LENGTH';
     return [{ value: type.incidentTypeId, label: supported ? type.name : `${type.name} (cannot be enabled here)`, type, peopleCount: false }];
   });
@@ -360,10 +355,8 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       criticalThreshold: selectedType.defaultCriticalThreshold ?? 1,
       thresholdUnit: peopleCount ? 'PEOPLE' : selectedType.thresholdUnit ?? '',
       sustainSec: 30, cooldownSec: 300, enabled: peopleCount || (selectedType.supported && selectedType.measurementType === 'QUEUE_LENGTH'),
-      parametersJson: peopleCount ? JSON.stringify({ measurementMode: 'PEOPLE_COUNT' }) : null,
+      parametersJson: null,
     });
-    // Density defaults are in people/m². A people-count rule needs its own thresholds.
-    if (peopleCount) { rule.warningThreshold = ''; rule.criticalThreshold = ''; }
     setRules(all => [rule, ...all]);
     touch(); setRulesMissing(false);
   }
@@ -378,7 +371,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       <div className={s.head}>
         <div>
           <h2 ref={detailHeading} tabIndex={-1} className={s.title}>{showForm ? (config ? 'Edit configuration' : 'Create configuration') + ' · ' + zone.name : zone.name}</h2>
-          <p className={s.sub}>{floorName} · {zone.code} · Area: {zone.areaM2 ?? 'not configured'} m² · Zone {zone.status}</p>
+          <p className={s.sub}>{floorName} · {zone.code} · Zone {zone.status}</p>
         </div>
         {!loading && !loadFailed && <Chip tone={statusTone(config?.status)}>{config?.status ?? 'NOT CONFIGURED'}</Chip>}
       </div>
@@ -458,13 +451,6 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
             <p className={s.help}>{modeLabel(mode)}</p>
             {!supported && <p className={s.help}>You can save this rule with Enabled off. This editor cannot enable the selected measurement mode.</p>}
             {!supported && t?.unsupportedReason && <p className={s.help}>{t.unsupportedReason}</p>}
-            {t?.code === 'OVERCROWDING_CONGESTION' && mode !== 'PEOPLE_COUNT' && <CountModeEditor disabled={locked} onConvert={(warning, critical) => {
-              try {
-                const converted = convertToPeopleCount({ ...r, incidentCode: t.code, warningThreshold: Number(r.warningThreshold), criticalThreshold: Number(r.criticalThreshold), sustainSec: Number(r.sustainSec), cooldownSec: Number(r.cooldownSec), warningExitThreshold: null, criticalExitThreshold: null }, warning, critical);
-                // Fresh people thresholds: old exit thresholds were in another unit, so they are cleared.
-                changeRule(r.incidentTypeId, { thresholdUnit: converted.thresholdUnit, parametersJson: converted.parametersJson, warningThreshold: String(converted.warningThreshold), criticalThreshold: String(converted.criticalThreshold), warningExitThreshold: '', criticalExitThreshold: '' });
-              } catch (e) { setError(message(e)); }
-            }} />}
             <div className={s.thresholdPairs}>
               {thresholdFields.map(({ level, entry, exit }) => {
                 const entryValue = r[entry].trim();
@@ -561,12 +547,3 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   </div>;
 }
 
-function CountModeEditor({ disabled, onConvert }: { disabled: boolean; onConvert: (warning: string, critical: string) => void }) {
-  const [warning, setWarning] = useState(''), [critical, setCritical] = useState('');
-  return <fieldset disabled={disabled} className={s.fields}>
-    <p className={s.help}>Explicit conversion only: enter new people counts. Existing density thresholds are not reused; area calibration is deferred.</p>
-    <label className={s.field}>New people-count warning<input aria-label="New people-count warning" type="number" min="0" step="1" value={warning} onChange={e => setWarning(e.target.value)} /></label>
-    <label className={s.field}>New people-count critical<input aria-label="New people-count critical" type="number" min="0" step="1" value={critical} onChange={e => setCritical(e.target.value)} /></label>
-    <Button variant="secondary" onClick={() => onConvert(warning, critical)}>Use people count (temporary)</Button>
-  </fieldset>;
-}

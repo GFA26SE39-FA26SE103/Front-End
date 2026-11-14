@@ -6,7 +6,7 @@ import { ZoneEditorOverlay } from './ZoneEditorOverlay';
 const rectangleZone = {
   zoneId: 'zone-rectangle', floorId: 'floor-1', code: 'PRODUCE', name: 'Produce', zoneType: 'AISLES',
   mapPolygon: [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.1 }, { x: 0.5, y: 0.5 }, { x: 0.1, y: 0.5 }],
-  colorHex: '#22C55E', areaM2: null, minStaff: 2, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
+  colorHex: '#22C55E', minStaff: 2, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
 };
 
 const polygonZone = {
@@ -31,11 +31,12 @@ const rect = {
 
 const renderEditor = (zones: typeof rectangleZone[] = []) => {
   const onSave = vi.fn().mockResolvedValue(undefined);
+  const onDelete = vi.fn().mockResolvedValue(undefined);
   const onCancel = vi.fn();
-  render(<ZoneEditorOverlay zones={zones} saving={false} onSave={onSave} onCancel={onCancel} />);
+  render(<ZoneEditorOverlay zones={zones} saving={false} onSave={onSave} onDelete={onDelete} onCancel={onCancel} />);
   const layer = screen.getByTestId('zone-drawing-layer');
   vi.spyOn(layer, 'getBoundingClientRect').mockReturnValue(rect);
-  return { layer, onSave, onCancel };
+  return { layer, onSave, onDelete, onCancel };
 };
 
 describe('ZoneEditorOverlay', () => {
@@ -50,7 +51,6 @@ describe('ZoneEditorOverlay', () => {
     await user.type(screen.getByLabelText('Zone name'), 'Produce');
     await user.selectOptions(screen.getByLabelText('Zone type'), 'FRESH_FOOD');
     await user.click(screen.getByRole('button', { name: 'Green' }));
-    await user.type(screen.getByLabelText('Area in square metres'), '125.5');
     await user.click(screen.getByRole('button', { name: 'Save zone' }));
 
     expect(onSave).toHaveBeenCalledWith({
@@ -58,7 +58,6 @@ describe('ZoneEditorOverlay', () => {
       name: 'Produce',
       zoneType: 'FRESH_FOOD',
       colorHex: '#22C55E',
-      areaM2: 125.5,
       mapPolygon: [
         { x: 0.1, y: 0.1 },
         { x: 0.5, y: 0.1 },
@@ -68,18 +67,11 @@ describe('ZoneEditorOverlay', () => {
     });
   });
 
-  it('undoes the latest polygon point', async () => {
-    const user = userEvent.setup();
-    const { layer } = renderEditor();
-    await user.click(screen.getByRole('button', { name: 'Polygon' }));
-    fireEvent.click(layer, { clientX: 180, clientY: 90 });
-    fireEvent.click(layer, { clientX: 500, clientY: 90 });
-    fireEvent.click(layer, { clientX: 500, clientY: 250 });
-    expect(screen.getAllByTestId('zone-point')).toHaveLength(3);
-
-    await user.click(screen.getByRole('button', { name: 'Undo' }));
-
-    expect(screen.getAllByTestId('zone-point')).toHaveLength(2);
+  it('offers rectangle drawing only and no area field', () => {
+    renderEditor();
+    expect(screen.getByRole('button', { name: 'Rectangle' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Polygon' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Area in square metres')).not.toBeInTheDocument();
   });
 
   it('renders the tools in a draggable floating widget', () => {
@@ -132,20 +124,25 @@ describe('ZoneEditorOverlay', () => {
     }));
   });
 
-  it('resizes a polygon by moving only the operated vertex', async () => {
+  it('normalizes a legacy polygon to its bounding rectangle when edited', async () => {
     const user = userEvent.setup();
     const { onSave } = renderEditor([polygonZone]);
     await user.click(screen.getByRole('button', { name: 'Edit zone Bakery' }));
-    const vertex = screen.getByRole('button', { name: 'Resize point 2' });
-
-    fireEvent.pointerDown(vertex, { pointerId: 5, clientX: 500, clientY: 90 });
-    fireEvent.pointerMove(vertex, { pointerId: 5, clientX: 580, clientY: 130 });
-    fireEvent.pointerUp(vertex, { pointerId: 5, clientX: 580, clientY: 130 });
     await user.click(screen.getByRole('button', { name: 'Save zone' }));
 
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
-      mapPolygon: [{ x: 0.1, y: 0.1 }, { x: 0.6, y: 0.2 }, { x: 0.3, y: 0.5 }],
+      mapPolygon: [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.1 }, { x: 0.5, y: 0.5 }, { x: 0.1, y: 0.5 }],
     }));
+  });
+
+  it('requires confirmation before deleting a selected zone', async () => {
+    const user = userEvent.setup();
+    const { onDelete } = renderEditor([rectangleZone]);
+    await user.click(screen.getByRole('button', { name: 'Edit zone Produce' }));
+    await user.click(screen.getByRole('button', { name: 'Delete zone' }));
+    expect(onDelete).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Delete permanently' }));
+    expect(onDelete).toHaveBeenCalledWith('zone-rectangle');
   });
 
   it('keeps a resize handle mounted during rapid movement and stops when pointer capture is lost', async () => {

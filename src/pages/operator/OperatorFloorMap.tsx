@@ -242,7 +242,7 @@ export default function OperatorFloorMap({ workspace = 'operator' }: { workspace
                   <Chip tone={meta.tone} pill>{meta.label}</Chip>
                 </span>
                 <span className={s.zoneMeta}>
-                  {[zone.zoneType, zone.areaM2 ? `${zone.areaM2} m²` : null, `${info?.onlineCount ?? 0}/${info?.cameraCount ?? 0} cameras online`].filter(Boolean).join(' · ')}
+                  {[zone.zoneType, `${info?.onlineCount ?? 0}/${info?.cameraCount ?? 0} cameras online`].filter(Boolean).join(' · ')}
                 </span>
               </button>
             );

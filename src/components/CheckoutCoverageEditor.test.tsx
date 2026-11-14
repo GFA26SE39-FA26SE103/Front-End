@@ -44,7 +44,7 @@ const camera: CameraRecord = {
 };
 const zone: ZoneRecord = {
   zoneId: 'zone-1', floorId: 'floor-1', code: 'CHECKOUT-1', name: 'Checkout area', zoneType: 'CHECKOUT', mapPolygon: lane,
-  colorHex: null, areaM2: null, minStaff: 0, status: 'ACTIVE', updatedAt: version,
+  colorHex: null, minStaff: 0, status: 'ACTIVE', updatedAt: version,
 };
 const zones: ZoneRecord[] = [zone, { ...zone, zoneId: 'zone-2', name: 'Other checkout' },
   { ...zone, zoneId: 'wrong-floor', floorId: 'floor-2', name: 'Upstairs checkout' },
