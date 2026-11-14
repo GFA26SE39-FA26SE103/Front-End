@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getCameraPreview, listCameraMappings, removeCameraMapping, saveCameraMapping,
+import { createCameraRoi, deleteCameraRoi, getCameraPreview, listCameraMappings, updateCameraRoi,
   type CameraRecord, type CameraZoneMapping, type ZoneRecord } from '../api/cameras';
 import { PolygonRoiEditor, type RoiDraft } from './PolygonRoiEditor';
 import { validateRoiPolygon } from './roiPolygonValidation';
@@ -54,6 +54,7 @@ function ZoneCoverageEditor({ camera, zones, onDirtyChange, onBusyChange }: Omit
   const [loading, setLoading] = useState(true);
   const [target, setTarget] = useState('');
   const [active, setActive] = useState('');
+  const [selectedId, setSelectedId] = useState('');
   const [draft, setDraft] = useState<RoiDraft>(emptyDraft);
   const [editSession, setEditSession] = useState(0);
   const [dirty, setDirty] = useState(false);
@@ -77,7 +78,7 @@ function ZoneCoverageEditor({ camera, zones, onDirtyChange, onBusyChange }: Omit
   const confirmChange = () => !dirty || window.confirm('Discard unsaved ROI changes?');
   const edit = (mapping: CameraZoneMapping) => {
     if (!confirmChange()) return;
-    setTarget(mapping.zoneId); setActive(mapping.zoneId);
+    setTarget(mapping.zoneId); setActive(mapping.zoneId); setSelectedId(mapping.cameraZoneId);
     setEditSession(n => n + 1);
     setDraft({ points: mapping.roiPolygon.map(p => ({ ...p })), complete: true, editing: true });
     setDirty(false); setError(''); setMessage('');
@@ -88,9 +89,11 @@ function ZoneCoverageEditor({ camera, zones, onDirtyChange, onBusyChange }: Omit
     if (!zoneId || !draft.complete || issue) { setError(issue ?? 'Finish the shape before saving.'); return; }
     setBusy(true); setError(''); setMessage('');
     try {
-      const saved = await saveCameraMapping(camera.cameraId, zoneId, { roiPolygon: draft.points, status: 'ACTIVE' });
-      setMappings(rows => [...rows.filter(m => m.zoneId !== saved.zoneId), saved]);
-      setActive(saved.zoneId); setDirty(false); setMessage(`ROI saved for ${zoneById(zoneId)?.name ?? 'this zone'}.`);
+      const saved = selectedId
+        ? await updateCameraRoi(camera.cameraId, selectedId, { roiPolygon: draft.points, status: 'ACTIVE' })
+        : await createCameraRoi(camera.cameraId, zoneId, { roiPolygon: draft.points, status: 'ACTIVE' });
+      setMappings(rows => [...rows.filter(m => m.cameraZoneId !== saved.cameraZoneId), saved]);
+      setActive(saved.zoneId); setSelectedId(saved.cameraZoneId); setDirty(false); setMessage(`ROI saved for ${zoneById(zoneId)?.name ?? 'this zone'}.`);
     } catch (e) { setError(messageOf(e, 'Could not save the ROI.')); }
     finally { setBusy(false); }
   };
@@ -98,9 +101,9 @@ function ZoneCoverageEditor({ camera, zones, onDirtyChange, onBusyChange }: Omit
     if (!confirmChange()) return;
     setBusy(true); setError(''); setMessage('');
     try {
-      await removeCameraMapping(camera.cameraId, mapping.zoneId);
-      setMappings(rows => rows.filter(m => m.zoneId !== mapping.zoneId));
-      if (active === mapping.zoneId) { setActive(''); setDraft(emptyDraft()); setDirty(false); }
+      await deleteCameraRoi(camera.cameraId, mapping.cameraZoneId);
+      setMappings(rows => rows.filter(m => m.cameraZoneId !== mapping.cameraZoneId));
+      if (selectedId === mapping.cameraZoneId) { setActive(''); setSelectedId(''); setDraft(emptyDraft()); setDirty(false); }
       setMessage(`${zoneById(mapping.zoneId)?.name ?? 'Zone'} mapping removed.`);
     } catch (e) { setError(messageOf(e, 'Could not remove the ROI.')); }
     finally { setBusy(false); }
@@ -109,14 +112,18 @@ function ZoneCoverageEditor({ camera, zones, onDirtyChange, onBusyChange }: Omit
     <PolygonRoiEditor key={`${active || target}:${editSession}`} previewUrl={previewUrl} previewLoading={previewLoading} cameraCode={camera.code}
       draft={draft} disabled={busy || loading} canDraw={Boolean(target)} color={zoneById(active || target)?.colorHex ?? '#3B82F6'}
       onChange={next => { setActive(target); setDraft(next); setDirty(true); setError(''); setMessage(''); }}
-      backgroundRois={mappings.filter(m => m.zoneId !== active).map(m => ({ id: m.cameraZoneId, points: m.roiPolygon, color: zoneById(m.zoneId)?.colorHex ?? '#3B82F6' }))} />
+      backgroundRois={mappings.filter(m => m.cameraZoneId !== selectedId).map(m => ({ id: m.cameraZoneId, points: m.roiPolygon, color: zoneById(m.zoneId)?.colorHex ?? '#3B82F6' }))} />
     <aside className={s.controls}>
       <label className={s.field}>Target zone<select value={target} disabled={!previewUrl || busy || loading} onChange={e => {
         const mapping = mappings.find(row => row.zoneId === e.target.value);
         if (mapping) { edit(mapping); return; }
         if (!confirmChange()) return;
-        setTarget(e.target.value); setActive(''); setDraft(emptyDraft()); setDirty(false); setError(''); setMessage('');
+        setTarget(e.target.value); setActive(''); setSelectedId(''); setDraft(emptyDraft()); setDirty(false); setError(''); setMessage('');
       }}><option value="">Select a zone</option>{zones.map(z => <option key={z.zoneId} value={z.zoneId}>{z.name} ({z.code})</option>)}</select></label>
+      <Button variant="secondary" disabled={!target || busy || loading} onClick={() => {
+        if (!confirmChange()) return;
+        setActive(target); setSelectedId(''); setDraft(emptyDraft()); setEditSession(n => n + 1); setDirty(false); setError(''); setMessage('');
+      }}>Add another ROI to this zone</Button>
       <Button disabled={!target || !draft.complete || !dirty || busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save ROI to zone'}</Button>
       <p className={s.hint}>{!target ? 'Select the zone you want this camera to monitor.'
         : !draft.complete ? 'Place points on the camera image and select Finish shape to unlock Save.'

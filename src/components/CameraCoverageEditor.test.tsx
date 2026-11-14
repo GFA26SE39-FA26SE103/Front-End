@@ -4,16 +4,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getCameraPreview,
   listCameraMappings,
-  removeCameraMapping,
-  saveCameraMapping,
+  createCameraRoi,
+  deleteCameraRoi,
 } from '../api/cameras';
 import { CameraCoverageEditor } from './CameraCoverageEditor';
 
 vi.mock('../api/cameras', () => ({
   getCameraPreview: vi.fn(),
   listCameraMappings: vi.fn(),
-  removeCameraMapping: vi.fn(),
-  saveCameraMapping: vi.fn(),
+  createCameraRoi: vi.fn(),
+  deleteCameraRoi: vi.fn(),
+  updateCameraRoi: vi.fn(),
 }));
 
 const camera = {
@@ -44,10 +45,10 @@ describe('CameraCoverageEditor', () => {
   beforeEach(() => {
     vi.mocked(getCameraPreview).mockResolvedValue(new Blob(['frame'], { type: 'image/jpeg' }));
     vi.mocked(listCameraMappings).mockResolvedValue([]);
-    vi.mocked(saveCameraMapping).mockImplementation(async (cameraId, zoneId, request) => ({
+    vi.mocked(createCameraRoi).mockImplementation(async (cameraId, zoneId, request) => ({
       cameraZoneId: 'mapping-1', cameraId, zoneId, roiPolygon: request.roiPolygon, status: request.status,
     }));
-    vi.mocked(removeCameraMapping).mockResolvedValue(undefined);
+    vi.mocked(deleteCameraRoi).mockResolvedValue(undefined);
     URL.createObjectURL = vi.fn(() => 'blob:camera-preview');
     URL.revokeObjectURL = vi.fn();
   });
@@ -68,10 +69,10 @@ describe('CameraCoverageEditor', () => {
     expect(screen.queryByTestId('active-roi')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Finish shape' }));
     expect(screen.getByTestId('active-roi')).toBeInTheDocument();
-    expect(saveCameraMapping).not.toHaveBeenCalled();
+    expect(createCameraRoi).not.toHaveBeenCalled();
     await user.click(save);
 
-    await waitFor(() => expect(saveCameraMapping).toHaveBeenCalledWith('camera-1', 'zone-frozen', {
+    await waitFor(() => expect(createCameraRoi).toHaveBeenCalledWith('camera-1', 'zone-frozen', {
       roiPolygon: [{ x: 0.1, y: 0.1 }, { x: 0.8, y: 0.1 }, { x: 0.7, y: 0.8 }],
       status: 'ACTIVE',
     }));
@@ -92,8 +93,22 @@ describe('CameraCoverageEditor', () => {
     expect(screen.getAllByRole('button', { name: /Resize ROI point/ })).toHaveLength(3);
     await user.click(screen.getByRole('button', { name: 'Remove ROI for Checkout area' }));
 
-    await waitFor(() => expect(removeCameraMapping).toHaveBeenCalledWith('camera-1', 'zone-checkout'));
+    await waitFor(() => expect(deleteCameraRoi).toHaveBeenCalledWith('camera-1', 'mapping-1'));
     expect(await screen.findByText('Checkout area mapping removed.')).toBeInTheDocument();
+  });
+
+  it('keeps another ROI for the same zone when one mapping is removed', async () => {
+    const roi=[{x:0,y:0},{x:1,y:0},{x:0,y:1}];
+    vi.mocked(listCameraMappings).mockResolvedValue(['mapping-1','mapping-2'].map(cameraZoneId => ({
+      cameraZoneId,cameraId:'camera-1',zoneId:'zone-frozen',status:'ACTIVE',roiPolygon:roi,
+    })));
+    const user=userEvent.setup();
+    render(<CameraCoverageEditor camera={camera} zones={zones} onClose={vi.fn()} />);
+    const buttons=await screen.findAllByRole('button',{name:'Remove ROI for Frozen aisle'});
+    expect(buttons).toHaveLength(2);
+    await user.click(buttons[1]);
+    await waitFor(() => expect(deleteCameraRoi).toHaveBeenCalledWith('camera-1','mapping-2'));
+    expect(screen.getAllByRole('button',{name:'Remove ROI for Frozen aisle'})).toHaveLength(1);
   });
 
   it('asks before discarding a dirty polygon when switching mode or closing', async () => {

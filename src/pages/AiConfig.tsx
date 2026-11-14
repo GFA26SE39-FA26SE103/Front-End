@@ -367,10 +367,9 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
     setRules(all => [rule, ...all]);
     touch(); setRulesMissing(false);
   }
-  const previewCamera = review?.cameras.find((camera) => camera.cameraId === previewCameraId);
-  const previewRegions = previewCamera && previewCamera.roiPolygon.length >= 3
-    ? [{ id: zoneId, label: zone.name, color: zone.colorHex ?? '#0d9494', points: previewCamera.roiPolygon }]
-    : [];
+  const previewRegions = review?.cameras.filter(camera => camera.cameraId === previewCameraId && camera.roiPolygon.length >= 3)
+    .map((camera, index) => ({ id: `${zoneId}:${index}`, label: `${zone.name} ROI ${index + 1}`,
+      color: zone.colorHex ?? '#0d9494', points: camera.roiPolygon })) ?? [];
 
   return <div className={policyRule ? s.zoneWithPolicy : undefined}>
     <div className={s.column}>
@@ -529,7 +528,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       <h3>Mapped cameras & camera ROI</h3>
       <p className={s.help}><a href="/admin/store-layout">Review or edit camera ROI in Store layout</a> (deactivate an active configuration before editing).</p>
       {!review.cameras.length && <p>No active camera mapping.</p>}
-      {review.cameras.map(c => <div key={c.cameraId} className={s.rule}>
+      {review.cameras.map((c, index) => <div key={`${c.cameraId}:${index}`} className={s.rule}>
         <strong>{c.code}</strong><p>{c.name} · {c.sourceType ?? 'No source'} / {c.protocol ?? '—'} · {c.ready ? 'Ready' : 'Not ready'}</p>
         <p className={s.help}>ROI: {c.roiPolygon.length} points · Connection: {c.isEnabled ? 'Enabled' : 'Disabled'} · Last test: {c.lastTestResult ?? 'Not tested'}{c.lastTestedAt ? ' / ' + c.lastTestedAt : ''}</p>
         {c.roiPolygon.length >= 3 && <svg className={s.roi} viewBox="0 0 100 100" role="img" aria-label={'Saved camera-frame ROI for ' + c.code}><polygon points={c.roiPolygon.map(p => p.x * 100 + ',' + p.y * 100).join(' ')} /></svg>}

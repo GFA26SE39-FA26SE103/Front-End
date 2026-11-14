@@ -153,6 +153,15 @@ export const saveCameraMapping = (cameraId: string, zoneId: string, body: Camera
     body: JSON.stringify(body),
   });
 
+export const createCameraRoi = (cameraId: string, zoneId: string, body: CameraMappingRequest) =>
+  apiFetch<CameraZoneMapping>(`/api/cameras/${cameraId}/zones/${zoneId}/rois`, { method: 'POST', body: JSON.stringify(body) });
+
+export const updateCameraRoi = (cameraId: string, mappingId: string, body: CameraMappingRequest) =>
+  apiFetch<CameraZoneMapping>(`/api/cameras/${cameraId}/zone-rois/${mappingId}`, { method: 'PUT', body: JSON.stringify(body) });
+
+export const deleteCameraRoi = (cameraId: string, mappingId: string) =>
+  apiFetch<void>(`/api/cameras/${cameraId}/zone-rois/${mappingId}`, { method: 'DELETE' });
+
 export const removeCameraMapping = (cameraId: string, zoneId: string) =>
   apiFetch<void>(`/api/cameras/${cameraId}/zones/${zoneId}`, { method: 'DELETE' });
 

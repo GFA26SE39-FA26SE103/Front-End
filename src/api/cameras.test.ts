@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { saveSession } from '../auth/session';
 import {
+  createCameraRoi,
+  deleteCameraRoi,
   getAiPreviewFrame,
   getAiPreviewStatus,
   getCameraPreview,
@@ -9,6 +11,7 @@ import {
   saveCameraMapping,
   startAiPreview,
   stopAiPreview,
+  updateCameraRoi,
   updateCamera,
   uploadRecordedVideo,
   type CreateCameraRequest,
@@ -146,6 +149,22 @@ describe('camera API', () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual(request);
     expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:5080/api/cameras/camera-1/zones/zone-1');
     expect(fetchMock.mock.calls[1][1]?.method).toBe('DELETE');
+  });
+
+  it('creates, updates and deletes individual ROIs by mapping ID', async () => {
+    const fetchMock=vi.spyOn(globalThis,'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({cameraZoneId:'roi-1'}),{headers:{'Content-Type':'application/json'}}))
+      .mockResolvedValueOnce(new Response(JSON.stringify({cameraZoneId:'roi-1'}),{headers:{'Content-Type':'application/json'}}))
+      .mockResolvedValueOnce(new Response(null,{status:204}));
+    const body={roiPolygon:[{x:0,y:0},{x:1,y:0},{x:0,y:1}],status:'ACTIVE' as const};
+    await createCameraRoi('camera-1','zone-1',body);
+    await updateCameraRoi('camera-1','roi-1',body);
+    await deleteCameraRoi('camera-1','roi-1');
+    expect(fetchMock.mock.calls.map(call=>[call[0],call[1]?.method])).toEqual([
+      ['http://localhost:5080/api/cameras/camera-1/zones/zone-1/rois','POST'],
+      ['http://localhost:5080/api/cameras/camera-1/zone-rois/roi-1','PUT'],
+      ['http://localhost:5080/api/cameras/camera-1/zone-rois/roi-1','DELETE'],
+    ]);
   });
 
   it('lets a recorded video upload finish beyond the normal API timeout', async () => {
