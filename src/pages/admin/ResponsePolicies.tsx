@@ -233,8 +233,6 @@ export function ResponsePolicyEditor({ ruleId, onSaved, compact = false }: {
                 {taskTypesError && <div className={s.catalogError} role="alert"><span>Could not load task types. {taskTypesError}</span><Button variant="secondary" onClick={() => { setTaskTypesLoading(true); setTaskTypesError(''); setCatalogReload(value => value + 1); }}>Retry task types</Button></div>}
                 {!taskTypesLoading && !taskTypesError && taskTypes.length === 0 && <span className={s.catalogError}>No task types are configured. Ask the administrator to check the task catalog.</span>}
               </div>
-              <label>Task title (optional)<input aria-label="Task title (optional)" maxLength={200} value={draft.title} placeholder="Default: Event type — Zone" onChange={(event) => update(priority, { title: event.target.value })} /></label>
-              <label className={s.instructions}>Staff instructions (optional)<textarea aria-label="Staff instructions (optional)" maxLength={4000} rows={3} value={draft.instructions} placeholder="No instructions if left blank." onChange={(event) => update(priority, { instructions: event.target.value })} /></label>
               </div>}
 
               {issues.length > 0 && <ul className={`${s.issues} ${s.policyIssues}`}>{issues.map((issue) => <li key={issue}>{issueLabels[issue] ?? 'This policy needs administrator review.'}</li>)}</ul>}

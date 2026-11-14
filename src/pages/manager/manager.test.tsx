@@ -143,8 +143,8 @@ describe('Manager console', () => {
     routes['GET /api/shifts'] = () => json([morning]);
     routes['GET /api/swap-requests'] = () => json([]);
     const options: StaffOption[] = [
-      { userId: 'u-lan', fullName: 'Hoàng Lan', eligible: true, weeklyHoursAfter: 16, problems: [] },
-      { userId: 'u-duc', fullName: 'Minh Đức', eligible: false, weeklyHoursAfter: 52, problems: ['Would work 52 h that week (limit 48 h).'] },
+      { userId: 'u-lan', fullName: 'Hoàng Lan', eligible: true, weeklyHoursAfter: 16, problems: [], specialtyName: 'Floor Staff', specialtyCode: 'SPC-02' },
+      { userId: 'u-duc', fullName: 'Minh Đức', eligible: false, weeklyHoursAfter: 52, problems: ['Would work 52 h that week (limit 48 h).'], specialtyName: null, specialtyCode: null },
     ];
     routes['GET /api/schedule/staff-options'] = () => json(options);
     routes['POST /api/schedule/assignments'] = (call) => json({ ...scheduleWith().assignments[0], userId: call.body!.userId, fullName: 'Hoàng Lan' });
@@ -154,6 +154,7 @@ describe('Manager console', () => {
     await userEvent.click(await screen.findByRole('button', { name: `Assign staff to Morning on ${dayName}` }));
     const blocked = await screen.findByRole('radio', { name: /Minh Đức/ });
     expect(blocked).toBeDisabled();
+    expect(blocked).toHaveAccessibleName(/No specialty assigned/);
     expect(screen.getByText('Would work 52 h that week (limit 48 h).')).toBeInTheDocument();
     const zone = screen.getByRole('combobox', { name: 'Zone' });
     expect(zone).toHaveValue('');
@@ -161,7 +162,7 @@ describe('Manager console', () => {
     expect(screen.queryByRole('checkbox', { name: 'Checkout' })).not.toBeInTheDocument();
     expect(screen.queryByText('Old storage')).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('radio', { name: /Hoàng Lan/ }));
+    await userEvent.click(screen.getByRole('radio', { name: /Hoàng Lan.*Floor Staff \(SPC-02\)/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Add as draft' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Choose a Zone.');
     await userEvent.selectOptions(zone, 'z-c');

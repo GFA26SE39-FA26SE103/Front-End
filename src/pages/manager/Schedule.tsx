@@ -345,6 +345,8 @@ function AssignmentDialog({ shiftId, workDate, title, zones, assignment, assignm
                   onChange={() => setUserId(o.userId)} />
                 <span>
                   <span className={s.optionName}>{o.fullName}</span>
+                  {o.specialtyName === null && <span className={s.optionNote}> · No specialty assigned</span>}
+                  {o.specialtyName && <span className={s.optionNote}> · {o.specialtyName}{o.specialtyCode && ` (${o.specialtyCode})`}</span>}
                   <span className={s.optionNote}> · {o.weeklyHoursAfter} / 48 h · {o.weeklyHoursAfter <= 40 ? 'recommended' : 'high workload'}</span>
                   {o.problems.map((p) => <span key={p} className={s.optionProblem} style={{ display: 'block' }}>{p}</span>)}
                 </span>

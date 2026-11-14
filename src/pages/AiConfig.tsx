@@ -27,10 +27,50 @@ const inputRule = (r: MonitoringRule): RuleInput => ({ ...r, warningThreshold: S
 /** Shows "≥ enter" and, when a dead band is configured, "held until < exit". */
 const band = (enter: number, exit: number | null | undefined, unit: string) => `≥ ${enter}${exit != null && exit !== enter ? ` · held until < ${exit}` : ''} ${unit}`;
 const message = (e: unknown) => e instanceof Error ? e.message : 'The request could not be completed.';
-const RULE_REQUIRED = 'Add at least one incident rule before saving. Choose an incident type and click Add rule.';
+const RULE_REQUIRED = 'Add at least one incident rule before saving. Choose a rule from the list.';
 function decimal(raw: string, label: string) {
   if (!/^\d+(\.\d{1,4})?$/.test(raw.trim()) || !Number.isFinite(Number(raw))) throw new Error(label + ' must be a non-negative number with at most 4 decimal places.');
   return Number(raw);
+}
+
+const thresholdFields = [
+  { level: 'WARNING', entry: 'warningThreshold', exit: 'warningExitThreshold' },
+  { level: 'CRITICAL', entry: 'criticalThreshold', exit: 'criticalExitThreshold' },
+] as const;
+type ThresholdField = typeof thresholdFields[number]['entry' | 'exit'];
+
+function validateThresholds(rule: RuleInput) {
+  const errors: Partial<Record<ThresholdField, string>> = {};
+  const parse = (field: ThresholdField, optional = false) => {
+    const input = rule[field].trim();
+    if (!input && optional) return null;
+    const value = Number(input);
+    if (!input) errors[field] = 'Enter a threshold.';
+    else if (!/^\d+(\.\d{1,4})?$/.test(input) || value >= 1e14) {
+      errors[field] = 'Enter a non-negative number below 100 trillion with up to 4 decimal places.';
+    } else if (rule.thresholdUnit === 'PEOPLE' && !Number.isInteger(value)) {
+      errors[field] = 'Enter a whole number of people.';
+    } else return value;
+    return null;
+  };
+  const warning = parse('warningThreshold');
+  const critical = parse('criticalThreshold');
+  const warningExit = parse('warningExitThreshold', true);
+  const criticalExit = parse('criticalExitThreshold', true);
+  if (warning !== null && critical !== null && warning >= critical) {
+    errors.criticalThreshold = 'Critical must be higher than warning.';
+  }
+  if (warningExit !== null && warning !== null && warningExit > warning) {
+    errors.warningExitThreshold = 'Warning exit must be at or below the warning threshold.';
+  }
+  if (rule.enabled && (warningExit ?? warning) === 0) {
+    if (warningExit === 0) errors.warningExitThreshold = 'Use a value above 0 so the event can clear.';
+    else errors.warningThreshold = 'Use a value above 0 so the event can clear.';
+  }
+  if (criticalExit !== null && ((warning !== null && criticalExit <= warning) || (critical !== null && criticalExit > critical))) {
+    errors.criticalExitThreshold = 'Critical exit must be above warning and at or below critical.';
+  }
+  return { warning, critical, warningExit, criticalExit, errors };
 }
 function seconds(raw: string, label: string) {
   const n = decimal(raw, label);
@@ -167,8 +207,6 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   const [name, setName] = useState('Zone monitoring');
   const [confidence, setConfidence] = useState('0.5');
   const [rules, setRules] = useState<RuleInput[]>([]);
-  const [typeId, setTypeId] = useState('');
-  const [useDensityDraft, setUseDensityDraft] = useState(false);
   const [policyRuleId, setPolicyRuleId] = useState<string | null>(null);
   const [policies, setPolicies] = useState<Record<string, PolicySummary>>({});
   const [policyRevision, setPolicyRevision] = useState(0);
@@ -179,6 +217,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState('');
   const [rulesMissing, setRulesMissing] = useState(false);
+  const [showRequiredThresholds, setShowRequiredThresholds] = useState(false);
   const [notice, setNotice] = useState('');
   const [loadFailed, setLoadFailed] = useState(false);
   const [deleting, setDeleting] = useState<MonitoringConfiguration | null>(null);
@@ -195,7 +234,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
 
   const fillForm = (saved: MonitoringConfiguration | null) => {
     setName(saved?.name ?? 'Zone monitoring'); setConfidence(String(saved?.confidenceThreshold ?? .5));
-    setRules(saved?.rules.map(inputRule) ?? []); setDirty(false); setRulesMissing(false);
+    setRules(saved?.rules.map(inputRule) ?? []); setDirty(false); setRulesMissing(false); setShowRequiredThresholds(false);
   };
   useEffect(() => {
     const controller = new AbortController();
@@ -227,8 +266,15 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   const showForm = editing && !active && !loadFailed;
   const locked = loading || busy || active;
   const available = types.filter(t => t.status === 'ACTIVE' && !rules.some(r => r.incidentTypeId === t.incidentTypeId));
-  const selectedType = available.find(t => t.incidentTypeId === typeId) ?? available[0];
-  const canAddPeopleCount = selectedType?.measurementOptions?.some(option => option.mode === 'PEOPLE_COUNT' && option.supported);
+  const ruleChoices = available.flatMap(type => {
+    const peopleCount = type.measurementOptions?.some(option => option.mode === 'PEOPLE_COUNT' && option.supported);
+    if (peopleCount) return [
+      { value: type.incidentTypeId, label: `${type.name} · People count`, type, peopleCount: true },
+      { value: `${type.incidentTypeId}:density`, label: `${type.name} · Density (cannot be enabled here)`, type, peopleCount: false },
+    ];
+    const supported = type.supported && type.measurementType === 'QUEUE_LENGTH';
+    return [{ value: type.incidentTypeId, label: supported ? type.name : `${type.name} (cannot be enabled here)`, type, peopleCount: false }];
+  });
   const policyRule = !showForm && !loading && !loadFailed && config?.rules.find(rule => rule.ruleId === policyRuleId);
   const refreshPolicies = () => { setPolicies({}); setPolicyRevision(value => value + 1); };
   function openPolicy(ruleId: string, trigger: HTMLButtonElement) {
@@ -255,10 +301,15 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
     try { await work(); } catch (e) { if (mounted.current) setError(message(e)); }
     finally { if (mounted.current) setBusy(false); }
   }
-  async function save() {
+  async function save(form: HTMLFormElement) {
     if (!rules.length) {
       setRulesMissing(true); setError(RULE_REQUIRED); setNotice('');
       typeSelect.current?.focus();
+      return;
+    }
+    if (rules.some(rule => Object.keys(validateThresholds(rule).errors).length)) {
+      setShowRequiredThresholds(true);
+      requestAnimationFrame(() => form.querySelector<HTMLInputElement>('input[aria-invalid="true"]')?.focus());
       return;
     }
     await operation(async () => {
@@ -267,16 +318,11 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       if (!name.trim()) throw new Error('Configuration name is required.');
       const parsed = rules.map(r => {
         const label = types.find(t => t.incidentTypeId === r.incidentTypeId)?.name ?? 'Rule';
-        const warning = decimal(r.warningThreshold, label + ' warning');
-        const critical = decimal(r.criticalThreshold, label + ' critical');
-        if (warning >= critical) throw new Error(label + ': warning must be less than critical.');
+        const { warning, critical, warningExit, criticalExit, errors } = validateThresholds(r);
+        if (warning === null || critical === null || Object.keys(errors).length) {
+          throw new Error(label + ': check the threshold fields.');
+        }
         if (!r.thresholdUnit.trim()) throw new Error(label + ': threshold unit is required.');
-        if (r.thresholdUnit === 'PEOPLE' && (!Number.isInteger(warning) || !Number.isInteger(critical))) throw new Error(label + ': people thresholds must be whole numbers.');
-        const warningExit = r.warningExitThreshold.trim() ? decimal(r.warningExitThreshold, label + ' warning exit') : null;
-        const criticalExit = r.criticalExitThreshold.trim() ? decimal(r.criticalExitThreshold, label + ' critical exit') : null;
-        if (warningExit !== null && warningExit > warning) throw new Error(label + ': warning exit must not be above the warning threshold.');
-        if (criticalExit !== null && (criticalExit <= warning || criticalExit > critical)) throw new Error(label + ': critical exit must be above the warning threshold and not above the critical threshold.');
-        if (r.thresholdUnit === 'PEOPLE' && [warningExit, criticalExit].some(v => v !== null && !Number.isInteger(v))) throw new Error(label + ': people exit thresholds must be whole numbers.');
         return { incidentTypeId: r.incidentTypeId, warningThreshold: warning, criticalThreshold: critical, thresholdUnit: r.thresholdUnit, sustainSec: seconds(r.sustainSec, label + ' sustain time'), cooldownSec: seconds(r.cooldownSec, label + ' cooldown'), enabled: r.enabled, parametersJson: r.parametersJson,
           warningExitThreshold: warningExit, criticalExitThreshold: criticalExit };
       });
@@ -304,21 +350,21 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       }
     });
   }
-  function addRule() {
-    if (!selectedType) return;
-    const peopleCount = canAddPeopleCount && !useDensityDraft;
+  function addRule(value: string) {
+    const choice = ruleChoices.find(option => option.value === value);
+    if (!choice) return;
+    const { type: selectedType, peopleCount } = choice;
     const rule = inputRule({
       incidentTypeId: selectedType.incidentTypeId, incidentCode: selectedType.code,
       warningThreshold: selectedType.defaultWarningThreshold ?? 0,
       criticalThreshold: selectedType.defaultCriticalThreshold ?? 1,
       thresholdUnit: peopleCount ? 'PEOPLE' : selectedType.thresholdUnit ?? '',
-      sustainSec: 30, cooldownSec: 300, enabled: Boolean(peopleCount) || selectedType.supported,
+      sustainSec: 30, cooldownSec: 300, enabled: peopleCount || (selectedType.supported && selectedType.measurementType === 'QUEUE_LENGTH'),
       parametersJson: peopleCount ? JSON.stringify({ measurementMode: 'PEOPLE_COUNT' }) : null,
     });
     // Density defaults are in people/m². A people-count rule needs its own thresholds.
     if (peopleCount) { rule.warningThreshold = ''; rule.criticalThreshold = ''; }
-    setRules(all => [...all, rule]);
-    setUseDensityDraft(false);
+    setRules(all => [rule, ...all]);
     touch(); setRulesMissing(false);
   }
   const previewCamera = review?.cameras.find((camera) => camera.cameraId === previewCameraId);
@@ -386,34 +432,32 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
         </div>}
       </>}
 
-      {!loading && showForm && <form noValidate onSubmit={e => { e.preventDefault(); void save(); }}>
+      {!loading && showForm && <form noValidate onSubmit={e => { e.preventDefault(); void save(e.currentTarget); }}>
         <fieldset disabled={locked} className={s.fields}>
           <label className={s.field}>Configuration name<input ref={nameInput} aria-label="Configuration name" maxLength={100} value={name} onChange={e => { setName(e.target.value); touch(); }} /></label>
-          <label className={s.field}>Detection confidence<input aria-label="Detection confidence" type="number" min="0" max="1" step=".0001" value={confidence} onChange={e => { setConfidence(e.target.value); touch(); }} /></label>
+          <label className={s.field}>Minimum detection confidence<input aria-label="Detection confidence" aria-describedby="zone-confidence-help" type="number" min="0" max="1" step=".0001" value={confidence} onChange={e => { setConfidence(e.target.value); touch(); }} />
+            <span id="zone-confidence-help" className={s.fieldHelp}>All rules in this zone use this minimum AI score to count a detected person. At 0.5, a detection scored 0.65 counts if it is inside the ROI, while a score of 0.40 is filtered out.</span>
+          </label>
         </fieldset>
-        <p className={s.help}>Confidence filters detection scores; rule thresholds determine operational event priority.</p>
 
         <h3 className={s.section}>Operational event rules <span className={s.required}>Required</span></h3>
         <div className={`${s.addRule} ${rulesMissing ? s.addRuleMissing : ''}`}>
-          <label className={s.field}>Operational event type<select ref={typeSelect} aria-label="Operational event type" aria-invalid={rulesMissing || undefined} disabled={locked || !available.length} value={selectedType?.incidentTypeId ?? ''} onChange={e => { setTypeId(e.target.value); setUseDensityDraft(false); }}>
-            {!available.length && <option value="">No more operational event types</option>}
-            {available.map(t => <option key={t.incidentTypeId} value={t.incidentTypeId}>{t.name}{!t.supported ? t.measurementOptions?.some(o => o.supported) ? ' (choose measurement mode)' : ' (disabled Draft only)' : ''}</option>)}
+          <label className={s.field}>Add a rule<select ref={typeSelect} aria-label="Add a rule" aria-invalid={rulesMissing || undefined} disabled={locked || !ruleChoices.length} value="" onChange={e => addRule(e.target.value)}>
+            <option value="" disabled>{ruleChoices.length ? 'Choose a rule to add…' : 'All available rules have been added'}</option>
+            {ruleChoices.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select></label>
-          {canAddPeopleCount && <label className={s.field}>Measurement mode<select disabled={locked} value={useDensityDraft ? 'density' : 'count'} onChange={event => setUseDensityDraft(event.target.value === 'density')}>
-            <option value="count">People count in ROI</option>
-            <option value="density">Density (disabled draft)</option>
-          </select></label>}
-          <Button disabled={locked || !selectedType} onClick={addRule}>Add rule</Button>
         </div>
         {!rules.length && <p className={rulesMissing ? s.error : s.help}>No operational event rules yet. A configuration needs at least one rule before it can be saved.</p>}
         {rules.map(r => {
           const t = types.find(t => t.incidentTypeId === r.incidentTypeId);
           const label = t?.name ?? r.incidentName ?? 'Unknown operational event type';
           const mode = ruleMode(r, types);
+          const { errors } = validateThresholds(r);
           const supported = mode === 'PEOPLE_COUNT' ? !!t?.measurementOptions?.some(o => o.mode === mode && o.supported) : !!t?.supported && mode === 'QUEUE_LENGTH';
           return <section key={r.incidentTypeId} className={s.rule}>
             <div className={s.head}><h3>{label}</h3><Button variant="secondary" disabled={locked} onClick={() => { setRules(all => all.filter(x => x.incidentTypeId !== r.incidentTypeId)); touch(); }}>Remove {label}</Button></div>
             <p className={s.help}>{modeLabel(mode)}</p>
+            {!supported && <p className={s.help}>You can save this rule with Enabled off. This editor cannot enable the selected measurement mode.</p>}
             {!supported && t?.unsupportedReason && <p className={s.help}>{t.unsupportedReason}</p>}
             {t?.code === 'OVERCROWDING_CONGESTION' && mode !== 'PEOPLE_COUNT' && <CountModeEditor disabled={locked} onConvert={(warning, critical) => {
               try {
@@ -422,11 +466,38 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
                 changeRule(r.incidentTypeId, { thresholdUnit: converted.thresholdUnit, parametersJson: converted.parametersJson, warningThreshold: String(converted.warningThreshold), criticalThreshold: String(converted.criticalThreshold), warningExitThreshold: '', criticalExitThreshold: '' });
               } catch (e) { setError(message(e)); }
             }} />}
+            <div className={s.thresholdPairs}>
+              {thresholdFields.map(({ level, entry, exit }) => {
+                const entryValue = r[entry].trim();
+                const exitValue = r[exit].trim() || entryValue;
+                const validPair = entryValue && !errors[entry] && !errors[exit];
+                const dual = validPair && Number(exitValue) < Number(entryValue);
+                return <fieldset key={level} disabled={locked} className={s.thresholdPair}>
+                  <legend>{level}</legend>
+                  <div className={s.thresholdInputs}>
+                    {([entry, exit] as const).map(key => {
+                      const isExit = key === exit;
+                      const error = showRequiredThresholds || r[key].trim() ? errors[key] : undefined;
+                      const errorId = `${r.incidentTypeId}-${key}-error`;
+                      return <label key={key} className={s.field}>
+                        {isExit ? 'Leave level when x < (optional)' : 'Reach level when x ≥'}
+                        <input aria-label={`${label} ${level.toLowerCase()}${isExit ? ' exit' : ''}`}
+                          aria-invalid={Boolean(error) || undefined} aria-describedby={error ? errorId : undefined}
+                          type="number" min="0" step={r.thresholdUnit === 'PEOPLE' ? '1' : '.0001'}
+                          placeholder={isExit ? entryValue || 'Same as entry' : undefined}
+                          value={r[key]} onChange={e => changeRule(r.incidentTypeId, { [key]: e.target.value })} />
+                        {error && <span id={errorId} className={s.fieldError}>{error}</span>}
+                      </label>;
+                    })}
+                  </div>
+                  <p className={s.thresholdHint}>{dual
+                    ? <><strong>Dual threshold</strong> · <code>{exitValue} ≤ x &lt; {entryValue}</code> keeps this rule level if already entered.</>
+                    : validPair ? 'Single threshold. Set a lower exit to keep the level through small fluctuations.'
+                      : 'Enter the thresholds to see when the rule keeps this level.'}</p>
+                </fieldset>;
+              })}
+            </div>
             <fieldset disabled={locked} className={s.fields}>
-              <label className={s.field}>Warning threshold ≥<input aria-label={label + ' warning'} type="number" min="0" step={r.thresholdUnit === 'PEOPLE' ? '1' : '.0001'} value={r.warningThreshold} onChange={e => changeRule(r.incidentTypeId, { warningThreshold: e.target.value })} /></label>
-              <label className={s.field}>Critical threshold ≥<input aria-label={label + ' critical'} type="number" min="0" step={r.thresholdUnit === 'PEOPLE' ? '1' : '.0001'} value={r.criticalThreshold} onChange={e => changeRule(r.incidentTypeId, { criticalThreshold: e.target.value })} /></label>
-              <label className={s.field}>Warning exit below (optional)<input aria-label={label + ' warning exit'} type="number" min="0" step={r.thresholdUnit === 'PEOPLE' ? '1' : '.0001'} placeholder={`= ${r.warningThreshold || 'warning'}`} value={r.warningExitThreshold} onChange={e => changeRule(r.incidentTypeId, { warningExitThreshold: e.target.value })} /></label>
-              <label className={s.field}>Critical exit below (optional)<input aria-label={label + ' critical exit'} type="number" min="0" step={r.thresholdUnit === 'PEOPLE' ? '1' : '.0001'} placeholder={`= ${r.criticalThreshold || 'critical'}`} value={r.criticalExitThreshold} onChange={e => changeRule(r.incidentTypeId, { criticalExitThreshold: e.target.value })} /></label>
               <label className={s.field}>Threshold unit<input aria-label={label + ' unit'} value={t?.thresholdUnit ? unitName(r.thresholdUnit) : r.thresholdUnit} maxLength={30} readOnly={!!t?.thresholdUnit} onChange={e => changeRule(r.incidentTypeId, { thresholdUnit: e.target.value })} /></label>
               <label className={s.field}>Sustain time (seconds)<input aria-label={label + ' sustain time'} type="number" min="0" step="1" value={r.sustainSec} onChange={e => changeRule(r.incidentTypeId, { sustainSec: e.target.value })} /></label>
               <label className={s.field}>Cooldown (seconds)<input aria-label={label + ' cooldown'} type="number" min="0" step="1" value={r.cooldownSec} onChange={e => changeRule(r.incidentTypeId, { cooldownSec: e.target.value })} /></label>
@@ -434,7 +505,8 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
             </fieldset>
           </section>;
         })}
-        <p className={s.help}>Warning &lt; critical. Optional exit thresholds add a dead band: a level starts at ≥ its threshold and is held until the value drops below its exit (e.g. Critical ≥ 20, exit below 18), so counts flickering around one number do not flip the level or clear and re-create the event. Leave empty for a single threshold. Sustain is continuous source-video time above threshold. Queue length counts people only after 5 seconds continuously in the ROI, then applies sustain. Cooldown starts after the operational event clears. Temporary people count needs no area; density runtime is deferred.</p>
+        <p className={s.help}>x is the rule’s measured value. An empty exit uses the entry threshold. A recorded event keeps its highest alert level until it clears.</p>
+        <p className={s.help}>Sustain uses continuous source-video time. Queue length counts people after 5 continuous seconds in the ROI, then applies sustain. Cooldown starts after the event clears.</p>
         <div className={s.actions}>
           <Button type="submit" disabled={locked}>{busy ? 'Saving…' : 'Save configuration'}</Button>
           <Button variant="secondary" disabled={busy} onClick={() => {

@@ -78,14 +78,13 @@ describe('Response policy administration', () => {
     await within(critical).findByRole('option', { name: 'TT-04 — Congestion assistance' });
     expect(within(critical).getByText('Not configured')).toBeInTheDocument();
     fireEvent.change(within(critical).getByLabelText('Task type (required when enabled)'), { target: { value: 'TT-04' } });
-    fireEvent.change(within(critical).getByLabelText('Task title (optional)'), { target: { value: 'Urgent congestion response' } });
-    fireEvent.change(within(critical).getByLabelText('Staff instructions (optional)'), { target: { value: 'Open a safe route and assist customers.' } });
+    expect(within(critical).queryByRole('textbox')).not.toBeInTheDocument();
     fireEvent.click(within(critical).getByRole('button', { name: 'Save critical task dispatch' }));
 
     expect(await screen.findByText('Critical task dispatch saved.')).toBeInTheDocument();
     await waitFor(() => expect(requests.find((request) => request.method === 'PUT')).toEqual({
       path: `/api/monitoring-rules/${ruleId}/response-policies/CRITICAL`, method: 'PUT',
-      body: { isEnabled: true, expectedVersion: 1, action: { isEnabled: true, taskTypeCode: 'TT-04', title: 'Urgent congestion response', instructions: 'Open a safe route and assist customers.', targetRoleCode: null } },
+      body: { isEnabled: true, expectedVersion: 1, action: { isEnabled: true, taskTypeCode: 'TT-04', title: null, instructions: null, targetRoleCode: null } },
     }));
   });
 
@@ -100,6 +99,9 @@ describe('Response policy administration', () => {
   });
 
   it('uses the advanced shared version when saving the other action and clears warning task parameters', async () => {
+    policies = [warning, { ...warning, eventPriority: 'CRITICAL', action: {
+      ...warning.action!, taskTypeCode: 'TT-04', title: 'Saved title', instructions: 'Saved instructions',
+    } }];
     show();
     const warningGroup = await screen.findByRole('group', { name: 'WARNING policy' });
     fireEvent.click(within(warningGroup).getByRole('button', { name: 'Save warning notification' }));
@@ -112,7 +114,8 @@ describe('Response policy administration', () => {
     const puts = requests.filter(r => r.method === 'PUT');
     expect(puts[0].body).toEqual({ isEnabled: true, expectedVersion: 1,
       action: { isEnabled: true, taskTypeCode: null, title: null, instructions: null, targetRoleCode: 'OPERATOR' } });
-    expect(puts[1].body).toMatchObject({ expectedVersion: 2 });
+    expect(puts[1].body).toMatchObject({ expectedVersion: 2,
+      action: { taskTypeCode: 'TT-01', title: 'Saved title', instructions: 'Saved instructions' } });
   });
 
   it('lets the warning notification target Managers', async () => {
@@ -151,13 +154,11 @@ describe('Response policy administration', () => {
     expect(within(critical).getByRole('combobox')).toBeDisabled();
     expect(within(critical).getByRole('button', { name: 'Save critical task dispatch' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Save warning notification' })).toBeEnabled();
-    fireEvent.change(within(critical).getByLabelText('Task title (optional)'), { target: { value: 'Keep draft title' } });
     failCatalog = false;
     fireEvent.click(within(critical).getByRole('button', { name: 'Retry task types' }));
     await within(critical).findByRole('option', { name: 'TT-01 — Queue assistance' });
     fireEvent.change(within(critical).getByRole('combobox'), { target: { value: 'TT-01' } });
     expect(within(critical).getByText('Help customers move through the checkout queue.')).toBeInTheDocument();
-    expect(within(critical).getByLabelText('Task title (optional)')).toHaveValue('Keep draft title');
   });
 
   it('does not allow inventing a missing shared policy', async () => {
@@ -187,13 +188,11 @@ describe('Response policy administration', () => {
     const critical = await screen.findByRole('group', { name: 'CRITICAL policy' });
     await within(critical).findByRole('option', { name: 'TT-01 — Queue assistance' });
     fireEvent.change(within(critical).getByLabelText('Task type (required when enabled)'), { target: { value: 'TT-01' } });
-    fireEvent.change(within(critical).getByLabelText('Task title (optional)'), { target: { value: 'Keep this draft' } });
-    fireEvent.change(within(critical).getByLabelText('Staff instructions (optional)'), { target: { value: 'Retry these instructions.' } });
     fireEvent.click(within(critical).getByRole('button', { name: 'Save critical task dispatch' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Response policy could not be saved.');
     expect(screen.getByRole('group', { name: 'WARNING policy' })).toBeInTheDocument();
-    expect(within(critical).getByLabelText('Task title (optional)')).toHaveValue('Keep this draft');
+    expect(within(critical).getByLabelText('Task type (required when enabled)')).toHaveValue('TT-01');
     expect(within(critical).getByRole('button', { name: 'Save critical task dispatch' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Reload saved state' })).toBeEnabled();
   });

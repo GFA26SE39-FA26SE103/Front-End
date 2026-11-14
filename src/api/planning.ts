@@ -21,7 +21,10 @@ export type ZoneCoverage = {
   minStaff: number; planned: number; published: number; belowMinimum: boolean;
 };
 export type ScheduleView = { from: string; to: string; assignments: ScheduledShift[]; coverage: ZoneCoverage[]; draftCount: number; gapCount: number };
-export type StaffOption = { userId: string; fullName: string; eligible: boolean; weeklyHoursAfter: number; problems: string[] };
+export type StaffOption = {
+  userId: string; fullName: string; eligible: boolean; weeklyHoursAfter: number; problems: string[];
+  specialtyName?: string | null; specialtyCode?: string | null;
+};
 export type PublishResult = { from: string; to: string; published: number; notified: number };
 
 export type Unavailability = { unavailabilityId: string; userId: string; fullName: string; startAt: string; endAt: string; note: string | null; createdAt: string };
