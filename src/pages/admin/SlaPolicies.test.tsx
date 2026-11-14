@@ -6,6 +6,8 @@ import {
   saveTaskTypeSlaPolicy, type OperationalEventSlaPolicy, type SlaPolicySummary,
 } from '../../api/slaPolicies';
 import { listIncidentTypes } from '../../api/monitoring';
+import { listStaffSpecialties } from '../../api/accounts';
+import { listTaskTypes } from '../../api/taskTypes';
 import { saveSession } from '../../auth/session';
 import SlaPolicies from './SlaPolicies';
 
@@ -14,6 +16,8 @@ vi.mock('../../api/slaPolicies', () => ({
   listTaskTypeSlaPolicies: vi.fn(), saveTaskTypeSlaPolicy: vi.fn(), listSlaPolicies: vi.fn(), saveSlaPolicy: vi.fn(), getSlaEscalation: vi.fn(), saveSlaEscalation: vi.fn(),
 }));
 vi.mock('../../api/monitoring', () => ({ listIncidentTypes: vi.fn() }));
+vi.mock('../../api/accounts', () => ({ listStaffSpecialties: vi.fn() }));
+vi.mock('../../api/taskTypes', () => ({ listTaskTypes: vi.fn() }));
 
 const summary: SlaPolicySummary = { policyId: 'policy-1', isEnabled: true, version: 3, priorityCode: 'HIGH', responseTargetSec: 120, resolutionTargetSec: 1800,
   offerTimeoutSec: 60, warningPercent: 80, createdAt: '2026-11-01T00:00:00Z', updatedAt: '2026-11-01T00:00:00Z' };
@@ -29,6 +33,12 @@ describe('SLA policy administration', () => {
     vi.mocked(listOperationalEventSlaPolicies).mockResolvedValue([queue, crowd]);
     vi.mocked(listTaskTypeSlaPolicies).mockResolvedValue([{ taskTypeId: 'task-type-1', code: 'TT-11', name: 'Clean Affected Area', sourceCategory: 'Cleanliness Problems', policy: null, issues: ['POLICY_MISSING'] }]);
     vi.mocked(listIncidentTypes).mockResolvedValue([]);
+    vi.mocked(listTaskTypes).mockResolvedValue([
+      { taskTypeId: 'task-type-1', code: 'TT-11', name: 'Clean Affected Area', description: null, requiredSpecialtyId: 'cleaning' },
+    ]);
+    vi.mocked(listStaffSpecialties).mockResolvedValue([
+      { specialtyId: 'cleaning', code: 'SPC-03', name: 'Cleaner', description: null },
+    ]);
     vi.mocked(listSlaPolicies).mockResolvedValue([]);
     vi.mocked(getSlaEscalation).mockResolvedValue({ policyId: 'policy-1', problemDomain: 'OPERATIONAL_EVENT', version: 3, warningRoles: ['OPERATOR'], breachRoles: ['OPERATOR', 'MANAGER'], usesDefault: true });
   });
@@ -71,7 +81,9 @@ describe('SLA policy administration', () => {
     vi.mocked(saveTaskTypeSlaPolicy).mockResolvedValue({ taskTypeId: 'task-type-1', code: 'TT-11', name: 'Clean Affected Area', sourceCategory: 'Cleanliness Problems', policy: summary, issues: [] });
     page();
     fireEvent.click(await screen.findByRole('tab', { name: 'Task types' }));
+    expect(await screen.findByText('Required specialty · Cleaner (SPC-03)')).toBeInTheDocument();
     fireEvent.click(await screen.findByRole('button', { name: 'Clean Affected Area' }));
+    expect(screen.getByText('Required Staff specialty · Cleaner (SPC-03)')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Create SLA policy' }));
     await waitFor(() => expect(saveTaskTypeSlaPolicy).toHaveBeenCalledWith('task-type-1', expect.objectContaining({ expectedVersion: null, priorityCode: 'HIGH' })));
   });

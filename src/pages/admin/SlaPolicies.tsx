@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError } from '../../api/client';
+import { listStaffSpecialties } from '../../api/accounts';
 import { listIncidentTypes } from '../../api/monitoring';
+import { listTaskTypes } from '../../api/taskTypes';
 import {
   getSlaEscalation, listOperationalEventSlaPolicies, listSlaPolicies, listTaskTypeSlaPolicies, saveOperationalEventSlaPolicy, saveSlaEscalation,
   saveSlaPolicy, saveTaskTypeSlaPolicy, slaPriorities, type EscalationRole, type SlaEscalation, type SlaPolicySummary, type SlaPriority, type SlaTimingSave,
@@ -11,7 +13,7 @@ import s from './SlaPolicies.module.css';
 
 /** L1: SLA timing (priority, response, resolution, offer timeout, warning %) and escalation routing for every SLA scope. */
 type Scope = 'EVENT' | 'TASK' | 'INCIDENT';
-type Row = { id: string; code: string; name: string; detail: string; policy: SlaPolicySummary | null; issues: string[] };
+type Row = { id: string; code: string; name: string; detail: string; policy: SlaPolicySummary | null; issues: string[]; specialty?: string };
 type Draft = { isEnabled: boolean; priorityCode: SlaPriority; responseTargetSec: string; resolutionTargetSec: string; offerTimeoutSec: string; warningPercent: string };
 const scopes: { id: Scope; label: string; help: string }[] = [
   { id: 'EVENT', label: 'Operational events', help: 'Camera OperationalEvent types. WARNING/CRITICAL actions are configured per monitoring rule in AI Config.' },
@@ -39,11 +41,20 @@ function problem(reason: unknown) {
 }
 
 async function loadRows(signal?: AbortSignal): Promise<Record<Scope, Row[]>> {
-  const [events, tasks, incidentTypes, incidentPolicies] = await Promise.all([
-    listOperationalEventSlaPolicies(signal), listTaskTypeSlaPolicies(signal), listIncidentTypes(signal), listSlaPolicies(signal)]);
+  const [events, tasks, incidentTypes, incidentPolicies, specialtiesByTask] = await Promise.all([
+    listOperationalEventSlaPolicies(signal), listTaskTypeSlaPolicies(signal), listIncidentTypes(signal), listSlaPolicies(signal),
+    Promise.all([listTaskTypes(signal), listStaffSpecialties(signal)]).then(([taskTypes, specialties]) => {
+      const catalog = new Map(specialties.map(item => [item.specialtyId, item]));
+      return new Map(taskTypes.map(type => {
+        const specialty = catalog.get(type.requiredSpecialtyId);
+        return [type.taskTypeId, specialty ? `${specialty.name} (${specialty.code})` : 'Unavailable'] as const;
+      }));
+    }).catch(() => new Map<string, string>()),
+  ]);
   return {
     EVENT: events.map(row => ({ id: row.eventTypeId, code: row.code, name: row.name, detail: row.measurementType, policy: row.policy, issues: row.issues })),
-    TASK: tasks.map(row => ({ id: row.taskTypeId, code: row.code, name: row.name, detail: row.sourceCategory, policy: row.policy, issues: row.issues })),
+    TASK: tasks.map(row => ({ id: row.taskTypeId, code: row.code, name: row.name, detail: row.sourceCategory,
+      policy: row.policy, issues: row.issues, specialty: specialtiesByTask.get(row.taskTypeId) ?? 'Unavailable' })),
     INCIDENT: incidentTypes.filter(type => type.sourceType !== 'AI_DETECTED').map(type => {
       const matches = incidentPolicies.filter(policy => policy.incidentTypeId === type.incidentTypeId);
       const policy = matches.length === 1 ? matches[0] : null;
@@ -127,7 +138,9 @@ export default function SlaPolicies() {
           {visible.length > 0 && <table className={s.table}>
             <thead><tr><th>Type</th><th>Priority</th><th>Respond</th><th>Resolve</th><th>Status</th></tr></thead>
             <tbody>{visible.map(row => <tr key={row.id} className={row.id === selected ? s.selected : undefined} onClick={() => choose(row)}>
-              <td><button type="button" className={s.link} onClick={() => choose(row)}>{row.name}</button><small className={s.muted}>{row.code} · {row.detail}</small></td>
+              <td><button type="button" className={s.link} onClick={() => choose(row)}>{row.name}</button><small className={s.muted}>{row.code} · {row.detail}</small>
+                {row.specialty && <small className={s.muted}>Required specialty · {row.specialty}</small>}
+              </td>
               <td>{row.policy ? <Chip tone={row.policy.priorityCode === 'CRITICAL' ? 'danger' : row.policy.priorityCode === 'HIGH' ? 'warning' : 'neutral'}>{row.policy.priorityCode}</Chip> : '—'}</td>
               <td>{row.policy ? duration(row.policy.responseTargetSec) : '—'}</td><td>{row.policy ? duration(row.policy.resolutionTargetSec) : '—'}</td>
               <td>{row.issues.length === 0 ? <Chip tone="success">Active v{row.policy?.version}</Chip> : row.issues.map(issue => <Chip key={issue} tone={issue === 'POLICY_DISABLED' ? 'neutral' : 'warning'}>{issueLabels[issue] ?? issue}</Chip>)}</td>
@@ -136,6 +149,7 @@ export default function SlaPolicies() {
         </Card>
         <Card className={s.drawer}>{chosen ? <>
           <CardHeader title={chosen.name} subtitle={`${chosen.code} · ${chosen.policy ? `policy v${chosen.policy.version}` : 'no policy yet'}`} />
+          {chosen.specialty && <p className={s.muted}>Required Staff specialty · {chosen.specialty}</p>}
           <fieldset className={s.form} disabled={busy}>
             <label>Priority<select value={draft.priorityCode} onChange={event => setDraft(d => ({ ...d, priorityCode: event.target.value as SlaPriority }))}>
               {slaPriorities.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
