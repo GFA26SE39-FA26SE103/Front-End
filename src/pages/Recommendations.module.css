@@ -16,6 +16,16 @@
 .page h2 { font-size: 20px; }
 .page h3 { font-size: 15px; }
 .page a { color: var(--color-primary); font-weight: 600; }
+.eyebrow { color: var(--color-primary); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.summary { margin-top: 6px !important; color: var(--color-text-muted); line-height: 1.6; }
+.guidance { display: grid; gap: 16px; margin-top: 20px; }
+.guidance section { display: grid; gap: 6px; }
+.guidance p { line-height: 1.6; }
+.guidance ol { margin: 0; padding-left: 22px; display: grid; gap: 8px; line-height: 1.55; }
+.reviewPlan { display: grid; grid-template-columns: minmax(180px, .7fr) minmax(260px, 1.3fr); gap: 12px; }
+.reviewPlan section { padding: 12px; border-radius: 8px; background: var(--color-surface-2); }
+.evidence summary { cursor: pointer; color: var(--color-text); font-size: 15px; font-weight: 700; }
+.evidence > .muted { margin-top: 8px; }
 .toolbar, .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .toolbar { justify-content: space-between; }
 .muted { color: var(--color-text-muted); font-size: 13px; line-height: 1.6; }
@@ -35,4 +45,4 @@
 .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 14px; margin: 16px 0 0; }
 .facts dt { color: var(--color-text-muted); font-size: 12px; margin-bottom: 4px; }
 .facts dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
-@media (max-width: 640px) { .operatorPage { padding: 12px; } }
+@media (max-width: 640px) { .operatorPage { padding: 12px; } .reviewPlan { grid-template-columns: 1fr; } }

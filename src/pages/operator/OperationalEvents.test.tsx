@@ -29,7 +29,7 @@ describe('Operational Event history', () => {
   it.each([false, true])('lets Manager review inline and keeps the selected event page (existing: %s)', async existing => {
     const active = { ...event, status: 'ACTIVE', clearedAt: null };
     const recommendation = { recommendationId: 'recommendation-1', eventId: event.eventId, status: 'AVAILABLE',
-      title: 'Monitor the condition', description: 'Review the queue.', generatedAt: event.updatedAt, expiresAt: null };
+      title: 'Monitor the condition', description: 'Review the queue.', generatedAt: event.updatedAt, expiresAt: null, guidance: null };
     const generate = vi.fn();
     vi.mocked(globalThis.fetch).mockImplementation(async (input, options) => {
       const url = new URL(String(input));

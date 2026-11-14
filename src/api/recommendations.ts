@@ -15,6 +15,12 @@ export type Recommendation = {
   expiresAt: string | null;
   reviewedByUserId: string | null;
   reviewedAt: string | null;
+  guidance: {
+    rationale: string;
+    immediateSteps: string[];
+    recheckAfterMinutes: number;
+    escalationCondition: string;
+  } | null;
   evidence: {
     signal: { eventType: string; alertLevel: string; metric: number; unit: string; warningThreshold: number;
       criticalThreshold: number; sustainSeconds: number; slaPriority: string | null };

@@ -158,8 +158,21 @@ function Detail({ workspace, id }: { workspace: RecommendationWorkspace; id: str
 function RecommendationReview({ workspace, value, onSaved }: { workspace: RecommendationWorkspace; value: Recommendation; onSaved?: (item: Recommendation) => void }) {
   return <>
       <Card>
+        <p className={s.eyebrow}>Recommended action</p>
         <div className={s.toolbar}><h2>{value.title}</h2><Status status={value.status} /></div>
-        <p>{value.description}</p>
+        <p className={s.summary}>{value.description}</p>
+        {value.guidance && <div className={s.guidance}>
+          <section aria-labelledby="recommendation-why"><h3 id="recommendation-why">Why this action</h3><p>{value.guidance.rationale}</p></section>
+          <section aria-labelledby="recommendation-steps"><h3 id="recommendation-steps">What the Operator should do now</h3>
+            <ol>{value.guidance.immediateSteps.map((step, index) => <li key={`${index}-${step}`}>{step}</li>)}</ol>
+          </section>
+          <div className={s.reviewPlan}>
+            <section aria-labelledby="recommendation-recheck"><h3 id="recommendation-recheck">Recheck</h3>
+              <p>Review the condition again in {value.guidance.recheckAfterMinutes} minutes.</p></section>
+            <section aria-labelledby="recommendation-escalate"><h3 id="recommendation-escalate">Escalate when</h3>
+              <p>{value.guidance.escalationCondition}</p></section>
+          </div>
+        </div>}
         <dl className={s.facts}>
           <div><dt>Generated · Vietnam time</dt><dd>{date(value.generatedAt)}</dd></div>
           <div><dt>Review deadline</dt><dd>{date(value.expiresAt)}</dd></div>
@@ -167,7 +180,9 @@ function RecommendationReview({ workspace, value, onSaved }: { workspace: Recomm
           {workspace === 'manager' && value.eventId && <div><dt>Source</dt><dd><Link to={`/manager/events/${encodeURIComponent(value.eventId)}`}>Open operational event</Link></dd></div>}
         </dl>
       </Card>
-      {value.evidence && <Card><h3>Evidence at generation</h3>
+      {value.evidence && <Card><details className={s.evidence}>
+        <summary>Supporting evidence</summary>
+        <p className={s.muted}>Observation and policy values used when this recommendation was generated.</p>
         <dl className={s.facts}>
           <div><dt>Observation</dt><dd>{value.evidence.signal.metric.toLocaleString()} {value.evidence.signal.unit}</dd></div>
           <div><dt>Observed · Vietnam time</dt><dd>{date(value.evidence.observedAt)}</dd></div>
@@ -179,7 +194,7 @@ function RecommendationReview({ workspace, value, onSaved }: { workspace: Recomm
           <div><dt>Model confidence (self-assessed)</dt><dd>{value.evidence.confidence}</dd></div>
           {value.evidence.slaPolicyVersion != null && <div><dt>SLA policy version</dt><dd>{value.evidence.slaPolicyVersion}</dd></div>}
         </dl>
-      </Card>}
+      </details></Card>}
       {workspace === 'manager' && onSaved && (value.status === 'AVAILABLE' || value.status === 'DEFERRED') && <DecisionForm item={value} onSaved={onSaved} />}
       {workspace === 'manager' && value.status === 'ACCEPTED' && <p className={s.notice} role="status">Accepted and available for Operator review.</p>}
       {workspace === 'operator' && (value.eventId ? <CurrentEvent key={value.eventId} eventId={value.eventId} />

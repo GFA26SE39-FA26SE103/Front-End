@@ -16,6 +16,9 @@ const event = { eventId: 'ev-1', eventTypeName: 'Long queue', sourceCode: 'EVT-1
 const row: Recommendation = { recommendationId: id, eventId: event.eventId, zoneId: 'zone-1', recommendationType: 'REVIEW_CHECKOUT_CAPACITY',
   title: 'Review checkout capacity', description: 'Check whether additional checkout support is appropriate.', status: 'AVAILABLE',
   generatedAt: now, expiresAt: '2026-11-12T09:05:00Z', reviewedByUserId: null, reviewedAt: null,
+  guidance: { rationale: 'The latest observation meets the warning threshold.',
+    immediateSteps: ['Verify the queue on site.', 'Assess whether additional staffed checkout support is needed.'], recheckAfterMinutes: 5,
+    escalationCondition: 'Escalate if the metric reaches the critical threshold.' },
   evidence: { observedAt: now, confidence: 'HIGH', slaPolicyVersion: 3, signal: { eventType: 'LONG_QUEUE', alertLevel: 'WARNING', metric: 7,
     unit: 'PEOPLE', warningThreshold: 5, criticalThreshold: 10, sustainSeconds: 30, slaPriority: 'MEDIUM' } } };
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
@@ -58,6 +61,11 @@ describe('D14 recommendation screens', () => {
     view('/manager/events/ev-1');
     await userEvent.click(await screen.findByRole('button', { name: 'Generate recommendation' }));
     expect(await screen.findByRole('heading', { name: row.title })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'What the Operator should do now' })).toBeInTheDocument();
+    expect(screen.getByText('Verify the queue on site.')).toBeInTheDocument();
+    expect(screen.getByText('Review the condition again in 5 minutes.')).toBeInTheDocument();
+    expect(screen.getByText('Escalate if the metric reaches the critical threshold.')).toBeInTheDocument();
+    expect(screen.getByText('Supporting evidence').closest('details')).not.toHaveAttribute('open');
     expect(screen.getByText('7 PEOPLE')).toBeInTheDocument();
     expect(screen.getByText('Model confidence (self-assessed)')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Save decision' }));
