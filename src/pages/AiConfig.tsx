@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { AdminLayout } from '../components/AdminLayout';
 import { AnnotatedPreview } from '../components/AnnotatedPreview';
 import { Dialog } from '../components/Dialog';
@@ -7,6 +7,8 @@ import { Button, Chip, type Tone } from '../components/ui';
 import { ApiError } from '../api/client';
 import { listFloors, listSupermarkets, listZones, type ZoneRecord } from '../api/floors';
 import { deleteMonitoring, getMonitoring, listIncidentTypes, reviewMonitoring, saveMonitoring, setMonitoringActive, type IncidentType, type MonitoringConfiguration, type MonitoringReview, type MonitoringRule } from '../api/monitoring';
+import { listResponsePolicies, type PolicyPriority, type ResponsePolicy } from '../api/responsePolicies';
+import { ResponsePolicyEditor } from './admin/ResponsePolicies';
 import s from './AiConfig.module.css';
 import { convertToPeopleCount, measurementMode, modeLabel } from './monitoringRuleMode';
 
@@ -18,6 +20,7 @@ type RuleInput = Omit<MonitoringRule, 'warningThreshold' | 'criticalThreshold' |
 type FloorGroup = { floorId: string; floorNumber: number; name: string; zones: ZoneRecord[] };
 // undefined = still loading, null = no configuration saved for the zone, 'error' = could not be loaded.
 type ConfigSummary = MonitoringConfiguration | null | 'error' | undefined;
+type PolicySummary = ResponsePolicy[] | 'error' | undefined;
 
 const inputRule = (r: MonitoringRule): RuleInput => ({ ...r, warningThreshold: String(r.warningThreshold), criticalThreshold: String(r.criticalThreshold), sustainSec: String(r.sustainSec), cooldownSec: String(r.cooldownSec),
   warningExitThreshold: r.warningExitThreshold == null ? '' : String(r.warningExitThreshold), criticalExitThreshold: r.criticalExitThreshold == null ? '' : String(r.criticalExitThreshold) });
@@ -45,6 +48,27 @@ const formatTime = (value: string) => { const date = new Date(value); return Num
 
 const units: Record<string, string> = { PEOPLE: 'people', MINUTES: 'minutes', PEOPLE_PER_M2: 'people/m²' };
 const unitName = (unit: string) => units[unit] ?? unit;
+
+function responseLabel(summary: PolicySummary, level: PolicyPriority) {
+  if (summary === undefined) return 'Checking policy…';
+  if (summary === 'error') return 'Policy unavailable';
+  if (!summary.length) return 'SLA missing';
+  const policy = summary.find(item => item.eventPriority === level);
+  if (policy?.issues.includes('POLICY_DISABLED')) return 'SLA disabled';
+  if (!policy?.action) return 'Action missing';
+  if (!policy.isEnabled || !policy.action.isEnabled) return 'Action disabled';
+  if (policy.issues.some(issue => issue !== 'CONFIGURATION_NOT_ACTIVE' && issue !== 'RULE_DISABLED')) return 'Needs attention';
+  return level === 'WARNING'
+    ? (policy.action.targetRoleCode === 'MANAGER' ? 'Notify Managers' : 'Notify Operators')
+    : `Create ${policy.action.taskTypeCode ?? 'Task'}`;
+}
+
+function RuleResponses({ summary }: { summary: PolicySummary }) {
+  return <div className={s.ruleResponses}>
+    <span><strong>WARNING</strong> · {responseLabel(summary, 'WARNING')}</span>
+    <span><strong>CRITICAL</strong> · {responseLabel(summary, 'CRITICAL')}</span>
+  </div>;
+}
 
 export default function AiConfig() {
   const [params, setParams] = useSearchParams();
@@ -144,6 +168,10 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   const [confidence, setConfidence] = useState('0.5');
   const [rules, setRules] = useState<RuleInput[]>([]);
   const [typeId, setTypeId] = useState('');
+  const [useDensityDraft, setUseDensityDraft] = useState(false);
+  const [policyRuleId, setPolicyRuleId] = useState<string | null>(null);
+  const [policies, setPolicies] = useState<Record<string, PolicySummary>>({});
+  const [policyRevision, setPolicyRevision] = useState(0);
   const [review, setReview] = useState<MonitoringReview | null>(null);
   const [previewCameraId, setPreviewCameraId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -159,6 +187,8 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   const typeSelect = useRef<HTMLSelectElement>(null);
   const nameInput = useRef<HTMLInputElement>(null);
   const detailHeading = useRef<HTMLHeadingElement>(null);
+  const policyHeading = useRef<HTMLHeadingElement>(null);
+  const policyTrigger = useRef<HTMLButtonElement | null>(null);
   const closeEditor = () => { onOpen(false); requestAnimationFrame(() => detailHeading.current?.focus()); };
   useEffect(() => { if (editing && !loading) nameInput.current?.focus(); }, [editing, loading]);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -173,7 +203,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       try {
         const saved = await loadConfig(zoneId, controller.signal);
         if (controller.signal.aborted) return;
-        setConfig(saved); fillForm(saved); onChanged(saved);
+        setConfig(saved); setPolicies({}); fillForm(saved); onChanged(saved);
       } catch (e) { if (!controller.signal.aborted) { setLoadFailed(true); setError(message(e)); } }
       finally { if (!controller.signal.aborted) setLoading(false); }
     }
@@ -181,14 +211,38 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
     return () => controller.abort();
   }, [zoneId, reloadKey, onChanged]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    for (const { ruleId } of config?.rules ?? []) {
+      if (!ruleId) continue;
+      void listResponsePolicies(ruleId, controller.signal).then(
+        summary => { if (!controller.signal.aborted) setPolicies(all => ({ ...all, [ruleId]: summary })); },
+        () => { if (!controller.signal.aborted) setPolicies(all => ({ ...all, [ruleId]: 'error' })); },
+      );
+    }
+    return () => controller.abort();
+  }, [config, policyRevision]);
+
   const active = config?.status === 'ACTIVE';
   const showForm = editing && !active && !loadFailed;
   const locked = loading || busy || active;
   const available = types.filter(t => t.status === 'ACTIVE' && !rules.some(r => r.incidentTypeId === t.incidentTypeId));
   const selectedType = available.find(t => t.incidentTypeId === typeId) ?? available[0];
+  const canAddPeopleCount = selectedType?.measurementOptions?.some(option => option.mode === 'PEOPLE_COUNT' && option.supported);
+  const policyRule = !showForm && !loading && !loadFailed && config?.rules.find(rule => rule.ruleId === policyRuleId);
+  const refreshPolicies = () => { setPolicies({}); setPolicyRevision(value => value + 1); };
+  function openPolicy(ruleId: string, trigger: HTMLButtonElement) {
+    policyTrigger.current = trigger;
+    setPolicyRuleId(ruleId);
+    requestAnimationFrame(() => policyHeading.current?.focus());
+  }
+  function closePolicy() {
+    setPolicyRuleId(null);
+    requestAnimationFrame(() => policyTrigger.current?.focus());
+  }
   const touch = () => { setDirty(true); setReview(null); setPreviewCameraId(null); setNotice(''); setError(''); };
   const changeRule = (id: string, patch: Partial<RuleInput>) => { setRules(all => all.map(r => r.incidentTypeId === id ? { ...r, ...patch } : r)); touch(); };
-  const apply = (saved: MonitoringConfiguration) => { setConfig(saved); fillForm(saved); setPreviewCameraId(null); onChanged(saved); };
+  const apply = (saved: MonitoringConfiguration) => { setConfig(saved); setPolicies({}); fillForm(saved); setPreviewCameraId(null); onChanged(saved); };
   const confirmDiscard = (text: string) => !dirty || window.confirm(text);
   const reloadSaved = () => {
     if (!confirmDiscard('Discard unsaved changes and reload the saved configuration?')) return;
@@ -252,7 +306,19 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   }
   function addRule() {
     if (!selectedType) return;
-    setRules(all => [...all, inputRule({ incidentTypeId: selectedType.incidentTypeId, incidentCode: selectedType.code, warningThreshold: selectedType.defaultWarningThreshold ?? 0, criticalThreshold: selectedType.defaultCriticalThreshold ?? 1, thresholdUnit: selectedType.thresholdUnit ?? '', sustainSec: 30, cooldownSec: 300, enabled: selectedType.supported, parametersJson: null })]);
+    const peopleCount = canAddPeopleCount && !useDensityDraft;
+    const rule = inputRule({
+      incidentTypeId: selectedType.incidentTypeId, incidentCode: selectedType.code,
+      warningThreshold: selectedType.defaultWarningThreshold ?? 0,
+      criticalThreshold: selectedType.defaultCriticalThreshold ?? 1,
+      thresholdUnit: peopleCount ? 'PEOPLE' : selectedType.thresholdUnit ?? '',
+      sustainSec: 30, cooldownSec: 300, enabled: Boolean(peopleCount) || selectedType.supported,
+      parametersJson: peopleCount ? JSON.stringify({ measurementMode: 'PEOPLE_COUNT' }) : null,
+    });
+    // Density defaults are in people/m². A people-count rule needs its own thresholds.
+    if (peopleCount) { rule.warningThreshold = ''; rule.criticalThreshold = ''; }
+    setRules(all => [...all, rule]);
+    setUseDensityDraft(false);
     touch(); setRulesMissing(false);
   }
   const previewCamera = review?.cameras.find((camera) => camera.cameraId === previewCameraId);
@@ -260,7 +326,8 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
     ? [{ id: zoneId, label: zone.name, color: zone.colorHex ?? '#0d9494', points: previewCamera.roiPolygon }]
     : [];
 
-  return <>
+  return <div className={policyRule ? s.zoneWithPolicy : undefined}>
+    <div className={s.column}>
     <button type="button" className={s.back} disabled={busy} onClick={() => { if (confirmDiscard('Discard unsaved changes and go back to all zones?')) onBack(); }}>‹ All zones</button>
     <section className={s.panel}>
       <div className={s.head}>
@@ -292,18 +359,23 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
           <h3 className={s.section}>Operational event rules</h3>
           {config.rules.length ? <div className={s.ruleTable} role="table" aria-label="Operational event rules">
             <div role="row" className={s.ruleHeadRow}><span role="columnheader">Operational event type</span><span role="columnheader">Warning</span><span role="columnheader">Critical</span><span role="columnheader">Sustain</span><span role="columnheader">Cooldown</span><span role="columnheader">Rule setting</span><span role="columnheader">Response</span></div>
-            {config.rules.map(r => <div role="row" key={r.incidentTypeId}>
+            {config.rules.map(r => <div role="row" key={r.incidentTypeId} className={r.ruleId && policyRuleId === r.ruleId ? s.selectedRule : undefined}>
               <span role="cell"><strong>{ruleName(r, types)}</strong><small>{modeLabel(ruleMode(r, types))}</small></span>
               <span role="cell">{band(r.warningThreshold, r.warningExitThreshold, unitName(r.thresholdUnit))}</span>
               <span role="cell">{band(r.criticalThreshold, r.criticalExitThreshold, unitName(r.thresholdUnit))}</span>
               <span role="cell">{r.sustainSec}s</span>
               <span role="cell">{r.cooldownSec}s</span>
               <span role="cell"><Chip tone={r.enabled && active ? 'success' : 'neutral'}>{r.enabled ? active ? 'Enabled' : 'Enabled when active' : 'Disabled'}</Chip></span>
-              <span role="cell">{r.ruleId && <Link className={s.responsePolicyLink} to={`/admin/response-policies/${r.ruleId}`} state={{ returnTo: `/admin/ai-config?zoneId=${encodeURIComponent(zoneId)}`, eventName: ruleName(r, types), zoneName: zone.name }} aria-label={`Manage response policy for ${ruleName(r, types)}`}>Manage policy</Link>}</span>
+              <div role="cell">{r.ruleId && <>
+                <RuleResponses summary={policies[r.ruleId]} />
+                <button type="button" className={s.responsePolicyLink} disabled={busy} aria-expanded={policyRuleId === r.ruleId}
+                  aria-controls={policyRuleId === r.ruleId ? 'zone-response-policy' : undefined}
+                  aria-label={`Manage response policy for ${ruleName(r, types)}`} onClick={event => openPolicy(r.ruleId!, event.currentTarget)}>Manage policy</button>
+              </>}</div>
             </div>)}
           </div> : <p className={s.missingBox}>This configuration has no operational event rules. Edit it and add at least one rule.</p>}
           <div className={s.actions}>
-            <Button disabled={busy || active} onClick={() => { fillForm(config); setReview(null); setPreviewCameraId(null); setError(''); setNotice(''); onOpen(true); }}>Edit configuration</Button>
+            <Button disabled={busy || active} onClick={() => { fillForm(config); setReview(null); setPreviewCameraId(null); setPolicyRuleId(null); setError(''); setNotice(''); onOpen(true); }}>Edit configuration</Button>
             <Button variant="secondary" disabled={busy} onClick={reloadSaved}>Reload saved configuration</Button>
             <Button variant="secondary" className={s.deleteButton} disabled={busy || active} onClick={() => { setError(''); setNotice(''); setDeleting(config); }}>Delete configuration</Button>
           </div>
@@ -323,10 +395,14 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
 
         <h3 className={s.section}>Operational event rules <span className={s.required}>Required</span></h3>
         <div className={`${s.addRule} ${rulesMissing ? s.addRuleMissing : ''}`}>
-          <label className={s.field}>Operational event type<select ref={typeSelect} aria-label="Operational event type" aria-invalid={rulesMissing || undefined} disabled={locked || !available.length} value={selectedType?.incidentTypeId ?? ''} onChange={e => setTypeId(e.target.value)}>
+          <label className={s.field}>Operational event type<select ref={typeSelect} aria-label="Operational event type" aria-invalid={rulesMissing || undefined} disabled={locked || !available.length} value={selectedType?.incidentTypeId ?? ''} onChange={e => { setTypeId(e.target.value); setUseDensityDraft(false); }}>
             {!available.length && <option value="">No more operational event types</option>}
             {available.map(t => <option key={t.incidentTypeId} value={t.incidentTypeId}>{t.name}{!t.supported ? t.measurementOptions?.some(o => o.supported) ? ' (choose measurement mode)' : ' (disabled Draft only)' : ''}</option>)}
           </select></label>
+          {canAddPeopleCount && <label className={s.field}>Measurement mode<select disabled={locked} value={useDensityDraft ? 'density' : 'count'} onChange={event => setUseDensityDraft(event.target.value === 'density')}>
+            <option value="count">People count in ROI</option>
+            <option value="density">Density (disabled draft)</option>
+          </select></label>}
           <Button disabled={locked || !selectedType} onClick={addRule}>Add rule</Button>
         </div>
         {!rules.length && <p className={rulesMissing ? s.error : s.help}>No operational event rules yet. A configuration needs at least one rule before it can be saved.</p>}
@@ -370,11 +446,14 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       </form>}
     </section>
 
-    {review && !showForm && <section className={`${s.panel} ${s.review}`} id="configuration-review">
-      <h2 className={s.title}>Review & activate</h2>
+    {review && !showForm && <section className={`${s.panel} ${s.review}`} id="configuration-review" aria-labelledby="configuration-review-title">
+      <h2 className={s.title} id="configuration-review-title">Review & activate</h2>
       <p>Zone: {review.zone.name} · Configuration: {review.configuration.name} · {review.configuration.status}</p>
       <p className={s.help}>Saved version: {review.configuration.updatedAt} · Confidence: {review.configuration.confidenceThreshold}</p>
-      <ul>{review.configuration.rules.map(r => <li key={r.incidentTypeId}>{ruleName(r, types)}: {r.enabled ? 'Enabled' : 'Disabled'} · {modeLabel(ruleMode(r, types))} · warning {band(r.warningThreshold, r.warningExitThreshold, '')}, critical {band(r.criticalThreshold, r.criticalExitThreshold, unitName(r.thresholdUnit))} · sustain {r.sustainSec}s · cooldown {r.cooldownSec}s</li>)}</ul>
+      <ul>{review.configuration.rules.map(r => <li key={r.incidentTypeId}>{ruleName(r, types)}: {r.enabled ? 'Enabled' : 'Disabled'} · {modeLabel(ruleMode(r, types))} · warning {band(r.warningThreshold, r.warningExitThreshold, '')}, critical {band(r.criticalThreshold, r.criticalExitThreshold, unitName(r.thresholdUnit))} · sustain {r.sustainSec}s · cooldown {r.cooldownSec}s
+        {r.enabled && r.ruleId && <RuleResponses summary={policies[r.ruleId]} />}
+      </li>)}</ul>
+      <p className={s.help}>Camera readiness controls activation. Rules can detect events once active. Automatic Task creation also needs a ready CRITICAL response.</p>
       <h3>Mapped cameras & camera ROI</h3>
       <p className={s.help}><a href="/admin/store-layout">Review or edit camera ROI in Store layout</a> (deactivate an active configuration before editing).</p>
       {!review.cameras.length && <p>No active camera mapping.</p>}
@@ -398,7 +477,17 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       {error && <p className={s.alertBox} role="alert">{error}</p>}
       <div className={s.actions}><Button variant="secondary" data-autofocus disabled={busy} onClick={() => { setDeleting(null); setError(''); }}>Cancel</Button><Button className={s.confirmDelete} disabled={busy} onClick={() => void removeConfiguration()}>{busy ? 'Deleting…' : 'Delete configuration'}</Button></div>
     </Dialog>}
-  </>;
+    </div>
+    {policyRule && policyRule.ruleId && <aside id="zone-response-policy" className={`${s.panel} ${s.policyPanel}`} aria-labelledby="zone-response-heading"
+      onKeyDown={event => { if (event.key === 'Escape') closePolicy(); }}>
+      <div className={s.head}>
+        <div><h2 ref={policyHeading} tabIndex={-1} id="zone-response-heading" className={s.title}>Response policy</h2>
+          <p className={s.sub}>{ruleName(policyRule, types)} · {zone.name}</p></div>
+        <Button variant="secondary" onClick={closePolicy}>Close</Button>
+      </div>
+      <ResponsePolicyEditor key={policyRule.ruleId} ruleId={policyRule.ruleId} compact onSaved={refreshPolicies} />
+    </aside>}
+  </div>;
 }
 
 function CountModeEditor({ disabled, onConvert }: { disabled: boolean; onConvert: (warning: string, critical: string) => void }) {

@@ -19,6 +19,7 @@ let failLoad: boolean;
 let multipleFloors: boolean;
 let requests: string[];
 let crowdCatalog: boolean;
+let criticalTaskType: string | null;
 const crowdType = { ...type, incidentTypeId: 'crowd', code: 'OVERCROWDING_CONGESTION', name: 'Overcrowding / Congestion', measurementType: 'CROWD_DENSITY', supported: false, thresholdUnit: 'PEOPLE_PER_M2', defaultWarningThreshold: 2, defaultCriticalThreshold: 3, unsupportedReason: 'Density runtime is deferred.', measurementOptions: [{ mode: 'PEOPLE_COUNT', unit: 'PEOPLE', supported: true, reason: null }] };
 function HistoryBack() { const navigate = useNavigate(); return <button onClick={() => navigate(-1)}>Browser back</button>; }
 const show = (path = '/admin/ai-config?zoneId=zone-1') => render(<MemoryRouter initialEntries={[path]}><HistoryBack /><AiConfig /></MemoryRouter>);
@@ -28,7 +29,7 @@ async function saveRule() { fireEvent.click(screen.getByRole('button', { name: '
 describe('API-backed monitoring configuration', () => {
   beforeEach(() => {
     failDelete = false;
-    config = null; writes = []; requests = []; failSave = false; ready = true; failLoad = false; multipleFloors = false; crowdCatalog = false;
+    config = null; writes = []; requests = []; failSave = false; ready = true; failLoad = false; multipleFloors = false; crowdCatalog = false; criticalTaskType = null;
     URL.createObjectURL = vi.fn(() => 'blob:zone-confidence'); URL.revokeObjectURL = vi.fn();
     saveSession({ accessToken: 'admin-token', expiresAt: '2099-01-01T00:00:00Z', user: { userId: 'admin', email: 'admin@example.test', fullName: 'Admin', roleId: 'role', role: 'ADMIN', status: 'ACTIVE' } }, true);
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -42,6 +43,16 @@ describe('API-backed monitoring configuration', () => {
       if (path === '/api/floors/floor-1/zones') return json([zone]);
       if (path === '/api/floors/floor-2/zones') return json([{ ...zone, zoneId: 'zone-2', floorId: 'floor-2', name: 'Fresh food zone', code: 'FOOD' }]);
       if (path === '/api/incident-types') return json(crowdCatalog ? [crowdType] : [type]);
+      if (path === '/api/task-types') return json([{ taskTypeId: 'task-1', code: 'TT-01', name: 'Open Additional Checkout' }]);
+      if (path.includes('/rule-1/response-policies')) {
+        if (method === 'PUT') criticalTaskType = JSON.parse(String(init?.body)).action.taskTypeCode;
+        const warning = { policyId: 'policy-1', eventPriority: 'WARNING', isEnabled: true, version: 1,
+          action: { isEnabled: true, targetRoleCode: 'OPERATOR' }, issues: ['CONFIGURATION_NOT_ACTIVE'] };
+        const critical = { policyId: 'policy-1', eventPriority: 'CRITICAL', isEnabled: Boolean(criticalTaskType), version: criticalTaskType ? 2 : 1,
+          action: criticalTaskType ? { isEnabled: true, taskTypeCode: criticalTaskType } : null,
+          issues: criticalTaskType ? ['CONFIGURATION_NOT_ACTIVE'] : ['CONFIGURATION_NOT_ACTIVE', 'ACTION_MISSING'] };
+        return json(method === 'PUT' ? critical : [warning, critical]);
+      }
       if (path.endsWith('/ai-preview/start') || path.endsWith('/ai-preview/status')) return json({ cameraId: 'camera-1', state: 'LIVE', frameSequence: 1, viewerLeaseId: '00000000-0000-0000-0000-000000000099' });
       if (path.endsWith('/ai-preview/stop')) return json({ cameraId: 'camera-1', state: 'STOPPED', frameSequence: 0 });
       if (path.endsWith('/ai-preview/frame/next')) return new Response('jpeg', { headers: { 'Content-Type': 'image/jpeg', 'X-Frame-Sequence': '1', 'X-Session-Id': '00000000-0000-0000-0000-000000000001' } });
@@ -64,14 +75,50 @@ describe('API-backed monitoring configuration', () => {
     });
   });
 
-  it('links each persisted monitoring rule to its response policy', async () => {
+  it('edits a saved response policy beside its rule and refreshes the review summary', async () => {
     config = savedConfig();
     show();
 
     await screen.findByRole('table', { name: 'Operational event rules' }, { timeout: 3000 });
     expect(screen.getByText('Enabled when active')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Manage response policy for Long Queue' }))
-      .toHaveAttribute('href', '/admin/response-policies/rule-1');
+    await screen.findByText(/Notify Operators/);
+    expect(screen.getByText(/Action missing/)).toBeInTheDocument();
+    const manage = screen.getByRole('button', { name: 'Manage response policy for Long Queue' });
+    fireEvent.click(manage);
+    const panel = screen.getByRole('complementary', { name: 'Response policy' });
+    expect(panel).toHaveTextContent('Actual queue zone');
+    expect(panel).toHaveTextContent('across all zones');
+    expect(screen.getByRole('table', { name: 'Operational event rules' })).toBeVisible();
+    const taskType = await within(panel).findByLabelText('Task type (required when enabled)');
+    await waitFor(() => expect(taskType).toBeEnabled());
+    fireEvent.click(within(panel).getByLabelText('Enable critical task dispatch'));
+    fireEvent.change(taskType, { target: { value: 'TT-01' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Save critical task dispatch' }));
+    await within(panel).findByText('Critical task dispatch saved.');
+    expect(writes).toContainEqual(expect.objectContaining({ method: 'PUT', path: '/api/monitoring-rules/rule-1/response-policies/CRITICAL' }));
+    fireEvent.click(within(panel).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('complementary', { name: 'Response policy' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Review & activate' }));
+    const review = await screen.findByRole('region', { name: 'Review & activate' });
+    expect(await within(review).findByText(/Create TT-01/)).toBeInTheDocument();
+  });
+
+  it('adds Congestion directly as People Count with fresh thresholds', async () => {
+    crowdCatalog = true;
+    await create();
+    expect(screen.getByLabelText('Measurement mode')).toHaveValue('count');
+    fireEvent.click(screen.getByRole('button', { name: 'Add rule' }));
+    const warning = screen.getByLabelText('Overcrowding / Congestion warning');
+    expect(warning).toHaveValue(null);
+    expect(screen.queryByRole('button', { name: 'Use people count (temporary)' })).not.toBeInTheDocument();
+    fireEvent.change(warning, { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('Overcrowding / Congestion critical'), { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
+    await screen.findByText('Configuration saved as Draft. Review it before activating.');
+    expect(writes[0].body.rules).toEqual([expect.objectContaining({
+      enabled: true, thresholdUnit: 'PEOPLE', warningThreshold: 1, criticalThreshold: 2,
+      parametersJson: '{"measurementMode":"PEOPLE_COUNT"}',
+    })]);
   });
 
   it('opens an overview grouped by real floors with saved rules and no edit form', async () => {

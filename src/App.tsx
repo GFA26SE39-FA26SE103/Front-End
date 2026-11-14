@@ -3,7 +3,6 @@ import AiConfig from './pages/AiConfig';
 import AuditLog from './pages/AuditLog';
 import Cameras from './pages/Cameras';
 import IncidentTypes from './pages/IncidentTypes';
-import Routing from './pages/Routing';
 import SetupHealth from './pages/SetupHealth';
 import StoreLayout from './pages/StoreLayout';
 import SystemHealth from './pages/SystemHealth';
@@ -46,7 +45,7 @@ export default function App() {
         <Route path="/admin/cameras" element={<Cameras />} />
         <Route path="/admin/ai-config" element={<AiConfig />} />
         <Route path="/admin/incident-types" element={<IncidentTypes />} />
-        <Route path="/admin/routing" element={<Routing />} />
+        <Route path="/admin/routing" element={<Navigate to="/admin/ai-config" replace />} />
         <Route path="/admin/response-policies/:ruleId" element={<ResponsePolicies />} />
         <Route path="/admin/sla-policies" element={<SlaPolicies />} />
         <Route path="/admin/users" element={<UsersRoles />} />

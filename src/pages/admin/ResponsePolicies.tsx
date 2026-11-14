@@ -65,6 +65,23 @@ export default function ResponsePolicies() {
   const location = useLocation();
   const context = location.state as { returnTo?: string; eventName?: string; zoneName?: string } | null;
   const returnTo = context?.returnTo ?? '/admin/ai-config';
+  return <AdminLayout title="Event response policies" subtitle="Configure warning notifications and critical task dispatch.">
+    <div className={s.page}>
+      <div className={s.toolbar}>
+        <Link className={s.back} to={returnTo}>← Back to AI configuration</Link>
+        <div className={s.context}>
+          {context?.eventName && <span>{context.eventName}</span>}
+          {context?.zoneName && <span>Zone: {context.zoneName}</span>}
+        </div>
+      </div>
+      <ResponsePolicyEditor key={ruleId} ruleId={ruleId} />
+    </div>
+  </AdminLayout>;
+}
+
+export function ResponsePolicyEditor({ ruleId, onSaved, compact = false }: {
+  ruleId: string; onSaved?: () => void; compact?: boolean;
+}) {
   const [drafts, setDrafts] = useState<Record<PolicyPriority, Draft>>({ WARNING: emptyDraft(), CRITICAL: emptyDraft() });
   const [loadedRuleId, setLoadedRuleId] = useState<string | null>(null);
   const [busy, setBusy] = useState<PolicyPriority | null>(null);
@@ -166,27 +183,17 @@ export default function ResponsePolicies() {
         [priority]: fromPolicy(saved),
       }));
       setNotice(`${priority === 'WARNING' ? 'Warning notification' : 'Critical task dispatch'} saved.`);
+      onSaved?.();
     } catch (reason) {
       setNeedsReload(true);
+      onSaved?.();
       setError(`${message(reason)} Reload saved state to confirm the current policy before saving again.`);
     }
     finally { setBusy(null); }
   }
 
-  return <AdminLayout title="Event response policies" subtitle="Warning notifies the Operator. Critical dispatches a task to eligible Staff.">
-    <div className={s.page}>
-      <div className={s.toolbar}>
-        <Link className={s.back} to={returnTo}>← Back to AI configuration</Link>
-        <div className={s.context}>
-        {context?.eventName && <span>{context.eventName}</span>}
-        {context?.zoneName && <span>Zone: {context.zoneName}</span>}
-        <details className={s.details}>
-          <summary>Policy details</summary>
-          <p>Changes apply to this event type across all zones. Existing task SLA snapshots stay unchanged.</p>
-          <p className={s.rule}>Rule <code>{ruleId || 'Not selected'}</code></p>
-        </details>
-        </div>
-      </div>
+  return <div className={`${s.page} ${compact ? s.compact : ''}`}>
+      <p className={s.help}>Changes apply to this event type across all zones. Existing Tasks retain their saved SLA snapshots.</p>
 
       {!ruleId && <div className={s.feedback} role="alert"><p>Open response policies from a monitoring rule.</p></div>}
       {loadError && !loading && <div className={s.feedback} role="alert"><p>{loadError}</p><Button variant="secondary" onClick={retry}>Reload</Button></div>}
@@ -240,6 +247,5 @@ export default function ResponsePolicies() {
           </Card>;
         })}
       </div>}
-    </div>
-  </AdminLayout>;
+  </div>;
 }

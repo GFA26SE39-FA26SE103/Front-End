@@ -12,7 +12,6 @@ const NAV = [
   { to: '/admin/ai-config', label: 'AI Config', icon: 'nav-sliders', activeIcon: 'nav-sliders-active' },
   { to: '/admin/incident-types', label: 'Incident types', icon: 'nav-tag', activeIcon: 'nav-tag-active' },
   { to: '/admin/sla-policies', label: 'SLA policies', icon: 'nav-activity' },
-  { to: '/admin/routing', label: 'Routing & alerts', icon: 'nav-bell', activeIcon: 'nav-bell-active' },
   { to: '/admin/users', label: 'Users & Roles', icon: 'nav-users', activeIcon: 'nav-users-active' },
   { to: '/admin/audit-logs', label: 'Audit Logs', icon: 'nav-file' },
   { to: '/admin/system-health', label: 'System Health', icon: 'nav-activity' },
