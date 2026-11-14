@@ -10,14 +10,19 @@ import { deleteMonitoring, getMonitoring, listIncidentTypes, reviewMonitoring, s
 import s from './AiConfig.module.css';
 import { convertToPeopleCount, measurementMode, modeLabel } from './monitoringRuleMode';
 
-type RuleInput = Omit<MonitoringRule, 'warningThreshold' | 'criticalThreshold' | 'sustainSec' | 'cooldownSec'> & {
+type RuleInput = Omit<MonitoringRule, 'warningThreshold' | 'criticalThreshold' | 'sustainSec' | 'cooldownSec' | 'warningExitThreshold' | 'criticalExitThreshold'> & {
   warningThreshold: string; criticalThreshold: string; sustainSec: string; cooldownSec: string;
+  /** '' = no dead band (exit equals the enter threshold). */
+  warningExitThreshold: string; criticalExitThreshold: string;
 };
 type FloorGroup = { floorId: string; floorNumber: number; name: string; zones: ZoneRecord[] };
 // undefined = still loading, null = no configuration saved for the zone, 'error' = could not be loaded.
 type ConfigSummary = MonitoringConfiguration | null | 'error' | undefined;
 
-const inputRule = (r: MonitoringRule): RuleInput => ({ ...r, warningThreshold: String(r.warningThreshold), criticalThreshold: String(r.criticalThreshold), sustainSec: String(r.sustainSec), cooldownSec: String(r.cooldownSec) });
+const inputRule = (r: MonitoringRule): RuleInput => ({ ...r, warningThreshold: String(r.warningThreshold), criticalThreshold: String(r.criticalThreshold), sustainSec: String(r.sustainSec), cooldownSec: String(r.cooldownSec),
+  warningExitThreshold: r.warningExitThreshold == null ? '' : String(r.warningExitThreshold), criticalExitThreshold: r.criticalExitThreshold == null ? '' : String(r.criticalExitThreshold) });
+/** Shows "≥ enter" and, when a dead band is configured, "held until < exit". */
+const band = (enter: number, exit: number | null | undefined, unit: string) => `≥ ${enter}${exit != null && exit !== enter ? ` · held until < ${exit}` : ''} ${unit}`;
 const message = (e: unknown) => e instanceof Error ? e.message : 'The request could not be completed.';
 const RULE_REQUIRED = 'Add at least one incident rule before saving. Choose an incident type and click Add rule.';
 function decimal(raw: string, label: string) {
@@ -213,7 +218,13 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
         if (warning >= critical) throw new Error(label + ': warning must be less than critical.');
         if (!r.thresholdUnit.trim()) throw new Error(label + ': threshold unit is required.');
         if (r.thresholdUnit === 'PEOPLE' && (!Number.isInteger(warning) || !Number.isInteger(critical))) throw new Error(label + ': people thresholds must be whole numbers.');
-        return { incidentTypeId: r.incidentTypeId, warningThreshold: warning, criticalThreshold: critical, thresholdUnit: r.thresholdUnit, sustainSec: seconds(r.sustainSec, label + ' sustain time'), cooldownSec: seconds(r.cooldownSec, label + ' cooldown'), enabled: r.enabled, parametersJson: r.parametersJson };
+        const warningExit = r.warningExitThreshold.trim() ? decimal(r.warningExitThreshold, label + ' warning exit') : null;
+        const criticalExit = r.criticalExitThreshold.trim() ? decimal(r.criticalExitThreshold, label + ' critical exit') : null;
+        if (warningExit !== null && warningExit > warning) throw new Error(label + ': warning exit must not be above the warning threshold.');
+        if (criticalExit !== null && (criticalExit <= warning || criticalExit > critical)) throw new Error(label + ': critical exit must be above the warning threshold and not above the critical threshold.');
+        if (r.thresholdUnit === 'PEOPLE' && [warningExit, criticalExit].some(v => v !== null && !Number.isInteger(v))) throw new Error(label + ': people exit thresholds must be whole numbers.');
+        return { incidentTypeId: r.incidentTypeId, warningThreshold: warning, criticalThreshold: critical, thresholdUnit: r.thresholdUnit, sustainSec: seconds(r.sustainSec, label + ' sustain time'), cooldownSec: seconds(r.cooldownSec, label + ' cooldown'), enabled: r.enabled, parametersJson: r.parametersJson,
+          warningExitThreshold: warningExit, criticalExitThreshold: criticalExit };
       });
       const saved = await saveMonitoring(zoneId, { name: name.trim(), confidenceThreshold: conf, rules: parsed, ...(config ? { expectedUpdatedAt: config.updatedAt } : {}) });
       if (mounted.current) { apply(saved); setReview(null); setNotice('Configuration saved as Draft. Review it before activating.'); closeEditor(); }
@@ -280,11 +291,11 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
           </div>
           <h3 className={s.section}>Operational event rules</h3>
           {config.rules.length ? <div className={s.ruleTable} role="table" aria-label="Operational event rules">
-            <div role="row" className={s.ruleHeadRow}><span role="columnheader">Operational event type</span><span role="columnheader">Warning ≥</span><span role="columnheader">Critical ≥</span><span role="columnheader">Sustain</span><span role="columnheader">Cooldown</span><span role="columnheader">Rule setting</span><span role="columnheader">Response</span></div>
+            <div role="row" className={s.ruleHeadRow}><span role="columnheader">Operational event type</span><span role="columnheader">Warning</span><span role="columnheader">Critical</span><span role="columnheader">Sustain</span><span role="columnheader">Cooldown</span><span role="columnheader">Rule setting</span><span role="columnheader">Response</span></div>
             {config.rules.map(r => <div role="row" key={r.incidentTypeId}>
               <span role="cell"><strong>{ruleName(r, types)}</strong><small>{modeLabel(ruleMode(r, types))}</small></span>
-              <span role="cell">{r.warningThreshold} {unitName(r.thresholdUnit)}</span>
-              <span role="cell">{r.criticalThreshold} {unitName(r.thresholdUnit)}</span>
+              <span role="cell">{band(r.warningThreshold, r.warningExitThreshold, unitName(r.thresholdUnit))}</span>
+              <span role="cell">{band(r.criticalThreshold, r.criticalExitThreshold, unitName(r.thresholdUnit))}</span>
               <span role="cell">{r.sustainSec}s</span>
               <span role="cell">{r.cooldownSec}s</span>
               <span role="cell"><Chip tone={r.enabled && active ? 'success' : 'neutral'}>{r.enabled ? active ? 'Enabled' : 'Enabled when active' : 'Disabled'}</Chip></span>
@@ -330,13 +341,16 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
             {!supported && t?.unsupportedReason && <p className={s.help}>{t.unsupportedReason}</p>}
             {t?.code === 'OVERCROWDING_CONGESTION' && mode !== 'PEOPLE_COUNT' && <CountModeEditor disabled={locked} onConvert={(warning, critical) => {
               try {
-                const converted = convertToPeopleCount({ ...r, incidentCode: t.code, warningThreshold: Number(r.warningThreshold), criticalThreshold: Number(r.criticalThreshold), sustainSec: Number(r.sustainSec), cooldownSec: Number(r.cooldownSec) }, warning, critical);
-                changeRule(r.incidentTypeId, { thresholdUnit: converted.thresholdUnit, parametersJson: converted.parametersJson, warningThreshold: String(converted.warningThreshold), criticalThreshold: String(converted.criticalThreshold) });
+                const converted = convertToPeopleCount({ ...r, incidentCode: t.code, warningThreshold: Number(r.warningThreshold), criticalThreshold: Number(r.criticalThreshold), sustainSec: Number(r.sustainSec), cooldownSec: Number(r.cooldownSec), warningExitThreshold: null, criticalExitThreshold: null }, warning, critical);
+                // Fresh people thresholds: old exit thresholds were in another unit, so they are cleared.
+                changeRule(r.incidentTypeId, { thresholdUnit: converted.thresholdUnit, parametersJson: converted.parametersJson, warningThreshold: String(converted.warningThreshold), criticalThreshold: String(converted.criticalThreshold), warningExitThreshold: '', criticalExitThreshold: '' });
               } catch (e) { setError(message(e)); }
             }} />}
             <fieldset disabled={locked} className={s.fields}>
               <label className={s.field}>Warning threshold ≥<input aria-label={label + ' warning'} type="number" min="0" step={r.thresholdUnit === 'PEOPLE' ? '1' : '.0001'} value={r.warningThreshold} onChange={e => changeRule(r.incidentTypeId, { warningThreshold: e.target.value })} /></label>
               <label className={s.field}>Critical threshold ≥<input aria-label={label + ' critical'} type="number" min="0" step={r.thresholdUnit === 'PEOPLE' ? '1' : '.0001'} value={r.criticalThreshold} onChange={e => changeRule(r.incidentTypeId, { criticalThreshold: e.target.value })} /></label>
+              <label className={s.field}>Warning exit below (optional)<input aria-label={label + ' warning exit'} type="number" min="0" step={r.thresholdUnit === 'PEOPLE' ? '1' : '.0001'} placeholder={`= ${r.warningThreshold || 'warning'}`} value={r.warningExitThreshold} onChange={e => changeRule(r.incidentTypeId, { warningExitThreshold: e.target.value })} /></label>
+              <label className={s.field}>Critical exit below (optional)<input aria-label={label + ' critical exit'} type="number" min="0" step={r.thresholdUnit === 'PEOPLE' ? '1' : '.0001'} placeholder={`= ${r.criticalThreshold || 'critical'}`} value={r.criticalExitThreshold} onChange={e => changeRule(r.incidentTypeId, { criticalExitThreshold: e.target.value })} /></label>
               <label className={s.field}>Threshold unit<input aria-label={label + ' unit'} value={t?.thresholdUnit ? unitName(r.thresholdUnit) : r.thresholdUnit} maxLength={30} readOnly={!!t?.thresholdUnit} onChange={e => changeRule(r.incidentTypeId, { thresholdUnit: e.target.value })} /></label>
               <label className={s.field}>Sustain time (seconds)<input aria-label={label + ' sustain time'} type="number" min="0" step="1" value={r.sustainSec} onChange={e => changeRule(r.incidentTypeId, { sustainSec: e.target.value })} /></label>
               <label className={s.field}>Cooldown (seconds)<input aria-label={label + ' cooldown'} type="number" min="0" step="1" value={r.cooldownSec} onChange={e => changeRule(r.incidentTypeId, { cooldownSec: e.target.value })} /></label>
@@ -344,7 +358,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
             </fieldset>
           </section>;
         })}
-        <p className={s.help}>Warning &lt; critical. Sustain is continuous source-video time above threshold. Queue length counts people only after 5 seconds continuously in the ROI, then applies sustain. Cooldown starts after the operational event clears. Temporary people count needs no area; density runtime is deferred.</p>
+        <p className={s.help}>Warning &lt; critical. Optional exit thresholds add a dead band: a level starts at ≥ its threshold and is held until the value drops below its exit (e.g. Critical ≥ 20, exit below 18), so counts flickering around one number do not flip the level or clear and re-create the event. Leave empty for a single threshold. Sustain is continuous source-video time above threshold. Queue length counts people only after 5 seconds continuously in the ROI, then applies sustain. Cooldown starts after the operational event clears. Temporary people count needs no area; density runtime is deferred.</p>
         <div className={s.actions}>
           <Button type="submit" disabled={locked}>{busy ? 'Saving…' : 'Save configuration'}</Button>
           <Button variant="secondary" disabled={busy} onClick={() => {
@@ -360,7 +374,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       <h2 className={s.title}>Review & activate</h2>
       <p>Zone: {review.zone.name} · Configuration: {review.configuration.name} · {review.configuration.status}</p>
       <p className={s.help}>Saved version: {review.configuration.updatedAt} · Confidence: {review.configuration.confidenceThreshold}</p>
-      <ul>{review.configuration.rules.map(r => <li key={r.incidentTypeId}>{ruleName(r, types)}: {r.enabled ? 'Enabled' : 'Disabled'} · {modeLabel(ruleMode(r, types))} · warning ≥ {r.warningThreshold}, critical ≥ {r.criticalThreshold} {unitName(r.thresholdUnit)} · sustain {r.sustainSec}s · cooldown {r.cooldownSec}s</li>)}</ul>
+      <ul>{review.configuration.rules.map(r => <li key={r.incidentTypeId}>{ruleName(r, types)}: {r.enabled ? 'Enabled' : 'Disabled'} · {modeLabel(ruleMode(r, types))} · warning {band(r.warningThreshold, r.warningExitThreshold, '')}, critical {band(r.criticalThreshold, r.criticalExitThreshold, unitName(r.thresholdUnit))} · sustain {r.sustainSec}s · cooldown {r.cooldownSec}s</li>)}</ul>
       <h3>Mapped cameras & camera ROI</h3>
       <p className={s.help}><a href="/admin/store-layout">Review or edit camera ROI in Store layout</a> (deactivate an active configuration before editing).</p>
       {!review.cameras.length && <p>No active camera mapping.</p>}
