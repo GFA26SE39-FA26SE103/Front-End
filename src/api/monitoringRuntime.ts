@@ -5,6 +5,10 @@ export type MonitoringRuleRuntime = {
   warningThreshold: number; criticalThreshold: number; sustainSec: number; cooldownSec: number;
   metricValue: number | null; warningProgressMs: number; criticalProgressMs: number;
   cooldownRemainingSec: number; reason: string; incidentId: string | null; operationalEventPriority?: string | null;
+  /** Effective exit thresholds (equal to the enter thresholds when no dead band is configured). */
+  warningExitThreshold?: number | null; criticalExitThreshold?: number | null;
+  /** Level currently held after sustain and dead band; the event priority itself never decreases. */
+  currentLevel?: 'WARNING' | 'CRITICAL' | null;
 };
 export type MonitoringZoneRuntime = {
   zoneId: string; zoneName: string; configId: string | null; configVersion: string | null;

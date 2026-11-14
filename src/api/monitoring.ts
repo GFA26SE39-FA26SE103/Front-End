@@ -13,6 +13,8 @@ export type MonitoringRule = {
   incidentTypeId: string; warningThreshold: number; criticalThreshold: number;
   thresholdUnit: string; sustainSec: number; cooldownSec: number; enabled: boolean;
   parametersJson: string | null; ruleId?: string; incidentCode?: string; incidentName?: string;
+  /** Dual threshold: the level is held until the value drops below this (null = same as the enter threshold). */
+  warningExitThreshold?: number | null; criticalExitThreshold?: number | null;
 };
 export type MonitoringRequest = {
   name: string; confidenceThreshold: number; rules: MonitoringRule[]; expectedUpdatedAt?: string;

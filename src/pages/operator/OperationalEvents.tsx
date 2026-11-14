@@ -92,7 +92,7 @@ export default function OperationalEvents({ workspace = 'operator' }: { workspac
         <tbody>{visible.items.map(event => <tr key={event.eventId} className={panelEvent?.eventId === event.eventId ? s.selectedRow : undefined}>
           <th scope="row"><Link to={`${base}/${encodeURIComponent(event.eventId)}${search ? `?${search}` : ''}`}>{event.eventTypeName}</Link><p className={s.note}>{event.sourceCode}</p></th>
           <td>{event.zoneName}<p className={s.note}>{event.cameraCode}</p></td><td><Badges event={event} /></td><td>{date(event.detectedAt)}</td><td>{date(event.clearedAt)}</td><td>{event.taskCount}</td>
-          {workspace === 'manager' && <td>{event.status === 'ACTIVE' && <Button variant="secondary" size="sm"
+          {workspace === 'manager' && <td>{event.status === 'ACTIVE' && <Button variant="secondary"
             aria-label={`AI recommendation for ${event.sourceCode}`} aria-expanded={panelEvent?.eventId === event.eventId}
             aria-controls={panelEvent ? 'event-recommendation-panel' : undefined}
             onClick={click => { panelTrigger.current = click.currentTarget; setSelected(event); }}>AI recommendation</Button>}</td>}

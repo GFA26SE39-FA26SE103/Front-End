@@ -23,6 +23,14 @@ describe('live monitoring and incidents', () => {
     expect(screen.getByText('EVENT WARNING')).toBeInTheDocument();
     expect(screen.getByText('No open incidents for this camera or its mapped zones.')).toBeInTheDocument();
   });
+  it('shows the dead band and the level currently held by the rule', () => {
+    const zone = state.runtime!.zones[0];
+    const rule = { ...zone.rules[0], warningThreshold: 10, criticalThreshold: 20, warningExitThreshold: 8, criticalExitThreshold: 18, metricValue: 19, currentLevel: 'CRITICAL' as const };
+    render(<CameraMonitoringPanel state={{ ...state, runtime: { ...state.runtime!, zones: [{ ...zone, rules: [rule] }] } }} />);
+    expect(screen.getByText('Warning ≥ 10 (held until < 8) · Critical ≥ 20 (held until < 18)')).toBeInTheDocument();
+    expect(screen.getByText('CRITICAL')).toBeInTheDocument();
+  });
+
   it('shows stale errors instead of an empty or healthy feed', () => {
     render(<CameraMonitoringPanel state={{ ...state, runtimeError: 'Runtime unavailable', feedError: 'Feed unavailable', feed: null }} />);
     expect(screen.getByText(/Last runtime data is stale/)).toBeInTheDocument();

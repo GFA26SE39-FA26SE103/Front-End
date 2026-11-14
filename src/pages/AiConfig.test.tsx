@@ -215,7 +215,7 @@ describe('API-backed monitoring configuration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save configuration' })); await screen.findByText('Configuration saved as Draft. Review it before activating.');
     const saved = writes.find(r => r.method === 'PUT')!;
     expect(saved.path).toBe('/api/zones/zone-1/monitoring'); expect(saved.bearer).toBe('Bearer admin-token'); expect(saved.body.confidenceThreshold).toBe(.7);
-    expect(saved.body.rules).toEqual([{ incidentTypeId: 'type-1', warningThreshold: 3, criticalThreshold: 5, thresholdUnit: 'PEOPLE', sustainSec: 30, cooldownSec: 300, enabled: true, parametersJson: null }]);
+    expect(saved.body.rules).toEqual([{ incidentTypeId: 'type-1', warningThreshold: 3, criticalThreshold: 5, thresholdUnit: 'PEOPLE', sustainSec: 30, cooldownSec: 300, enabled: true, parametersJson: null, warningExitThreshold: null, criticalExitThreshold: null }]);
     fireEvent.click(screen.getByRole('button', { name: 'Review & activate' })); await screen.findByText('CAM-01');
     fireEvent.click(screen.getByRole('button', { name: 'Activate configuration' }));
     await waitFor(() => expect(writes.some(r => r.path.endsWith('/activate'))).toBe(true));
@@ -258,6 +258,22 @@ describe('API-backed monitoring configuration', () => {
     const saved = writes.find(r => r.method === 'PUT')!;
     expect(saved.body.expectedUpdatedAt).toBe('2026-10-03T01:00:00Z');
     expect((saved.body.rules as Record<string, unknown>[])[0].parametersJson).toBe('{}');
+  });
+
+  it('saves optional exit thresholds as a dead band and validates them locally', async () => {
+    await create(); fireEvent.click(screen.getByRole('button', { name: 'Add rule' }));
+    fireEvent.change(screen.getByLabelText('Long Queue warning'), { target: { value: '10' } });
+    fireEvent.change(screen.getByLabelText('Long Queue critical'), { target: { value: '20' } });
+    fireEvent.change(screen.getByLabelText('Long Queue warning exit'), { target: { value: '11' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
+    await screen.findByText('Long Queue: warning exit must not be above the warning threshold.'); expect(writes).toHaveLength(0);
+    fireEvent.change(screen.getByLabelText('Long Queue warning exit'), { target: { value: '8' } });
+    fireEvent.change(screen.getByLabelText('Long Queue critical exit'), { target: { value: '10' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
+    await screen.findByText('Long Queue: critical exit must be above the warning threshold and not above the critical threshold.'); expect(writes).toHaveLength(0);
+    fireEvent.change(screen.getByLabelText('Long Queue critical exit'), { target: { value: '18' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save configuration' })); await screen.findByText('Configuration saved as Draft. Review it before activating.');
+    expect((writes.find(r => r.method === 'PUT')!.body.rules as unknown[])[0]).toMatchObject({ warningThreshold: 10, criticalThreshold: 20, warningExitThreshold: 8, criticalExitThreshold: 18 });
   });
 
   it('rejects invalid thresholds locally and clears review when Edit opens', async () => {
