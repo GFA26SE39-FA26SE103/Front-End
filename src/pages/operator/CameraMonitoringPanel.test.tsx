@@ -18,16 +18,22 @@ describe('live monitoring and incidents', () => {
     render(<CameraMonitoringPanel state={state} />);
     expect(screen.getByText(/People in ROI: 3/)).toBeInTheDocument();
     expect(screen.getByText(/Waiting for 5s continuous dwell/)).toBeInTheDocument();
-    expect(screen.getByText(/Warning ≥ 1/)).toHaveTextContent('Critical ≥ 2');
+    expect(screen.getByText('Warning').closest('p')).toHaveTextContent('Warning · 1 ≤ x < 2');
+    expect(screen.getByText('Critical').closest('p')).toHaveTextContent('Critical · x ≥ 2');
+    expect(screen.getByText('Leave Warning when x < 1')).toBeInTheDocument();
+    expect(screen.getByText('Leave Critical when x < 2')).toBeInTheDocument();
     expect(screen.getByText(/confidence:0.5/)).toBeInTheDocument();
     expect(screen.getByText('EVENT WARNING')).toBeInTheDocument();
     expect(screen.getByText('No open incidents for this camera or its mapped zones.')).toBeInTheDocument();
   });
-  it('shows the dead band and the level currently held by the rule', () => {
+  it('shows activation ranges, separate exit thresholds and the level currently held by the rule', () => {
     const zone = state.runtime!.zones[0];
     const rule = { ...zone.rules[0], warningThreshold: 10, criticalThreshold: 20, warningExitThreshold: 8, criticalExitThreshold: 18, metricValue: 19, currentLevel: 'CRITICAL' as const };
     render(<CameraMonitoringPanel state={{ ...state, runtime: { ...state.runtime!, zones: [{ ...zone, rules: [rule] }] } }} />);
-    expect(screen.getByText('Warning ≥ 10 (held until < 8) · Critical ≥ 20 (held until < 18)')).toBeInTheDocument();
+    expect(screen.getByText('Warning').closest('p')).toHaveTextContent('Warning · 10 ≤ x < 20');
+    expect(screen.getByText('Critical', { selector: 'strong' }).closest('p')).toHaveTextContent('Critical · x ≥ 20');
+    expect(screen.getByText('Leave Warning when x < 8')).toBeInTheDocument();
+    expect(screen.getByText('Leave Critical when x < 18')).toBeInTheDocument();
     expect(screen.getByText('CRITICAL')).toBeInTheDocument();
   });
 

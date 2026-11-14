@@ -65,7 +65,15 @@ export function CameraMonitoringPanel({ state, canDismiss = false }: { state: Ca
         {zone.rules.map(rule => <div key={rule.ruleId} className={s.runtimeRule}>
           <div className={s.zoneRow}><strong>{rule.incidentName}</strong>{rule.operationalEventPriority && <Chip tone={rule.operationalEventPriority === 'CRITICAL' ? 'danger' : 'warning'}>EVENT {rule.operationalEventPriority}</Chip>}</div>
           <p>{rule.mode === 'PEOPLE_COUNT' ? 'People count in ROI (temporary)' : rule.mode === 'QUEUE_LENGTH' ? 'Queue length (5s continuous dwell)' : rule.mode} · Metric: {count(rule.metricValue)} {rule.unit === 'PEOPLE' ? 'people' : rule.unit}</p>
-          <p>Warning ≥ {rule.warningThreshold}{rule.warningExitThreshold != null && rule.warningExitThreshold !== rule.warningThreshold ? ` (held until < ${rule.warningExitThreshold})` : ''} · Critical ≥ {rule.criticalThreshold}{rule.criticalExitThreshold != null && rule.criticalExitThreshold !== rule.criticalThreshold ? ` (held until < ${rule.criticalExitThreshold})` : ''}</p>
+          <p className={s.muted}>Activation ranges as the metric (x) rises</p>
+          <p>
+            <strong>Warning</strong> · {rule.warningThreshold} ≤ x &lt; {rule.criticalThreshold}<br />
+            <span className={s.muted}>Leave Warning when x &lt; {rule.warningExitThreshold ?? rule.warningThreshold}</span>
+          </p>
+          <p>
+            <strong>Critical</strong> · x ≥ {rule.criticalThreshold}<br />
+            <span className={s.muted}>Leave Critical when x &lt; {rule.criticalExitThreshold ?? rule.criticalThreshold}</span>
+          </p>
           {rule.metricValue !== null && <p>Current level: <Chip tone={rule.currentLevel === 'CRITICAL' ? 'danger' : rule.currentLevel === 'WARNING' ? 'warning' : 'neutral'}>{rule.currentLevel ?? 'Below thresholds'}</Chip></p>}
           <p>Warning sustain: {seconds(rule.warningProgressMs)}/{rule.sustainSec}s · Critical: {seconds(rule.criticalProgressMs)}/{rule.sustainSec}s</p>
           <p>{reasonLabel(rule.reason)}{rule.cooldownRemainingSec > 0 ? ` · ${Math.ceil(rule.cooldownRemainingSec)}s cooldown remaining` : ''}</p>
