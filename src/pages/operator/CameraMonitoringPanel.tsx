@@ -12,10 +12,13 @@ const reasons: Record<string, string> = {
   BELOW_THRESHOLD: 'Below threshold.', QUEUE_DWELL_PENDING: 'Waiting for 5s continuous dwell in queue ROI, before sustain.',
   COOLDOWN: 'Cooldown after incident closure.', RULE_RUNTIME_UNSUPPORTED: 'This rule measurement is not supported yet.',
   MEASUREMENT_SOURCE_AMBIGUOUS: 'Zone has multiple active cameras. Select one active measurement mapping in Store layout.',
+  DENSITY_AREA_REQUIRED: 'Enter the measured zone area in Store layout before activating crowd density.',
+  DENSITY_SINGLE_ROI_REQUIRED: 'Use one active ROI covering the measured zone area.',
   MONITORING_SCHEMA_NOT_READY: 'Apply the monitoring-runtime database script, then restart the backend.',
 };
 const reasonLabel = (code: string) => reasons[code] ?? code.replaceAll('_', ' ');
 const count = (value: number | null) => value === null ? '—' : value;
+const densityDisplay = new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 });
 const seconds = (value: number) => (value / 1000).toFixed(1).replace(/\.0$/, '');
 const date = (value: string) => new Date(value).toLocaleString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'medium', timeStyle: 'short' });
 const slaTone = (priority: string | null): Tone => priority === 'CRITICAL' ? 'danger' : priority === 'HIGH' ? 'warning' : priority === 'MEDIUM' ? 'primary' : 'neutral';
@@ -64,7 +67,10 @@ export function CameraMonitoringPanel({ state, canDismiss = false }: { state: Ca
         <p>People in ROI: {count(zone.peopleCount)} · Queue (≥5s): {count(zone.queueCount)}</p>
         {zone.rules.map(rule => <div key={rule.ruleId} className={s.runtimeRule}>
           <div className={s.zoneRow}><strong>{rule.incidentName}</strong>{rule.operationalEventPriority && <Chip tone={rule.operationalEventPriority === 'CRITICAL' ? 'danger' : 'warning'}>EVENT {rule.operationalEventPriority}</Chip>}</div>
-          <p>{rule.mode === 'PEOPLE_COUNT' ? 'People count in ROI (temporary)' : rule.mode === 'QUEUE_LENGTH' ? 'Queue length (5s continuous dwell)' : rule.mode} · Metric: {count(rule.metricValue)} {rule.unit === 'PEOPLE' ? 'people' : rule.unit}</p>
+          {rule.mode === 'CROWD_DENSITY' ? <>
+            <p>Crowd density · Metric: {runtime.isStale || runtimeError || rule.metricValue === null ? 'Unavailable' : densityDisplay.format(rule.metricValue) + ' people/m²'}</p>
+            {zone.areaM2 != null && <p className={s.muted}>Measured zone area: {zone.areaM2} m²</p>}
+          </> : <p>{rule.mode === 'PEOPLE_COUNT' ? 'People count in ROI' : rule.mode === 'QUEUE_LENGTH' ? 'Queue length (5s continuous dwell)' : rule.mode} · Metric: {count(rule.metricValue)} {rule.unit === 'PEOPLE' ? 'people' : rule.unit}</p>}
           <p className={s.muted}>Activation ranges as the metric (x) rises</p>
           <p>
             <strong>Warning</strong> · {rule.warningThreshold} ≤ x &lt; {rule.criticalThreshold}<br />
@@ -74,7 +80,7 @@ export function CameraMonitoringPanel({ state, canDismiss = false }: { state: Ca
             <strong>Critical</strong> · x ≥ {rule.criticalThreshold}<br />
             <span className={s.muted}>Leave Critical when x &lt; {rule.criticalExitThreshold ?? rule.criticalThreshold}</span>
           </p>
-          {rule.metricValue !== null && <p>Current level: <Chip tone={rule.currentLevel === 'CRITICAL' ? 'danger' : rule.currentLevel === 'WARNING' ? 'warning' : 'neutral'}>{rule.currentLevel ?? 'Below thresholds'}</Chip></p>}
+          {rule.metricValue !== null && (rule.mode !== 'CROWD_DENSITY' || !runtime.isStale && !runtimeError) && <p>Current level: <Chip tone={rule.currentLevel === 'CRITICAL' ? 'danger' : rule.currentLevel === 'WARNING' ? 'warning' : 'neutral'}>{rule.currentLevel ?? 'Below thresholds'}</Chip></p>}
           <p>Warning sustain: {seconds(rule.warningProgressMs)}/{rule.sustainSec}s · Critical: {seconds(rule.criticalProgressMs)}/{rule.sustainSec}s</p>
           <p>{reasonLabel(rule.reason)}{rule.cooldownRemainingSec > 0 ? ` · ${Math.ceil(rule.cooldownRemainingSec)}s cooldown remaining` : ''}</p>
           {rule.incidentId && <p>Open incident</p>}

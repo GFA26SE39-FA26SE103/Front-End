@@ -67,11 +67,21 @@ describe('ZoneEditorOverlay', () => {
     });
   });
 
-  it('offers rectangle drawing only and no area field', () => {
-    renderEditor();
+  it('offers rectangle drawing and saves a measured area only after editing it', async () => {
+    const user = userEvent.setup();
+    const { onSave } = renderEditor([rectangleZone]);
     expect(screen.getByRole('button', { name: 'Rectangle' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Polygon' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Area in square metres')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Edit zone Produce' }));
+    const area = screen.getByLabelText('Zone area (m²)');
+    await user.type(area, '0');
+    await user.click(screen.getByRole('button', { name: 'Save zone' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter a zone area');
+    expect(onSave).not.toHaveBeenCalled();
+    await user.clear(area);
+    await user.type(area, '5,25');
+    await user.click(screen.getByRole('button', { name: 'Save zone' }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ zoneId: rectangleZone.zoneId, areaM2: 5.25 }));
   });
 
   it('renders the tools in a draggable floating widget', () => {

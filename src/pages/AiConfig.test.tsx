@@ -19,6 +19,7 @@ let failLoad: boolean;
 let multipleFloors: boolean;
 let requests: string[];
 let crowdCatalog: boolean;
+let densityCatalog: boolean;
 let criticalTaskType: string | null;
 const crowdType = { ...type, incidentTypeId: 'crowd', code: 'OVERCROWDING_CONGESTION', name: 'Overcrowding / Congestion', measurementType: 'PEOPLE_COUNT', supported: true, thresholdUnit: 'PEOPLE', defaultWarningThreshold: 3, defaultCriticalThreshold: 5, unsupportedReason: null, measurementOptions: [{ mode: 'PEOPLE_COUNT', unit: 'PEOPLE', supported: true, reason: null }] };
 function HistoryBack() { const navigate = useNavigate(); return <button onClick={() => navigate(-1)}>Browser back</button>; }
@@ -30,7 +31,7 @@ async function saveRule() { chooseRule(); fireEvent.click(screen.getByRole('butt
 describe('API-backed monitoring configuration', () => {
   beforeEach(() => {
     failDelete = false;
-    config = null; writes = []; requests = []; failSave = false; ready = true; failLoad = false; multipleFloors = false; crowdCatalog = false; criticalTaskType = null;
+    config = null; writes = []; requests = []; failSave = false; ready = true; failLoad = false; multipleFloors = false; crowdCatalog = false; densityCatalog = false; criticalTaskType = null;
     URL.createObjectURL = vi.fn(() => 'blob:zone-confidence'); URL.revokeObjectURL = vi.fn();
     saveSession({ accessToken: 'admin-token', expiresAt: '2099-01-01T00:00:00Z', user: { userId: 'admin', email: 'admin@example.test', fullName: 'Admin', roleId: 'role', role: 'ADMIN', status: 'ACTIVE' } }, true);
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -43,7 +44,10 @@ describe('API-backed monitoring configuration', () => {
       }
       if (path === '/api/floors/floor-1/zones') return json([zone]);
       if (path === '/api/floors/floor-2/zones') return json([{ ...zone, zoneId: 'zone-2', floorId: 'floor-2', name: 'Fresh food zone', code: 'FOOD' }]);
-      if (path === '/api/incident-types') return json(crowdCatalog ? [crowdType] : [type]);
+      if (path === '/api/incident-types') return json(densityCatalog
+        ? [{ ...crowdType, measurementOptions: [...crowdType.measurementOptions,
+          { mode: 'CROWD_DENSITY', unit: 'PEOPLE_PER_M2', supported: true, reason: null, defaultWarning: 2, defaultCritical: 3 }] }]
+        : crowdCatalog ? [crowdType] : [type]);
       if (path === '/api/task-types') return json([{ taskTypeId: 'task-1', code: 'TT-01', name: 'Open Additional Checkout' }]);
       if (path.includes('/rule-1/response-policies')) {
         if (method === 'PUT') criticalTaskType = JSON.parse(String(init?.body)).action.taskTypeCode;
@@ -139,6 +143,24 @@ describe('API-backed monitoring configuration', () => {
     expect(screen.queryByRole('region', { name: 'Floor 1: Real floor' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open AI configuration for Fresh food zone' })).toBeInTheDocument();
     expect(writes).toHaveLength(0);
+  });
+
+  it('saves an explicitly selected density rule with fractional thresholds and a clear duration', async () => {
+    densityCatalog = true;
+    await create();
+    chooseRule('crowd:CROWD_DENSITY');
+    const label = 'Overcrowding / Congestion';
+    expect(screen.getByLabelText(label + ' unit')).toHaveValue('people/m²');
+    expect(screen.getByLabelText(label + ' warning')).toHaveValue(2);
+    expect(screen.getByText(/Enter the measured zone area in Store layout/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(label + ' warning'), { target: { value: '0.60' } });
+    fireEvent.change(screen.getByLabelText(label + ' critical'), { target: { value: '1.00' } });
+    fireEvent.change(screen.getByLabelText(label + ' clear duration'), { target: { value: '5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
+    await screen.findByText('Configuration saved as Draft. Review it before activating.');
+    expect(writes[0].body.rules).toEqual([expect.objectContaining({
+      enabled: true, thresholdUnit: 'PEOPLE_PER_M2', warningThreshold: 0.60, criticalThreshold: 1.00, clearDurationSec: 5,
+    })]);
   });
 
   it('shows a legacy density rule as unsupported instead of converting it implicitly', async () => {

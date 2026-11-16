@@ -6,12 +6,13 @@ export type IncidentType = {
   sourceType: string; measurementType: string | null; status: string; supported: boolean;
   thresholdUnit: string | null; defaultWarningThreshold: number | null;
   defaultCriticalThreshold: number | null; unsupportedReason: string | null;
-  measurementOptions?: { mode: string; unit: string; supported: boolean; reason: string | null; defaultWarningThreshold?: number | null; defaultCriticalThreshold?: number | null }[];
+  measurementOptions?: { mode: string; unit: string; supported: boolean; reason: string | null; defaultWarning?: number | null; defaultCritical?: number | null }[];
   requiresBeforePhoto?: boolean;
 };
 export type MonitoringRule = {
   incidentTypeId: string; warningThreshold: number; criticalThreshold: number;
   thresholdUnit: string; sustainSec: number; cooldownSec: number; enabled: boolean;
+  clearDurationSec?: number;
   parametersJson: string | null; ruleId?: string; incidentCode?: string; incidentName?: string;
   /** Dual threshold: the level is held until the value drops below this (null = same as the enter threshold). */
   warningExitThreshold?: number | null; criticalExitThreshold?: number | null;

@@ -29,6 +29,7 @@ export type ZoneRecord = {
   zoneType: string | null;
   mapPolygon: MapPoint[];
   colorHex: string | null;
+  areaM2?: number | null;
   minStaff: number;
   status: string;
   updatedAt: string;
@@ -41,6 +42,7 @@ export type ZoneRequest = {
   mapPolygon: MapPoint[];
   status: string;
   colorHex: string | null;
+  areaM2?: number | null;
 };
 
 export type AdjacentZoneRecord = Pick<ZoneRecord, 'zoneId' | 'floorId' | 'code' | 'name' | 'status'>;

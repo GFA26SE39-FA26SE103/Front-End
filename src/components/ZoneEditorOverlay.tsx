@@ -10,6 +10,7 @@ export type ZoneEditorSave = {
   zoneType: string;
   colorHex: string;
   mapPolygon: MapPoint[];
+  areaM2?: number | null;
 };
 
 type Tool = 'edit' | 'rectangle';
@@ -110,6 +111,8 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onDelete, onCancel }:
   const [selectedZoneId, setSelectedZoneId] = useState<string>();
   const [name, setName] = useState('');
   const [zoneType, setZoneType] = useState('');
+  const [areaM2, setAreaM2] = useState('');
+  const [areaEdited, setAreaEdited] = useState(false);
   const [colorHex, setColorHex] = useState(DEFAULT_COLOR);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState('');
@@ -122,6 +125,8 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onDelete, onCancel }:
     setSelectedZoneId(undefined);
     setName('');
     setZoneType('');
+    setAreaM2('');
+    setAreaEdited(false);
     setColorHex(DEFAULT_COLOR);
     setConfirmDelete(false);
     setError('');
@@ -148,6 +153,8 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onDelete, onCancel }:
     setComplete(true);
     setName(zone.name);
     setZoneType(zone.zoneType ?? '');
+    setAreaM2(zone.areaM2 == null ? '' : String(zone.areaM2));
+    setAreaEdited(false);
     setColorHex(zone.colorHex ?? DEFAULT_COLOR);
     setConfirmDelete(false);
     setError('');
@@ -278,9 +285,14 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onDelete, onCancel }:
     if (!trimmedName) return setError('Enter a zone name.');
     if (!zoneTypeCodes.has(zoneType)) return setError('Choose a zone type.');
     if (!/^#[0-9A-F]{6}$/i.test(colorHex)) return setError('Choose a valid zone color.');
+    const areaText = areaM2.trim().replace(',', '.');
+    const area = areaText ? Number(areaText) : null;
+    if (areaEdited && area !== null && (!/^\d+(?:\.\d{1,2})?$/.test(areaText) || area < 0.01 || area > 9999999999.99))
+      return setError('Enter a zone area from 0.01 to 9999999999.99 m² with up to two decimal places.');
     setError('');
     try {
-      await onSave({ zoneId: selectedZoneId, name: trimmedName, zoneType, colorHex: colorHex.toUpperCase(), mapPolygon: points });
+      await onSave({ zoneId: selectedZoneId, name: trimmedName, zoneType, colorHex: colorHex.toUpperCase(), mapPolygon: points,
+        ...(areaEdited ? { areaM2: area } : {}) });
       resetDraft();
       setTool('edit');
     } catch (reason) {
@@ -358,6 +370,11 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onDelete, onCancel }:
           <option value="">Select zone type</option>
           {zoneTypes.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
+      </label>
+      <label className={s.field}>Zone area (m²)
+        <input aria-label="Zone area (m²)" aria-describedby="zone-area-help" inputMode="decimal" value={areaM2}
+          onChange={(event) => { setAreaM2(event.target.value); setAreaEdited(true); }} />
+        <small id="zone-area-help">Enter the measured floor area covered by the single camera ROI for crowd density.</small>
       </label>
       {error && <p className={s.error} role="alert">{error}</p>}
       {confirmDelete && <div className={s.deleteConfirm} role="alert">

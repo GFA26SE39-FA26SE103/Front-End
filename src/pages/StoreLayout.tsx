@@ -342,6 +342,7 @@ export default function StoreLayout() {
       mapPolygon: draft.mapPolygon,
       colorHex: draft.colorHex,
       status: existing?.status ?? 'ACTIVE',
+      ...(draft.areaM2 !== undefined ? { areaM2: draft.areaM2 } : {}),
     };
     setZoneSaving(true);
     setActionError('');

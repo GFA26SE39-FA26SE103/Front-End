@@ -12,8 +12,10 @@ import { ResponsePolicyEditor } from './admin/ResponsePolicies';
 import s from './AiConfig.module.css';
 import { measurementMode, modeLabel } from './monitoringRuleMode';
 
-type RuleInput = Omit<MonitoringRule, 'warningThreshold' | 'criticalThreshold' | 'sustainSec' | 'cooldownSec' | 'warningExitThreshold' | 'criticalExitThreshold'> & {
+type MeasurementOption = NonNullable<IncidentType['measurementOptions']>[number];
+type RuleInput = Omit<MonitoringRule, 'warningThreshold' | 'criticalThreshold' | 'sustainSec' | 'cooldownSec' | 'clearDurationSec' | 'warningExitThreshold' | 'criticalExitThreshold'> & {
   warningThreshold: string; criticalThreshold: string; sustainSec: string; cooldownSec: string;
+  clearDurationSec: string;
   /** '' = no dead band (exit equals the enter threshold). */
   warningExitThreshold: string; criticalExitThreshold: string;
 };
@@ -23,6 +25,7 @@ type ConfigSummary = MonitoringConfiguration | null | 'error' | undefined;
 type PolicySummary = ResponsePolicy[] | 'error' | undefined;
 
 const inputRule = (r: MonitoringRule): RuleInput => ({ ...r, warningThreshold: String(r.warningThreshold), criticalThreshold: String(r.criticalThreshold), sustainSec: String(r.sustainSec), cooldownSec: String(r.cooldownSec),
+  clearDurationSec: r.clearDurationSec == null ? '' : String(r.clearDurationSec),
   warningExitThreshold: r.warningExitThreshold == null ? '' : String(r.warningExitThreshold), criticalExitThreshold: r.criticalExitThreshold == null ? '' : String(r.criticalExitThreshold) });
 /** Shows "≥ enter" and, when a dead band is configured, "held until < exit". */
 const band = (enter: number, exit: number | null | undefined, unit: string) => `≥ ${enter}${exit != null && exit !== enter ? ` · held until < ${exit}` : ''} ${unit}`;
@@ -85,8 +88,12 @@ const ruleName = (rule: MonitoringRule, types: IncidentType[]) => rule.incidentN
 const ruleMode = (rule: Pick<MonitoringRule, 'incidentTypeId' | 'incidentCode' | 'thresholdUnit' | 'parametersJson'>, types: IncidentType[]) => measurementMode({ ...rule, incidentCode: rule.incidentCode ?? types.find(t => t.incidentTypeId === rule.incidentTypeId)?.code });
 const formatTime = (value: string) => { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString(); };
 
-const units: Record<string, string> = { PEOPLE: 'people', MINUTES: 'minutes' };
+const units: Record<string, string> = { PEOPLE: 'people', MINUTES: 'minutes', PEOPLE_PER_M2: 'people/m²' };
 const unitName = (unit: string) => units[unit] ?? unit;
+const congestionOptions = (type?: IncidentType) => type?.measurementOptions?.filter(option =>
+  option.supported && (option.mode === 'PEOPLE_COUNT' || option.mode === 'CROWD_DENSITY')) ?? [];
+const congestionLabel = (option: MeasurementOption) => option.mode === 'CROWD_DENSITY'
+  ? 'Crowd density (people/m²)' : 'People currently in ROI';
 
 function responseLabel(summary: PolicySummary, level: PolicyPriority) {
   if (summary === undefined) return 'Checking policy…';
@@ -264,11 +271,14 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   const showForm = editing && !active && !loadFailed;
   const locked = loading || busy || active;
   const available = types.filter(t => t.status === 'ACTIVE' && !rules.some(r => r.incidentTypeId === t.incidentTypeId));
-  const ruleChoices = available.flatMap(type => {
-    const peopleCount = type.measurementOptions?.some(option => option.mode === 'PEOPLE_COUNT' && option.supported);
-    if (peopleCount) return [{ value: type.incidentTypeId, label: `${type.name} · People currently in ROI`, type, peopleCount: true }];
+  const ruleChoices = available.flatMap<{ value: string; label: string; type: IncidentType; measurement?: MeasurementOption }>(type => {
+    const measurements = congestionOptions(type);
+    if (measurements.length) return measurements.map(measurement => ({
+      value: measurement.mode === 'PEOPLE_COUNT' ? type.incidentTypeId : `${type.incidentTypeId}:${measurement.mode}`,
+      label: `${type.name} · ${congestionLabel(measurement)}`, type, measurement,
+    }));
     const supported = type.supported && type.measurementType === 'QUEUE_LENGTH';
-    return [{ value: type.incidentTypeId, label: supported ? type.name : `${type.name} (cannot be enabled here)`, type, peopleCount: false }];
+    return [{ value: type.incidentTypeId, label: supported ? type.name : `${type.name} (cannot be enabled here)`, type }];
   });
   const policyRule = !showForm && !loading && !loadFailed && config?.rules.find(rule => rule.ruleId === policyRuleId);
   const refreshPolicies = () => { setPolicies({}); setPolicyRevision(value => value + 1); };
@@ -318,8 +328,13 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
           throw new Error(label + ': check the threshold fields.');
         }
         if (!r.thresholdUnit.trim()) throw new Error(label + ': threshold unit is required.');
+        const clearDurationSec = r.clearDurationSec === '' ? undefined : seconds(r.clearDurationSec, label + ' clear duration');
+        if (clearDurationSec !== undefined && (clearDurationSec < 1 || clearDurationSec > 86400)) {
+          throw new Error(label + ': clear duration must be between 1 and 86400 seconds.');
+        }
         return { incidentTypeId: r.incidentTypeId, warningThreshold: warning, criticalThreshold: critical, thresholdUnit: r.thresholdUnit, sustainSec: seconds(r.sustainSec, label + ' sustain time'), cooldownSec: seconds(r.cooldownSec, label + ' cooldown'), enabled: r.enabled, parametersJson: r.parametersJson,
-          warningExitThreshold: warningExit, criticalExitThreshold: criticalExit };
+          warningExitThreshold: warningExit, criticalExitThreshold: criticalExit,
+          ...(clearDurationSec !== undefined ? { clearDurationSec } : {}) };
       });
       const saved = await saveMonitoring(zoneId, { name: name.trim(), confidenceThreshold: conf, rules: parsed, ...(config ? { expectedUpdatedAt: config.updatedAt } : {}) });
       if (mounted.current) { apply(saved); setReview(null); setNotice('Configuration saved as Draft. Review it before activating.'); closeEditor(); }
@@ -348,13 +363,14 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   function addRule(value: string) {
     const choice = ruleChoices.find(option => option.value === value);
     if (!choice) return;
-    const { type: selectedType, peopleCount } = choice;
+    const { type: selectedType, measurement } = choice;
     const rule = inputRule({
       incidentTypeId: selectedType.incidentTypeId, incidentCode: selectedType.code,
-      warningThreshold: selectedType.defaultWarningThreshold ?? 0,
-      criticalThreshold: selectedType.defaultCriticalThreshold ?? 1,
-      thresholdUnit: peopleCount ? 'PEOPLE' : selectedType.thresholdUnit ?? '',
-      sustainSec: 30, cooldownSec: 300, enabled: peopleCount || (selectedType.supported && selectedType.measurementType === 'QUEUE_LENGTH'),
+      warningThreshold: measurement?.defaultWarning ?? selectedType.defaultWarningThreshold ?? 0,
+      criticalThreshold: measurement?.defaultCritical ?? selectedType.defaultCriticalThreshold ?? 1,
+      thresholdUnit: measurement?.unit ?? selectedType.thresholdUnit ?? '',
+      sustainSec: 30, cooldownSec: 300, enabled: measurement !== undefined || (selectedType.supported && selectedType.measurementType === 'QUEUE_LENGTH'),
+      clearDurationSec: measurement?.mode === 'CROWD_DENSITY' ? 60 : undefined,
       parametersJson: null,
     });
     setRules(all => [rule, ...all]);
@@ -445,10 +461,29 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
           const label = t?.name ?? r.incidentName ?? 'Unknown operational event type';
           const mode = ruleMode(r, types);
           const { errors } = validateThresholds(r);
-          const supported = mode === 'PEOPLE_COUNT' ? !!t?.measurementOptions?.some(o => o.mode === mode && o.supported) : !!t?.supported && mode === 'QUEUE_LENGTH';
+          const measurements = congestionOptions(t);
+          const supported = measurements.some(option => option.mode === mode) || (!!t?.supported && mode === 'QUEUE_LENGTH');
           return <section key={r.incidentTypeId} className={s.rule}>
             <div className={s.head}><h3>{label}</h3><Button variant="secondary" disabled={locked} onClick={() => { setRules(all => all.filter(x => x.incidentTypeId !== r.incidentTypeId)); touch(); }}>Remove {label}</Button></div>
-            <p className={s.help}>{modeLabel(mode)}</p>
+            <p className={s.help}>{modeLabel(supported ? mode : 'UNSUPPORTED')}</p>
+            {measurements.length > 1 && <label className={s.field}>Measurement
+              <select aria-label={label + ' measurement'} disabled={locked} value={r.thresholdUnit} onChange={e => {
+                const choice = measurements.find(option => option.unit === e.target.value);
+                if (!choice) return;
+                changeRule(r.incidentTypeId, {
+                  thresholdUnit: choice.unit, warningThreshold: String(choice.defaultWarning ?? ''),
+                  criticalThreshold: String(choice.defaultCritical ?? ''), warningExitThreshold: '', criticalExitThreshold: '',
+                  clearDurationSec: r.clearDurationSec || (choice.mode === 'CROWD_DENSITY' ? '60' : ''),
+                });
+              }}>
+                {!measurements.some(option => option.unit === r.thresholdUnit) && <option value={r.thresholdUnit} disabled>Unsupported measurement</option>}
+                {measurements.map(option => <option key={option.mode} value={option.unit}>{congestionLabel(option)}</option>)}
+              </select>
+            </label>}
+            {mode === 'CROWD_DENSITY' && supported && <p className={s.help}>
+              {zone.areaM2 != null && zone.areaM2 > 0 ? `Measured zone area: ${zone.areaM2} m².` : 'Enter the measured zone area in Store layout before activation.'}
+              {' '}Use one active ROI covering that floor area.
+            </p>}
             {!supported && <p className={s.help}>You can save this rule with Enabled off. This editor cannot enable the selected measurement mode.</p>}
             {!supported && t?.unsupportedReason && <p className={s.help}>{t.unsupportedReason}</p>}
             <div className={s.thresholdPairs}>
@@ -483,9 +518,13 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
               })}
             </div>
             <fieldset disabled={locked} className={s.fields}>
-              <label className={s.field}>Threshold unit<input aria-label={label + ' unit'} value={t?.thresholdUnit ? unitName(r.thresholdUnit) : r.thresholdUnit} maxLength={30} readOnly={!!t?.thresholdUnit} onChange={e => changeRule(r.incidentTypeId, { thresholdUnit: e.target.value })} /></label>
+              <label className={s.field}>Threshold unit<input aria-label={label + ' unit'} value={t?.thresholdUnit && supported ? unitName(r.thresholdUnit) : r.thresholdUnit} maxLength={30} readOnly={!!t?.thresholdUnit} onChange={e => changeRule(r.incidentTypeId, { thresholdUnit: e.target.value })} /></label>
               <label className={s.field}>Sustain time (seconds)<input aria-label={label + ' sustain time'} type="number" min="0" step="1" value={r.sustainSec} onChange={e => changeRule(r.incidentTypeId, { sustainSec: e.target.value })} /></label>
               <label className={s.field}>Cooldown (seconds)<input aria-label={label + ' cooldown'} type="number" min="0" step="1" value={r.cooldownSec} onChange={e => changeRule(r.incidentTypeId, { cooldownSec: e.target.value })} /></label>
+              {mode === 'CROWD_DENSITY' && supported && <label className={s.field}>Clear duration (seconds)
+                <input aria-label={label + ' clear duration'} type="number" min="1" max="86400" step="1" value={r.clearDurationSec}
+                  onChange={e => changeRule(r.incidentTypeId, { clearDurationSec: e.target.value })} />
+              </label>}
               <label className={s.check}><input type="checkbox" aria-label={label + ' enabled'} checked={r.enabled} disabled={!r.enabled && (!supported || t?.status !== 'ACTIVE')} onChange={e => changeRule(r.incidentTypeId, { enabled: e.target.checked })} />Enabled</label>
             </fieldset>
           </section>;

@@ -13,6 +13,7 @@ export type MonitoringRuleRuntime = {
 export type MonitoringZoneRuntime = {
   zoneId: string; zoneName: string; configId: string | null; configVersion: string | null;
   configurationStatus: string; confidence: number; peopleCount: number | null; queueCount: number | null;
+  areaM2?: number | null;
   rules: MonitoringRuleRuntime[]; issueCode: string | null;
 };
 export type CameraMonitoringRuntime = {
