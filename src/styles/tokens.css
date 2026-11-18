@@ -1,5 +1,6 @@
 /* Colour tokens exported from the Figma variable collection "Theme" (Light / Dark). */
 :root {
+  color-scheme: light;
   --color-bg: #f4f6f9;
   --color-surface: #ffffff;
   --color-surface-2: #f5f7fa;
@@ -13,10 +14,13 @@
   --color-on-primary: #ffffff;
   --color-danger: #dc2d37;
   --color-danger-tint: #fbe6e7;
+  --color-danger-text: #991b1b;
   --color-warning: #c88214;
   --color-warning-tint: #fbf1df;
+  --color-warning-text: #9a3412;
   --color-success: #16965f;
   --color-success-tint: #e4f3ea;
+  --color-success-text: #166534;
   --color-info: #2563eb;
   --color-info-tint: #eaf1fe;
   --color-accent: #e0631b;
@@ -34,8 +38,8 @@
   --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
-/* Dark values are ready for when the icon set gets dark variants. */
 :root[data-theme='dark'] {
+  color-scheme: dark;
   --color-bg: #101218;
   --color-surface: #1a1d26;
   --color-surface-2: #212530;
@@ -43,16 +47,20 @@
   --color-grid: #262a34;
   --color-text: #e6e8ee;
   --color-text-muted: #969daa;
-  --color-text-dim: #6e7583;
+  --color-text-dim: #8b95a5;
+  --color-link: #61d9d2;
   --color-primary: #14afaa;
   --color-primary-tint: #123433;
-  --color-on-primary: #ffffff;
-  --color-danger: #e94a4f;
+  --color-on-primary: #101218;
+  --color-danger: #f87579;
   --color-danger-tint: #2e1618;
+  --color-danger-text: #fb8a8e;
   --color-warning: #f0aa37;
   --color-warning-tint: #2c2210;
+  --color-warning-text: #f0aa37;
   --color-success: #2daf78;
   --color-success-tint: #12281e;
+  --color-success-text: #68dda6;
   --color-info: #4682f0;
   --color-info-tint: #152238;
   --color-accent: #f08a45;

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { Icon } from './Icon';
 import { AccountMenu } from './AccountMenu';
+import { ThemeToggle } from './ThemeToggle';
 import s from './OperatorLayout.module.css';
 
 export function OperatorLayout({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
@@ -26,6 +27,7 @@ export function OperatorLayout({ title, subtitle, children }: { title: string; s
           <NavLink to="/operator/incidents" className={({ isActive }) => `${s.navLink} ${isActive ? s.active : ''}`}>Incidents</NavLink>
           <NavLink to="/operator/notifications" className={({ isActive }) => `${s.navLink} ${isActive ? s.active : ''}`}>Notifications</NavLink>
         </nav>
+        <ThemeToggle />
         <AccountMenu />
       </header>
       <main className={s.content}>{children}</main>

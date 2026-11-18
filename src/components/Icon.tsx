@@ -8,5 +8,5 @@ type IconProps = {
 };
 
 export function Icon({ name, size, width, className }: IconProps) {
-  return <img src={icon(name)} width={width ?? size} height={size} alt="" aria-hidden className={className} />;
+  return <img src={icon(name)} width={width ?? size} height={size} alt="" aria-hidden data-app-icon="" className={className} />;
 }

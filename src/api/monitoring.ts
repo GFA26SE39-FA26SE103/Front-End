@@ -36,9 +36,10 @@ const path = (zoneId: string) => `/api/zones/${encodeURIComponent(zoneId)}/monit
 export const listIncidentTypes = (signal?: AbortSignal) => apiFetch<IncidentType[]>('/api/incident-types', { signal });
 export type IncidentTypeCreate = { code: string; name: string; description: string | null; requiresBeforePhoto: boolean; status: 'ACTIVE' | 'INACTIVE' };
 export type IncidentTypeUpdate = Omit<IncidentTypeCreate, 'code'>;
-export const createIncidentType = (body: IncidentTypeCreate) => apiFetch('/api/incident-types', { method: 'POST', body: JSON.stringify(body) });
+type SavedIncidentType = Pick<IncidentType, 'incidentTypeId' | 'code' | 'name' | 'description' | 'requiresBeforePhoto' | 'status'>;
+export const createIncidentType = (body: IncidentTypeCreate) => apiFetch<SavedIncidentType>('/api/incident-types', { method: 'POST', body: JSON.stringify(body) });
 export const updateIncidentType = (id: string, body: IncidentTypeUpdate) =>
-  apiFetch<Pick<IncidentType, 'status'>>(`/api/incident-types/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) });
+  apiFetch<SavedIncidentType>(`/api/incident-types/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) });
 export const getMonitoring = (zoneId: string, signal?: AbortSignal) => apiFetch<MonitoringConfiguration>(path(zoneId), { signal });
 export const saveMonitoring = (zoneId: string, body: MonitoringRequest) => apiFetch<MonitoringConfiguration>(path(zoneId), { method: 'PUT', body: JSON.stringify(body) });
 export const deleteMonitoring = (zoneId: string, config: MonitoringConfiguration) => apiFetch<void>(path(zoneId), { method: 'DELETE', body: JSON.stringify({ configId: config.configId, expectedUpdatedAt: config.updatedAt }) });

@@ -144,7 +144,8 @@ describe('API-backed monitoring configuration', () => {
     expect(screen.queryByLabelText('Configuration name')).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Filter by floor'), { target: { value: 'floor-2' } });
     expect(screen.queryByRole('region', { name: 'Floor 1: Real floor' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open AI configuration for Fresh food zone' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Monitoring rules', level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'View rules for Fresh food zone' })).toBeInTheDocument();
     expect(writes).toHaveLength(0);
   });
 
@@ -202,7 +203,7 @@ describe('API-backed monitoring configuration', () => {
   it('cancels deletion without writing, then deletes the displayed saved version and updates the overview', async () => {
     config = savedConfig(); show();
     fireEvent.click(await screen.findByRole('button', { name: 'Delete configuration' }));
-    let dialog = screen.getByRole('dialog', { name: 'Delete AI configuration?' });
+    let dialog = screen.getByRole('dialog', { name: 'Delete monitoring configuration?' });
     expect(dialog).toHaveTextContent('Queue monitoring'); expect(dialog).toHaveTextContent('Actual queue zone');
     expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
@@ -241,7 +242,7 @@ describe('API-backed monitoring configuration', () => {
 
   it('opens read-only detail, then Edit and Cancel discard input without an API write', async () => {
     config = savedConfig(); show('/admin/ai-config');
-    fireEvent.click(await screen.findByRole('button', { name: 'Open AI configuration for Actual queue zone' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'View rules for Actual queue zone' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Edit configuration' }));
     fireEvent.change(screen.getByLabelText('Configuration name'), { target: { value: 'Unsaved change' } });
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -260,9 +261,9 @@ describe('API-backed monitoring configuration', () => {
     expect(screen.queryByRole('button', { name: 'Save configuration' })).not.toBeInTheDocument();
   });
 
-  it('requires adding an incident rule before saving and focuses the selector', async () => {
+  it('requires adding an operational event rule before saving and focuses the selector', async () => {
     await create(); fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
-    expect(screen.getByRole('alert')).toHaveTextContent('Add at least one incident rule before saving');
+    expect(screen.getByRole('alert')).toHaveTextContent('Add at least one operational event rule before saving');
     expect(screen.getByLabelText('Add a rule')).toHaveFocus(); expect(writes).toHaveLength(0);
     chooseRule();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
@@ -290,7 +291,7 @@ describe('API-backed monitoring configuration', () => {
     await create(); fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.getByRole('button', { name: 'Create configuration' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '‹ All zones' }));
-    await screen.findByRole('button', { name: 'Open AI configuration for Actual queue zone' }); expect(writes).toHaveLength(0);
+    await screen.findByRole('button', { name: 'View rules for Actual queue zone' }); expect(writes).toHaveLength(0);
   });
 
   it('saves numeric rules with bearer and versioned review/activation', async () => {
@@ -381,7 +382,7 @@ describe('API-backed monitoring configuration', () => {
 
   it('keeps unsaved edits when leaving is cancelled and follows browser Back', async () => {
     config = savedConfig(); show('/admin/ai-config');
-    fireEvent.click(await screen.findByRole('button', { name: 'Open AI configuration for Actual queue zone' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'View rules for Actual queue zone' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Edit configuration' }));
     fireEvent.change(screen.getByLabelText('Configuration name'), { target: { value: 'Pending draft' } });
     vi.spyOn(window, 'confirm').mockReturnValue(false);
@@ -389,7 +390,7 @@ describe('API-backed monitoring configuration', () => {
     expect(screen.getByLabelText('Configuration name')).toHaveValue('Pending draft');
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     fireEvent.click(screen.getByRole('button', { name: 'Browser back' }));
-    await screen.findByRole('button', { name: 'Open AI configuration for Actual queue zone' });
+    await screen.findByRole('button', { name: 'View rules for Actual queue zone' });
   });
 
   it('does not silently choose another zone for a broken deep link', async () => {

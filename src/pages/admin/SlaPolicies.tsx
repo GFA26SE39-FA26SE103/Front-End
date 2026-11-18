@@ -17,7 +17,7 @@ type Scope = 'EVENT' | 'TASK' | 'INCIDENT';
 type Row = { id: string; code: string; name: string; detail: string; policy: SlaPolicySummary | null; issues: string[]; specialty?: string };
 type Draft = { isEnabled: boolean; priorityCode: SlaPriority; responseTargetSec: string; resolutionTargetSec: string; offerTimeoutSec: string; warningPercent: string };
 const scopes: { id: Scope; label: string; help: string }[] = [
-  { id: 'EVENT', label: 'Operational events', help: 'Camera OperationalEvent types. WARNING/CRITICAL actions are configured per monitoring rule in AI Config.' },
+  { id: 'EVENT', label: 'Operational events', help: 'SLA targets for camera-detected events. Set warning and critical responses in Monitoring rules.' },
   { id: 'TASK', label: 'Task types', help: 'StaffReport routine Tasks and Tasks an Operator creates manually. A missing policy blocks those Tasks with a configuration error.' },
   { id: 'INCIDENT', label: 'Incident types', help: 'Confirmed Incidents and their mandatory corrective Tasks.' },
 ];

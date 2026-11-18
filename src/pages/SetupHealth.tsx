@@ -75,7 +75,7 @@ export default function SetupHealth() {
           <label className={s.check}><input type="checkbox" checked={attentionOnly} onChange={e => setAttentionOnly(e.target.checked)} />Needs attention only</label>
         </div>
         <section className={s.panel}>
-          <div className={s.head}><div><h2>Zone configurations</h2><p>View saved rules, missing requirements and configuration status.</p></div><Link className={s.linkButton} to="/admin/ai-config">Open AI Config</Link></div>
+          <div className={s.head}><div><h2>Zone configurations</h2><p>View saved rules, missing requirements and configuration status.</p></div><Link className={s.linkButton} to="/admin/ai-config">Open monitoring rules</Link></div>
           {!data.floors.length ? <p className={s.empty}>No floors yet. <Link to="/admin/store-layout">Open Store layout</Link> to begin floor and zone setup.</p> : !zones.length ? <p className={s.empty}>No zones match these filters.{!data.totals.zoneCount && <> <Link to="/admin/store-layout">Add zones in Store layout</Link>.</>}</p> :
             <div className={s.tableWrap}><table aria-label="Zone configurations"><thead><tr><th>Floor / Zone</th><th>Configuration</th><th>Activation</th><th>Readiness</th><th>Actions</th></tr></thead><tbody>
               {zones.map(({ floor, zone }) => <tr key={zone.zoneId}>

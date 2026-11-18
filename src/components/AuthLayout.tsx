@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { icon } from '../assets/icons';
 import { Icon } from './Icon';
+import { ThemeToggle } from './ThemeToggle';
 import s from './AuthLayout.module.css';
 
 // Left brand panel shared by the sign-in and password-recovery screens.
@@ -37,7 +38,10 @@ export function AuthLayout({ children, plain }: { children: ReactNode; plain?: b
           <p className={s.lede}>Monitor queues, crowding and incidents live — and turn camera video into action for your store team.</p>
         </div>
       </aside>
-      <div className={`${s.formSide} ${plain ? s.plain : ''}`}>{children}</div>
+      <div className={`${s.formSide} ${plain ? s.plain : ''}`}>
+        <div className={s.appearance}><ThemeToggle /></div>
+        {children}
+      </div>
     </div>
   );
 }

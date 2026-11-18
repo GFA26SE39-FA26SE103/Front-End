@@ -176,7 +176,7 @@ export default function UsersRoles() {
               <label className={s.search}>Search accounts<input type="search" placeholder="Name, email or role" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
               <div className={s.tableWrap}>
                 <table className={s.table}>
-                  <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Specialty</th><th>Status</th><th><span className={s.srOnly}>Actions</span></th></tr></thead>
+                  <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Specialty</th><th>Status</th><th>Action</th></tr></thead>
                   <tbody>{visible.map((user) => <tr key={user.userId} className={selected?.userId === user.userId ? s.rowSelected : ''}>
                     <td className={s.person}>{user.fullName}{user.userId === loadSession()?.user.userId && <span className={s.you}>You</span>}</td>
                     <td className={s.email}>{user.email}</td>

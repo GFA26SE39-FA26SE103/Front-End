@@ -212,7 +212,7 @@
   align-items: center;
   justify-content: center;
   background: var(--color-danger);
-  color: #fff;
+  color: var(--color-on-primary);
   font-size: 17px;
   font-weight: 700;
 }
