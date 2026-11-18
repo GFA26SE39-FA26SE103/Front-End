@@ -3,14 +3,15 @@ import { NavLink } from 'react-router-dom';
 import { Icon } from './Icon';
 import { SearchBox } from './ui';
 import { AccountMenu } from './AccountMenu';
+import { ThemeToggle } from './ThemeToggle';
 import s from './AdminLayout.module.css';
 
 const NAV = [
   { to: '/admin/dashboard', label: 'Dashboard', icon: 'nav-grid', activeIcon: 'nav-grid-active' },
   { to: '/admin/store-layout', label: 'Store layout', icon: 'nav-pin', activeIcon: 'nav-pin-active' },
   { to: '/admin/cameras', label: 'Cameras', icon: 'nav-camera', activeIcon: 'nav-camera-active' },
-  { to: '/admin/ai-config', label: 'AI Config', icon: 'nav-sliders', activeIcon: 'nav-sliders-active' },
-  { to: '/admin/incident-types', label: 'Incident types', icon: 'nav-tag', activeIcon: 'nav-tag-active' },
+  { to: '/admin/ai-config', label: 'Monitoring rules', icon: 'nav-sliders', activeIcon: 'nav-sliders-active' },
+  { to: '/admin/incident-types', label: 'Event & incident types', icon: 'nav-tag', activeIcon: 'nav-tag-active' },
   { to: '/admin/sla-policies', label: 'SLA policies', icon: 'nav-activity' },
   { to: '/admin/users', label: 'Users & Roles', icon: 'nav-users', activeIcon: 'nav-users-active' },
   { to: '/admin/audit-logs', label: 'Audit Logs', icon: 'nav-file' },
@@ -52,6 +53,7 @@ export function AdminLayout({ title, subtitle, actions, children }: { title: str
           </div>
           <div style={{ flex: 1 }} />
           {actions ?? <SearchBox value={query} onChange={setQuery} placeholder="Search" width={220} height={34} iconName="header-search" iconSize={14} />}
+          <ThemeToggle />
           <AccountMenu />
         </header>
         <main className={s.content}>{children}</main>

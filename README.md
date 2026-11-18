@@ -200,7 +200,7 @@ Cloudinary timeout compatibility verification (2026-10-03): **29 focused tests i
 
 - Authentication, Users & Roles, Cameras, Store Layout and AI Config have API-backed slices. Other screens still use mock/component state until their backend contracts are implemented.
 - Model confidence is an input filter, not an incident severity/routing threshold; legacy Routing mock does not represent current AGENTS.md rules.
-- Only the Light theme is wired. Dark colour tokens exist (`[data-theme='dark']`), but the Figma icons are exported in light-theme colours, so dark mode needs dark icon variants first.
+- Use **Dark mode** in the header to toggle the theme. The web app uses the system preference on the first visit and remembers your choice in the browser.
 
 ## Response-policy TaskType selection — 2026-11-06
 

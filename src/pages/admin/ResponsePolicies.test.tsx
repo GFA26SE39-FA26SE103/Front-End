@@ -74,7 +74,7 @@ describe('Response policy administration', () => {
     eventCode = 'CONGESTION';
     show();
     const warningGroup = await screen.findByRole('group', { name: 'WARNING policy' });
-    expect(screen.getByRole('link', { name: /Back to AI configuration/ })).toHaveAttribute('href', '/admin/ai-config');
+    expect(screen.getByRole('link', { name: /Back to monitoring rules/ })).toHaveAttribute('href', '/admin/ai-config');
     expect(within(warningGroup).getByText('Notification ready')).toBeInTheDocument();
     expect(within(warningGroup).queryByLabelText('Task title (optional)')).not.toBeInTheDocument();
     expect(within(warningGroup).queryByRole('textbox')).not.toBeInTheDocument();
@@ -150,7 +150,7 @@ describe('Response policy administration', () => {
     show();
     const group = await screen.findByRole('group', { name: 'WARNING policy' });
     expect(screen.getAllByText('Configuration inactive.')).toHaveLength(1);
-    expect(screen.getByRole('status')).toHaveTextContent('Activate it in AI configuration');
+    expect(screen.getByRole('status')).toHaveTextContent('Activate it in Monitoring rules');
     expect(within(group).queryByText('Needs attention')).not.toBeInTheDocument();
   });
 

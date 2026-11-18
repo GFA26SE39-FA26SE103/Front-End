@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Icon } from './Icon';
 import { AccountMenu } from './AccountMenu';
+import { ThemeToggle } from './ThemeToggle';
 import s from './AdminLayout.module.css';
 
 const NAV = [
@@ -49,6 +50,7 @@ export function ManagerLayout({ title, subtitle, actions, children }: { title: s
           </div>
           <div style={{ flex: 1 }} />
           {actions}
+          <ThemeToggle />
           <AccountMenu />
         </header>
         <main className={s.content}>{children}</main>

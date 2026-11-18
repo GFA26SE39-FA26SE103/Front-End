@@ -7,7 +7,9 @@ import '@fontsource/inter/600.css'
 import '@fontsource/inter/700.css'
 import './index.css'
 import App from './App.tsx'
+import { initializeTheme } from './styles/theme'
 
+initializeTheme()
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>

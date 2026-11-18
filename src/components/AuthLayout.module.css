@@ -92,10 +92,17 @@
 }
 
 .formSide {
+  position: relative;
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.appearance {
+  position: absolute;
+  top: 20px;
+  right: 24px;
 }
 
 /* Password-recovery screens sit on a plain surface in Figma. */

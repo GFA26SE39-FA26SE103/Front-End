@@ -30,7 +30,7 @@ const inputRule = (r: MonitoringRule): RuleInput => ({ ...r, warningThreshold: S
 /** Shows "≥ enter" and, when a dead band is configured, "held until < exit". */
 const band = (enter: number, exit: number | null | undefined, unit: string) => `≥ ${enter}${exit != null && exit !== enter ? ` · held until < ${exit}` : ''} ${unit}`;
 const message = (e: unknown) => e instanceof Error ? e.message : 'The request could not be completed.';
-const RULE_REQUIRED = 'Add at least one incident rule before saving. Choose a rule from the list.';
+const RULE_REQUIRED = 'Add at least one operational event rule before saving. Choose a rule from the list.';
 function decimal(raw: string, label: string) {
   if (!/^\d+(\.\d{1,4})?$/.test(raw.trim()) || !Number.isFinite(Number(raw))) throw new Error(label + ' must be a non-negative number with at most 4 decimal places.');
   return Number(raw);
@@ -153,7 +153,7 @@ export default function AiConfig() {
     setEditZoneId(edit ? id : null);
     if (id !== zoneId) setParams({ zoneId: id });
   };
-  return <AdminLayout title="AI Configuration" subtitle={zone && floor ? floor.name + ' · ' + zone.name : undefined}>
+  return <AdminLayout title="Monitoring rules" subtitle={zone && floor ? floor.name + ' · ' + zone.name : undefined}>
     <div className={s.column}>
       {loading && <p className={s.help} role="status">Loading floors, zones and configurations…</p>}
       {error && <section className={s.panel}><p className={s.alertBox} role="alert">{error}</p><Button variant="secondary" onClick={() => setOverviewKey(k => k + 1)}>Retry loading zones</Button></section>}
@@ -176,7 +176,7 @@ function Overview({ floors, summaries, types, missingZone, floorId, onFloorChang
   const activeCount = Object.values(summaries).filter(c => c && c !== 'error' && c.status === 'ACTIVE').length;
   return <>
     <section className={s.panel}>
-      <div className={s.head}><div><h2 className={s.title}>Configurations by floor & zone</h2></div><Button variant="secondary" onClick={onRefresh}>Refresh configurations</Button></div>
+      <div className={s.head}><div><h2 className={s.title}>Zones by floor</h2></div><Button variant="secondary" onClick={onRefresh}>Refresh configurations</Button></div>
       {missingZone && <p className={s.alertBox} role="alert">The requested zone was not found. Choose a zone below.</p>}
       <div className={s.stats}><div><strong>{zoneCount}</strong><span>Zones</span></div><div><strong>{configured}</strong><span>Configured</span></div><div><strong>{activeCount}</strong><span>Active configurations</span></div></div>
       <label className={s.floorFilter}>Floor<select aria-label="Filter by floor" value={floorId} onChange={e => onFloorChange(e.target.value)}><option value="">All floors</option>{floors.map(f => <option key={f.floorId} value={f.floorId}>Floor {f.floorNumber} · {f.name}</option>)}</select></label>
@@ -188,11 +188,11 @@ function Overview({ floors, summaries, types, missingZone, floorId, onFloorChang
       <div className={s.zoneGrid}>{f.zones.map(z => {
         const summary = summaries[z.zoneId];
         const saved = summary && summary !== 'error' ? summary : null;
-        return <button key={z.zoneId} type="button" className={s.zoneCard} aria-label={'Open AI configuration for ' + z.name} onClick={() => onOpen(z.zoneId)}>
+        return <button key={z.zoneId} type="button" className={s.zoneCard} aria-label={'View rules for ' + z.name} onClick={() => onOpen(z.zoneId)}>
           <div className={s.head}><span className={s.zoneCode}><i style={{ background: z.colorHex ?? 'var(--color-primary)' }} />{z.code}</span><Chip tone={summary === 'error' ? 'danger' : statusTone(saved?.status)}>{summary === 'error' ? 'Load failed' : saved?.status ?? 'Not configured'}</Chip></div>
-          <h3>{z.name}</h3><p className={s.configName}>{saved?.name ?? (summary === 'error' ? 'Configuration unavailable' : 'No AI configuration yet')}</p>
+          <h3>{z.name}</h3><p className={s.configName}>{saved?.name ?? (summary === 'error' ? 'Configuration unavailable' : 'No monitoring configuration yet')}</p>
           {summary === 'error' ? <p className={s.error}>Could not load this configuration. Open its detail to retry.</p> : saved ? <><p className={s.help}>Confidence: {saved.confidenceThreshold} · {saved.rules.length} operational event {saved.rules.length === 1 ? 'rule' : 'rules'}</p><div className={s.ruleTags}>{saved.rules.map(r => <span key={r.incidentTypeId}>{ruleName(r, types)}{!r.enabled ? ' · Disabled' : ''}</span>)}</div>{!saved.rules.length && <p className={s.help}>No operational event rules saved. Edit to add one.</p>}</> : <p className={s.help}>Add operational event rules to configure monitoring for this zone.</p>}
-          <span className={s.cardLink}>View details →</span>
+          <span className={s.cardLink}>View rules →</span>
         </button>;
       })}</div>
     </section>)}
@@ -455,7 +455,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
           </div>
           {active && <p className={s.help}>This configuration is active. Deactivate it before changing confidence or rules.</p>}
         </> : <div className={s.empty}>
-          <p>This zone has no AI configuration yet.</p>
+          <p>This zone has no monitoring configuration yet.</p>
           <Button onClick={() => { fillForm(null); setError(''); setNotice(''); onOpen(true); }}>Create configuration</Button>
         </div>}
       </>}
@@ -576,7 +576,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
         <Button className={s.confirmDelete} onClick={confirmRemoveRule}>Remove rule</Button>
       </div>
     </Dialog>}
-    {deleting && <Dialog title="Delete AI configuration?" busy={busy} onClose={() => { setDeleting(null); setError(''); }}>
+    {deleting && <Dialog title="Delete monitoring configuration?" busy={busy} onClose={() => { setDeleting(null); setError(''); }}>
       <p className={s.help}>Delete <strong>{deleting.name}</strong> for <strong>{zone.name}</strong> on {floorName}?</p>
       <p className={s.alertBox}>This permanently removes the configuration and its operational event rules. The zone, cameras and ROI mappings are kept.</p>
       {error && <p className={s.alertBox} role="alert">{error}</p>}

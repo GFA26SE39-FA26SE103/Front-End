@@ -83,7 +83,7 @@ export default function ResponsePolicies() {
   return <AdminLayout title="Event response policies">
     <div className={s.page}>
       <div className={s.toolbar}>
-        <Link className={s.back} to={returnTo}>← Back to AI configuration</Link>
+        <Link className={s.back} to={returnTo}>← Back to monitoring rules</Link>
         <div className={s.context}>
           {context?.eventName && <span>{context.eventName}</span>}
           {context?.zoneName && <span>Zone: {context.zoneName}</span>}
@@ -223,7 +223,7 @@ export function ResponsePolicyEditor({ ruleId, eventCode, onSaved, compact = fal
       {loadError && !loading && <div className={s.feedback} role="alert"><p>{loadError}</p><Button variant="secondary" onClick={retry}>Reload</Button></div>}
       {error && !loadError && <div className={s.feedback} role="alert"><p>{error}</p>{needsReload && <Button variant="secondary" onClick={retry}>Reload saved state</Button>}</div>}
       {notice && <p className={s.success} role="status">{notice}</p>}
-      {ruleId && !loading && !loadError && configurationInactive && <p className={s.configurationNotice} role="status"><strong>Configuration inactive.</strong> Activate it in AI configuration for responses to run.</p>}
+      {ruleId && !loading && !loadError && configurationInactive && <p className={s.configurationNotice} role="status"><strong>Configuration inactive.</strong> Activate it in Monitoring rules for responses to run.</p>}
       {ruleId && !loading && !loadError && !hasPolicy && <p className={s.issues} role="alert">No shared operational SLA policy exists for this event type. <Link to="/admin/sla-policies">Create it in SLA policies</Link> before editing response actions.</p>}
       {loading ? <p className={s.loading} role="status">Loading response policies…</p> : ruleId && !loadError && <div className={s.grid}>
         {priorities.map((priority) => {
@@ -257,7 +257,7 @@ export function ResponsePolicyEditor({ ruleId, eventCode, onSaved, compact = fal
                 {taskTypesError && <div className={s.catalogError} role="alert"><span>Could not load task types. {taskTypesError}</span><Button variant="secondary" onClick={() => { setTaskTypesLoading(true); setTaskTypesError(''); setCatalogReload(value => value + 1); }}>Retry task types</Button></div>}
                 {hasPolicy && !taskTypesLoading && !taskTypesError && availableTaskTypes.length === 0 && <span className={s.catalogError}>{resolvedEventCode
                   ? 'No task types are available for this operational event.'
-                  : 'Could not identify the operational event. Reload the policy or open it from AI Configuration.'}</span>}
+                  : 'Could not identify the operational event. Reload the policy or open it from Monitoring rules.'}</span>}
               </div>
               </div>}
 
