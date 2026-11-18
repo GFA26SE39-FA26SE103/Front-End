@@ -5,6 +5,7 @@ import {
   type CameraRecord,
 } from '../api/cameras';
 import { ApiError } from '../api/client';
+import { Dialog } from './Dialog';
 import { Button, Field, Select, TextInput } from './ui';
 import s from './CameraRegistration.module.css';
 
@@ -101,26 +102,28 @@ export function CameraRegistration({ floors, onCancel, onRegistered }: Props) {
   };
 
   return (
-    <form className={s.form} aria-label="Add camera" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-      <div className={s.heading}>
-        <div><h3>Add camera</h3><p>{source === 'LIVE' ? 'Use an HTTP/HTTPS or RTSP live stream URL.' : 'Register the camera, then upload an MP4 as its source.'}</p></div>
-        <Button variant="secondary" onClick={onCancel} disabled={saving || Boolean(created)}>Cancel</Button>
-      </div>
-      <div className={s.grid}>
-        <Field label="Camera source"><Select value={source} onChange={changeSource} disabled={saving || Boolean(created)} options={[{ value: 'LIVE', label: 'Live stream (HTTP/RTSP)' }, { value: 'RECORDED', label: 'Uploaded video (test source)' }]} /></Field>
-        <Field label="Floor"><Select value={floorId} onChange={setFloorId} disabled={saving || Boolean(created)} options={floors.map((floor) => ({ value: floor.id, label: `${floor.key} · ${floor.label}` }))} /></Field>
-        <Field label="Camera code"><TextInput value={code} onChange={setCode} placeholder="CAM-PHONE" disabled={saving || Boolean(created)} /></Field>
-        <Field label="Camera name"><TextInput value={name} onChange={setName} disabled={saving || Boolean(created)} /></Field>
-        {source === 'LIVE' && <>
-          <Field label="Stream URL"><TextInput value={streamUrl} onChange={setStreamUrl} disabled={saving} placeholder="rtsp://192.168.1.198:554/stream2" /></Field>
-          <Field label="Username (optional)"><TextInput value={username} onChange={setUsername} disabled={saving} autoComplete="section-camera username" /></Field>
-          <Field label="Password (optional)"><TextInput value={password} onChange={setPassword} disabled={saving} type="password" autoComplete="section-camera new-password" /></Field>
-        </>}
-        <Field label="Installed date"><TextInput value={installedAt} onChange={setInstalledAt} type="date" disabled={saving || Boolean(created)} /></Field>
-        <Field label="Warranty expires"><TextInput value={warrantyExpiresAt} onChange={setWarrantyExpiresAt} type="date" disabled={saving || Boolean(created)} /></Field>
-      </div>
-      {error && <p className={s.error} role="alert">{error}</p>}
-      <div className={s.actions}><Button type="submit" disabled={saving || floors.length === 0}>{saving ? 'Saving…' : created ? 'Retry connection' : 'Save camera'}</Button></div>
-    </form>
+    <Dialog title="Add camera" busy={saving || Boolean(created)} onClose={onCancel} className={s.registrationDialog}>
+      <form className={s.dialogForm} aria-label="Add camera" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+        <p className={s.dialogIntro}>{source === 'LIVE' ? 'Use an HTTP/HTTPS or RTSP live stream URL.' : 'Register the camera, then upload an MP4 as its source.'}</p>
+        <div className={s.grid}>
+          <Field label="Camera source"><Select value={source} onChange={changeSource} disabled={saving || Boolean(created)} options={[{ value: 'LIVE', label: 'Live stream (HTTP/RTSP)' }, { value: 'RECORDED', label: 'Uploaded video (test source)' }]} /></Field>
+          <Field label="Floor"><Select value={floorId} onChange={setFloorId} disabled={saving || Boolean(created)} options={floors.map((floor) => ({ value: floor.id, label: `${floor.key} · ${floor.label}` }))} /></Field>
+          <Field label="Camera code"><TextInput value={code} onChange={setCode} placeholder="CAM-PHONE" disabled={saving || Boolean(created)} /></Field>
+          <Field label="Camera name"><TextInput value={name} onChange={setName} disabled={saving || Boolean(created)} /></Field>
+          {source === 'LIVE' && <>
+            <Field label="Stream URL"><TextInput value={streamUrl} onChange={setStreamUrl} disabled={saving} placeholder="rtsp://192.168.1.198:554/stream2" /></Field>
+            <Field label="Username (optional)"><TextInput value={username} onChange={setUsername} disabled={saving} autoComplete="section-camera username" /></Field>
+            <Field label="Password (optional)"><TextInput value={password} onChange={setPassword} disabled={saving} type="password" autoComplete="section-camera new-password" /></Field>
+          </>}
+          <Field label="Installed date"><TextInput value={installedAt} onChange={setInstalledAt} type="date" disabled={saving || Boolean(created)} /></Field>
+          <Field label="Warranty expires"><TextInput value={warrantyExpiresAt} onChange={setWarrantyExpiresAt} type="date" disabled={saving || Boolean(created)} /></Field>
+        </div>
+        {error && <p className={s.error} role="alert">{error}</p>}
+        <div className={s.actions}>
+          <Button type="button" variant="secondary" onClick={onCancel} disabled={saving || Boolean(created)}>Cancel</Button>
+          <Button type="submit" disabled={saving || floors.length === 0}>{saving ? 'Saving…' : created ? 'Retry connection' : 'Save camera'}</Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }

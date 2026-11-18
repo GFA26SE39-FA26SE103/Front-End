@@ -105,6 +105,8 @@
 .activation h3 { margin: 0 0 8px; font-size: 15px; }
 .activation p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--color-text-muted); }
 .activation button { flex-shrink: 0; }
-.deleteButton { color: var(--color-danger); }
+.deleteButton { color: var(--color-danger); border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border)); }
+.deleteButton:hover { background: var(--color-danger-tint); }
 .confirmDelete { background: var(--color-danger); }
+.confirmDelete:hover:not(:disabled) { background: color-mix(in srgb, var(--color-danger) 88%, black); }
 .review { scroll-margin-top: 16px; }

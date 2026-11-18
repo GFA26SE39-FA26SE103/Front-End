@@ -9,6 +9,6 @@ export function measurementMode(rule: ModeRule): 'PEOPLE_COUNT' | 'QUEUE_LENGTH'
 }
 
 export const modeLabel = (mode: ReturnType<typeof measurementMode>) => ({
-  PEOPLE_COUNT: 'People currently in ROI', QUEUE_LENGTH: 'Queue length (5s continuous dwell)',
+  PEOPLE_COUNT: 'Legacy people count', QUEUE_LENGTH: 'Queue length (5s continuous dwell)',
   CROWD_DENSITY: 'Crowd density', UNSUPPORTED: 'Runtime unsupported',
 })[mode];

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import { listTaskTypes, type TaskType } from '../../api/taskTypes';
+import { listOperationalEventSlaPolicies } from '../../api/slaPolicies';
 import {
   listResponsePolicies,
   saveResponsePolicy,
@@ -13,6 +14,20 @@ import { Button, Card, Chip } from '../../components/ui';
 import s from './ResponsePolicies.module.css';
 
 const priorities: PolicyPriority[] = ['WARNING', 'CRITICAL'];
+
+// Stable task codes from the operational event categories in the task type seed.
+function eventTaskCodes(eventCode?: string): readonly string[] {
+  switch (eventCode) {
+    case 'LONG_QUEUE': return ['TT-01'];
+    case 'EXCESSIVE_WAITING_TIME':
+    case 'EXCESSIVE_WAIT': return ['TT-02'];
+    case 'OVERCROWDING_CONGESTION':
+    case 'CONGESTION': return ['TT-03', 'TT-04'];
+    case 'CHECKOUT_CAPACITY_ISSUE':
+    case 'CHECKOUT_CAPACITY': return ['TT-05'];
+    default: return [];
+  }
+}
 type Draft = {
   policyId: string | null;
   version: number | null;
@@ -79,8 +94,8 @@ export default function ResponsePolicies() {
   </AdminLayout>;
 }
 
-export function ResponsePolicyEditor({ ruleId, onSaved, compact = false }: {
-  ruleId: string; onSaved?: () => void; compact?: boolean;
+export function ResponsePolicyEditor({ ruleId, eventCode, onSaved, compact = false }: {
+  ruleId: string; eventCode?: string; onSaved?: () => void; compact?: boolean;
 }) {
   const [drafts, setDrafts] = useState<Record<PolicyPriority, Draft>>({ WARNING: emptyDraft(), CRITICAL: emptyDraft() });
   const [loadedRuleId, setLoadedRuleId] = useState<string | null>(null);
@@ -91,6 +106,7 @@ export function ResponsePolicyEditor({ ruleId, onSaved, compact = false }: {
   const [reload, setReload] = useState(0);
   const [needsReload, setNeedsReload] = useState(false);
   const [hasPolicy, setHasPolicy] = useState(false);
+  const [resolvedEventCode, setResolvedEventCode] = useState<string>();
   const [taskTypes, setTaskTypes] = useState<TaskType[]>([]);
   const [taskTypesLoading, setTaskTypesLoading] = useState(true);
   const [taskTypesError, setTaskTypesError] = useState('');
@@ -114,8 +130,14 @@ export function ResponsePolicyEditor({ ruleId, onSaved, compact = false }: {
   useEffect(() => {
     if (!ruleId) return;
     const controller = new AbortController();
-    void listResponsePolicies(ruleId, controller.signal).then((policies) => {
+    void listResponsePolicies(ruleId, controller.signal).then(async (policies) => {
       if (controller.signal.aborted) return;
+      // The standalone route has only the rule ID. Its response policy points to the shared event SLA.
+      const policyId = policies[0]?.policyId;
+      const eventPolicies = !eventCode && policyId
+        ? await listOperationalEventSlaPolicies(controller.signal).catch(() => []) : [];
+      if (controller.signal.aborted) return;
+      setResolvedEventCode(eventCode ?? eventPolicies.find(row => row.policy?.policyId === policyId)?.code);
       const next = { WARNING: emptyDraft(), CRITICAL: emptyDraft() };
       for (const policy of policies) {
         if (policy.eventPriority in next) next[policy.eventPriority] = fromPolicy(policy);
@@ -136,9 +158,12 @@ export function ResponsePolicyEditor({ ruleId, onSaved, compact = false }: {
       }
     });
     return () => controller.abort();
-  }, [ruleId, reload]);
+  }, [ruleId, eventCode, reload]);
   const loading = Boolean(ruleId) && loadedRuleId !== ruleId;
   const configurationInactive = priorities.some(priority => drafts[priority].issues.includes('CONFIGURATION_NOT_ACTIVE'));
+  const allowedCodes = eventTaskCodes(resolvedEventCode);
+  const availableTaskTypes = taskTypes.filter(type => allowedCodes.includes(type.code));
+  const taskPickerDisabled = taskTypesLoading || Boolean(taskTypesError) || availableTaskTypes.length === 0;
 
   function retry() {
     setLoadedRuleId(null);
@@ -156,7 +181,7 @@ export function ResponsePolicyEditor({ ruleId, onSaved, compact = false }: {
   async function save(priority: PolicyPriority) {
     if (!ruleId || busy || needsReload || !hasPolicy) return;
     const draft = drafts[priority];
-    if (priority === 'CRITICAL' && draft.policyEnabled && (taskTypesLoading || taskTypesError || !taskTypes.some(type => type.code === draft.taskTypeCode))) {
+    if (priority === 'CRITICAL' && draft.policyEnabled && (taskPickerDisabled || !availableTaskTypes.some(type => type.code === draft.taskTypeCode))) {
       setError('Select an available task type before enabling critical task dispatch.');
       return;
     }
@@ -209,7 +234,7 @@ export function ResponsePolicyEditor({ ruleId, onSaved, compact = false }: {
           return <Card className={`${s.policy} ${priority === 'WARNING' ? s.warning : s.critical}`} key={priority}>
             <fieldset aria-label={`${priority} policy`} disabled={Boolean(busy) || needsReload || !hasPolicy}>
               <div className={s.heading}>
-                <div><legend>{priority === 'WARNING' ? 'Warning response' : 'Critical response'}</legend><p>{priority === 'WARNING' ? `Notify the ${draft.targetRoleCode === 'MANAGER' ? 'Manager' : 'Operator'} to monitor the condition. No task is created.` : 'Create one task for the event and offer it to eligible Staff.'}</p></div>
+                <div><legend>{priority === 'WARNING' ? 'Warning response' : 'Critical response'}</legend><p>{priority === 'WARNING' ? `Notify the ${draft.targetRoleCode === 'MANAGER' ? 'Manager' : 'Operator'} to monitor the condition. No task is created.` : 'Create one task of the type you select and offer it to eligible Staff with the required specialty.'}</p></div>
                 {draft.policyId === null ? <Chip tone="neutral">Not configured</Chip>
                   : draft.issues.some(issue => !['CONFIGURATION_NOT_ACTIVE', 'RULE_DISABLED', 'POLICY_DISABLED', 'ACTION_DISABLED'].includes(issue)) ? <Chip tone="warning">Needs attention</Chip>
                     : !draft.policyEnabled ? <Chip tone="neutral">Disabled</Chip>
@@ -224,21 +249,23 @@ export function ResponsePolicyEditor({ ruleId, onSaved, compact = false }: {
               {priority === 'CRITICAL' && <div className={s.taskFields}>
               <div className={s.taskTypeField}>
                 <label htmlFor="response-task-type">Task type (required when enabled)</label>
-                <select id="response-task-type" required={draft.policyEnabled} disabled={taskTypesLoading || Boolean(taskTypesError) || taskTypes.length === 0} value={draft.taskTypeCode} onChange={event => update(priority, { taskTypeCode: event.target.value })} aria-describedby="response-task-type-help">
+                <select id="response-task-type" required={draft.policyEnabled} disabled={taskPickerDisabled} value={draft.taskTypeCode} onChange={event => update(priority, { taskTypeCode: event.target.value })} aria-describedby="response-task-type-help">
                   <option value="">{taskTypesLoading ? 'Loading task types…' : 'Select a task type'}</option>
-                  {draft.taskTypeCode && !taskTypes.some(type => type.code === draft.taskTypeCode) && <option value={draft.taskTypeCode} disabled>{draft.taskTypeCode} — {taskTypesLoading ? 'Loading…' : 'Unavailable'}</option>}
-                  {taskTypes.map(type => <option key={type.taskTypeId} value={type.code}>{type.code} — {type.name}</option>)}
+                  {draft.taskTypeCode && !availableTaskTypes.some(type => type.code === draft.taskTypeCode) && <option value={draft.taskTypeCode} disabled>{draft.taskTypeCode} — {taskTypesLoading ? 'Loading…' : 'Saved, unavailable for this event'}</option>}
+                  {availableTaskTypes.map(type => <option key={type.taskTypeId} value={type.code}>{type.code} — {type.name}</option>)}
                 </select>
-                <span id="response-task-type-help" className={s.help}>{taskTypes.find(type => type.code === draft.taskTypeCode)?.description || 'The selected task type determines the required Staff specialty.'}</span>
+                <span id="response-task-type-help" className={s.help}>{availableTaskTypes.find(type => type.code === draft.taskTypeCode)?.description || 'Choose a task type for this event. It determines the required Staff specialty.'}</span>
                 {taskTypesError && <div className={s.catalogError} role="alert"><span>Could not load task types. {taskTypesError}</span><Button variant="secondary" onClick={() => { setTaskTypesLoading(true); setTaskTypesError(''); setCatalogReload(value => value + 1); }}>Retry task types</Button></div>}
-                {!taskTypesLoading && !taskTypesError && taskTypes.length === 0 && <span className={s.catalogError}>No task types are configured. Ask the administrator to check the task catalog.</span>}
+                {hasPolicy && !taskTypesLoading && !taskTypesError && availableTaskTypes.length === 0 && <span className={s.catalogError}>{resolvedEventCode
+                  ? 'No task types are available for this operational event.'
+                  : 'Could not identify the operational event. Reload the policy or open it from AI Configuration.'}</span>}
               </div>
               </div>}
 
               {issues.length > 0 && <ul className={`${s.issues} ${s.policyIssues}`}>{issues.map((issue) => <li key={issue}>{issueLabels[issue] ?? 'This policy needs administrator review.'}</li>)}</ul>}
               <div className={s.policyFooter}>
               <div className={s.actions}>
-                <Button disabled={working || (priority === 'CRITICAL' && draft.policyEnabled && (taskTypesLoading || Boolean(taskTypesError) || taskTypes.length === 0))} onClick={() => void save(priority)}>{working ? 'Saving…' : priority === 'WARNING' ? 'Save warning notification' : 'Save critical task dispatch'}</Button>
+                <Button disabled={working || (priority === 'CRITICAL' && draft.policyEnabled && taskPickerDisabled)} onClick={() => void save(priority)}>{working ? 'Saving…' : priority === 'WARNING' ? 'Save warning notification' : 'Save critical task dispatch'}</Button>
               </div>
               </div>
             </fieldset>

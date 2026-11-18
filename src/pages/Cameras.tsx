@@ -352,7 +352,8 @@ export default function Cameras() {
   return (
     <AdminLayout title="Cameras" subtitle={cameraSummary(cameras.length, counts)}>
       <Card className={s.registry}>
-        <CardHeader title="Camera registry" subtitle="Live records loaded from the MF-01 backend">
+        <div className={s.registryHeader}>
+          <CardHeader title="Camera registry" subtitle="Live records loaded from the MF-01 backend" />
           <div className={s.registryFilters}>
             <SearchBox value={query} onChange={setQuery} placeholder="Search camera" width={170} />
             <div className={s.floorFilter}>
@@ -369,7 +370,7 @@ export default function Cameras() {
             </div>
             <Button onClick={() => { setUploadOpen(false); setConnectionEditorOpen(false); setRegistrationOpen(true); }} disabled={loading || uploadBusy}>Add camera</Button>
           </div>
-        </CardHeader>
+        </div>
 
         {registrationOpen && <CameraRegistration floors={floors} onCancel={() => setRegistrationOpen(false)} onRegistered={registered} />}
 
@@ -385,8 +386,11 @@ export default function Cameras() {
               const active = item.id === selected;
               return (
                 <button key={item.id} role="row" disabled={uploadBusy} className={`${s.row} ${active ? s.selected : ''}`} onClick={() => selectCamera(item.id)}>
-                  <span className={s.code}><Icon name={active ? 'camera-row-active' : 'camera-row'} size={14} />{item.code}</span>
-                  <span>{item.floor} · {item.zones.length ? item.zones.map((zone) => `${zone.code} ${zone.name}`).join(', ') : 'Unmapped'}</span>
+                  <span className={s.code}>
+                    <Icon name={active ? 'camera-row-active' : 'camera-row'} size={14} />
+                    <span className={s.codeText}>{item.code}</span>
+                  </span>
+                  <span className={s.zoneText}>{item.floor} · {item.zones.length ? item.zones.map((zone) => `${zone.code} ${zone.name}`).join(', ') : 'Unmapped'}</span>
                   <span>{statusChip(item.status)}</span>
                   <span>{item.installed}</span>
                   <span className={s.strong}>{item.warrantyUntil}</span>

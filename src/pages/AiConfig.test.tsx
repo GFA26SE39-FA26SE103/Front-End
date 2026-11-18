@@ -20,6 +20,8 @@ let multipleFloors: boolean;
 let requests: string[];
 let crowdCatalog: boolean;
 let densityCatalog: boolean;
+let checkoutCatalog: boolean;
+let reviewedAreaM2: number | null;
 let criticalTaskType: string | null;
 const crowdType = { ...type, incidentTypeId: 'crowd', code: 'OVERCROWDING_CONGESTION', name: 'Overcrowding / Congestion', measurementType: 'PEOPLE_COUNT', supported: true, thresholdUnit: 'PEOPLE', defaultWarningThreshold: 3, defaultCriticalThreshold: 5, unsupportedReason: null, measurementOptions: [{ mode: 'PEOPLE_COUNT', unit: 'PEOPLE', supported: true, reason: null }] };
 function HistoryBack() { const navigate = useNavigate(); return <button onClick={() => navigate(-1)}>Browser back</button>; }
@@ -31,7 +33,7 @@ async function saveRule() { chooseRule(); fireEvent.click(screen.getByRole('butt
 describe('API-backed monitoring configuration', () => {
   beforeEach(() => {
     failDelete = false;
-    config = null; writes = []; requests = []; failSave = false; ready = true; failLoad = false; multipleFloors = false; crowdCatalog = false; densityCatalog = false; criticalTaskType = null;
+    config = null; writes = []; requests = []; failSave = false; ready = true; failLoad = false; multipleFloors = false; crowdCatalog = false; densityCatalog = false; checkoutCatalog = false; reviewedAreaM2 = null; criticalTaskType = null;
     URL.createObjectURL = vi.fn(() => 'blob:zone-confidence'); URL.revokeObjectURL = vi.fn();
     saveSession({ accessToken: 'admin-token', expiresAt: '2099-01-01T00:00:00Z', user: { userId: 'admin', email: 'admin@example.test', fullName: 'Admin', roleId: 'role', role: 'ADMIN', status: 'ACTIVE' } }, true);
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -44,6 +46,10 @@ describe('API-backed monitoring configuration', () => {
       }
       if (path === '/api/floors/floor-1/zones') return json([zone]);
       if (path === '/api/floors/floor-2/zones') return json([{ ...zone, zoneId: 'zone-2', floorId: 'floor-2', name: 'Fresh food zone', code: 'FOOD' }]);
+      if (path === '/api/incident-types' && checkoutCatalog) return json([type,
+        { ...type, incidentTypeId: 'checkout', code: 'CHECKOUT_CAPACITY_ISSUE', name: 'Checkout Capacity Issue', measurementType: 'CHECKOUT_CAPACITY', supported: false },
+        { ...type, incidentTypeId: 'wait', code: 'EXCESSIVE_WAITING_TIME', name: 'Excessive Waiting Time', measurementType: 'WAITING_TIME', supported: false },
+      ]);
       if (path === '/api/incident-types') return json(densityCatalog
         ? [{ ...crowdType, measurementOptions: [...crowdType.measurementOptions,
           { mode: 'CROWD_DENSITY', unit: 'PEOPLE_PER_M2', supported: true, reason: null, defaultWarning: 2, defaultCritical: 3 }] }]
@@ -61,7 +67,7 @@ describe('API-backed monitoring configuration', () => {
       if (path.endsWith('/ai-preview/start') || path.endsWith('/ai-preview/status')) return json({ cameraId: 'camera-1', state: 'LIVE', frameSequence: 1, viewerLeaseId: '00000000-0000-0000-0000-000000000099' });
       if (path.endsWith('/ai-preview/stop')) return json({ cameraId: 'camera-1', state: 'STOPPED', frameSequence: 0 });
       if (path.endsWith('/ai-preview/frame/next')) return new Response('jpeg', { headers: { 'Content-Type': 'image/jpeg', 'X-Frame-Sequence': '1', 'X-Session-Id': '00000000-0000-0000-0000-000000000001' } });
-      if (path.endsWith('/review')) return json({ configuration: config, zone, cameras: [{ cameraId: 'camera-1', code: 'CAM-01', name: 'Phone', status: 'ACTIVE', mappingStatus: 'ACTIVE', roiPolygon: zone.mapPolygon, sourceType: 'RECORDED', protocol: 'FILE', isEnabled: true, lastTestResult: 'SUCCESS', lastTestedAt: '2026-10-03T00:00:00Z', ready: true, issues: [] }], issues: ready ? [] : [{ code: 'ROI_INVALID', message: 'Fix camera ROI before activation.' }], warnings: [], canActivate: ready });
+      if (path.endsWith('/review')) return json({ configuration: config, zone: { ...zone, areaM2: reviewedAreaM2 }, cameras: [{ cameraId: 'camera-1', code: 'CAM-01', name: 'Phone', status: 'ACTIVE', mappingStatus: 'ACTIVE', roiPolygon: zone.mapPolygon, sourceType: 'RECORDED', protocol: 'FILE', isEnabled: true, lastTestResult: 'SUCCESS', lastTestedAt: '2026-10-03T00:00:00Z', ready: true, issues: [] }], issues: ready ? [] : [{ code: 'ROI_INVALID', message: 'Fix camera ROI before activation.' }], warnings: [], canActivate: ready });
       if (path.endsWith('/activate')) { config = { ...config, status: 'ACTIVE' }; return json(config); }
       if (path.endsWith('/deactivate')) { config = { ...config, status: 'INACTIVE' }; return json(config); }
       if (path.endsWith('/monitoring')) {
@@ -108,26 +114,23 @@ describe('API-backed monitoring configuration', () => {
     expect(await within(review).findByText(/Create TT-01/)).toBeInTheDocument();
   });
 
-  it('adds Congestion directly as People Count with fresh thresholds', async () => {
+  it('offers no Congestion rule when the catalogue only supports people count', async () => {
     crowdCatalog = true;
     await create();
     const selector = screen.getByLabelText('Add a rule');
-    expect(selector).toHaveValue('');
-    chooseRule('crowd');
-    expect(selector).toHaveValue('');
     expect(selector).toBeDisabled();
+    expect(within(selector).queryByRole('option', { name: /Congestion/ })).not.toBeInTheDocument();
     expect(writes).toHaveLength(0);
-    const warning = screen.getByLabelText('Overcrowding / Congestion warning');
-    expect(warning).toHaveValue(3);
-    expect(warning).not.toHaveAttribute('aria-invalid');
-    expect(screen.queryByRole('button', { name: 'Use people count (temporary)' })).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Overcrowding / Congestion critical')).toHaveValue(5);
-    fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
-    await screen.findByText('Configuration saved as Draft. Review it before activating.');
-    expect(writes[0].body.rules).toEqual([expect.objectContaining({
-      enabled: true, thresholdUnit: 'PEOPLE', warningThreshold: 3, criticalThreshold: 5,
-      parametersJson: null,
-    })]);
+  });
+
+  it('excludes unavailable checkout and waiting rules from the add picker', async () => {
+    checkoutCatalog = true;
+    await create();
+    const picker = screen.getByLabelText('Add a rule');
+    expect(within(picker).getByRole('option', { name: 'Long Queue' })).toBeInTheDocument();
+    expect(within(picker).queryByRole('option', { name: /Checkout Capacity|Excessive Waiting/ })).not.toBeInTheDocument();
+    chooseRule('checkout');
+    expect(screen.queryByLabelText('Checkout Capacity Issue warning')).not.toBeInTheDocument();
   });
 
   it('opens an overview grouped by real floors with saved rules and no edit form', async () => {
@@ -148,6 +151,7 @@ describe('API-backed monitoring configuration', () => {
   it('saves an explicitly selected density rule with fractional thresholds and a clear duration', async () => {
     densityCatalog = true;
     await create();
+    expect(within(screen.getByLabelText('Add a rule')).getAllByRole('option', { name: /Congestion/ })).toHaveLength(1);
     chooseRule('crowd:CROWD_DENSITY');
     const label = 'Overcrowding / Congestion';
     expect(screen.getByLabelText(label + ' unit')).toHaveValue('people/m²');
@@ -161,6 +165,14 @@ describe('API-backed monitoring configuration', () => {
     expect(writes[0].body.rules).toEqual([expect.objectContaining({
       enabled: true, thresholdUnit: 'PEOPLE_PER_M2', warningThreshold: 0.60, criticalThreshold: 1.00, clearDurationSec: 5,
     })]);
+    expect(screen.getByText('Needs zone area')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Set zone area in Store layout' })).toHaveAttribute('href', '/admin/store-layout?floorId=floor-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Review configuration' }));
+    expect(await screen.findByRole('button', { name: 'Activate configuration' })).toBeDisabled();
+    reviewedAreaM2 = 20;
+    fireEvent.click(screen.getByRole('button', { name: 'Review configuration' }));
+    expect(await screen.findByRole('button', { name: 'Activate configuration' })).toBeEnabled();
+    expect(screen.queryByText('Needs zone area')).not.toBeInTheDocument();
   });
 
   it('shows a legacy density rule as unsupported instead of converting it implicitly', async () => {
@@ -176,13 +188,15 @@ describe('API-backed monitoring configuration', () => {
     expect(writes).toHaveLength(0);
   });
 
-  it('does not expose a legacy density conversion control', async () => {
-    crowdCatalog = true;
-    config = { ...savedConfig(), rules: [{ ...savedConfig().rules[0], incidentTypeId: 'crowd', incidentCode: crowdType.code, thresholdUnit: 'PEOPLE_PER_M2', parametersJson: '[1]' }] };
+  it('keeps the measurement and thresholds of a previously saved people-count rule', async () => {
+    densityCatalog = true;
+    config = { ...savedConfig(), rules: [{ ...savedConfig().rules[0], incidentTypeId: 'crowd', incidentCode: crowdType.code }] };
     show(); fireEvent.click(await screen.findByRole('button', { name: 'Edit configuration' }));
-    expect(screen.queryByRole('button', { name: /Use people count/i })).not.toBeInTheDocument();
+    expect(screen.getByText('Legacy people count')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Overcrowding / Congestion measurement')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Overcrowding / Congestion unit')).toHaveValue('people');
+    expect(screen.getByLabelText('Overcrowding / Congestion warning')).toHaveValue(3);
     expect(writes).toHaveLength(0);
-    expect(screen.getByLabelText('Overcrowding / Congestion unit')).toHaveValue('PEOPLE_PER_M2');
   });
 
   it('cancels deletion without writing, then deletes the displayed saved version and updates the overview', async () => {
@@ -258,7 +272,15 @@ describe('API-backed monitoring configuration', () => {
 
   it('rejects removing the last rule and Cancel preserves the saved rules', async () => {
     config = savedConfig(); show(); fireEvent.click(await screen.findByRole('button', { name: 'Edit configuration' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Remove Long Queue' }));
+    const remove = screen.getByRole('button', { name: 'Remove Long Queue' });
+    fireEvent.click(remove);
+    let dialog = screen.getByRole('dialog', { name: 'Remove monitoring rule?' });
+    expect(dialog).toHaveTextContent('Saving the configuration applies the removal');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(remove).toBeInTheDocument();
+    fireEvent.click(remove);
+    dialog = screen.getByRole('dialog', { name: 'Remove monitoring rule?' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove rule' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save configuration' })); expect(writes).toHaveLength(0);
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.getByRole('table')).toHaveTextContent('Long Queue');

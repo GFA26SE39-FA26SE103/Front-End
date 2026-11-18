@@ -22,6 +22,7 @@ describe('Response policy administration', () => {
   let failSave: boolean;
   let loadCount: number;
   let failCatalog: boolean;
+  let eventCode: string;
 
   beforeEach(() => {
     requests = [];
@@ -30,6 +31,7 @@ describe('Response policy administration', () => {
     failSave = false;
     loadCount = 0;
     failCatalog = false;
+    eventCode = 'LONG_QUEUE';
     saveSession({ accessToken: 'admin-token', expiresAt: '2099-01-01T00:00:00Z', user: { userId: 'admin', email: 'admin@example.test', fullName: 'Admin', roleId: 'role-admin', role: 'ADMIN', status: 'ACTIVE' } }, true);
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const path = new URL(String(input)).pathname;
@@ -38,8 +40,10 @@ describe('Response policy administration', () => {
       requests.push({ path, method, body });
       if (path === '/api/task-types') return failCatalog ? json({ detail: 'Catalog unavailable.' }, 503) : json([
         { taskTypeId: 'type-1', code: 'TT-01', name: 'Queue assistance', description: 'Help customers move through the checkout queue.', requiredSpecialtyId: 'checkout' },
+        { taskTypeId: 'type-3', code: 'TT-03', name: 'Redirect customer flow', description: null, requiredSpecialtyId: 'floor' },
         { taskTypeId: 'type-4', code: 'TT-04', name: 'Congestion assistance', description: null, requiredSpecialtyId: 'floor' },
       ]);
+      if (path === '/api/operational-event-types/sla-policies') return json([{ code: eventCode, policy: { policyId } }]);
       if (method === 'GET') {
         loadCount += 1;
         if (failFirstLoad && loadCount === 1) return json({ code: 'POLICY_LOAD_FAILED', detail: 'Response policies are temporarily unavailable.' }, 503);
@@ -67,6 +71,7 @@ describe('Response policy administration', () => {
   }
 
   it('loads both priority slots and saves a missing critical policy through the versioned contract', async () => {
+    eventCode = 'CONGESTION';
     show();
     const warningGroup = await screen.findByRole('group', { name: 'WARNING policy' });
     expect(screen.getByRole('link', { name: /Back to AI configuration/ })).toHaveAttribute('href', '/admin/ai-config');
@@ -76,6 +81,8 @@ describe('Response policy administration', () => {
 
     const critical = screen.getByRole('group', { name: 'CRITICAL policy' });
     await within(critical).findByRole('option', { name: 'TT-04 — Congestion assistance' });
+    expect(within(critical).getByRole('option', { name: 'TT-03 — Redirect customer flow' })).toBeInTheDocument();
+    expect(within(critical).queryByRole('option', { name: /TT-01/ })).not.toBeInTheDocument();
     expect(within(critical).getByText('Not configured')).toBeInTheDocument();
     fireEvent.change(within(critical).getByLabelText('Task type (required when enabled)'), { target: { value: 'TT-04' } });
     expect(within(critical).queryByRole('textbox')).not.toBeInTheDocument();
@@ -108,6 +115,7 @@ describe('Response policy administration', () => {
     await screen.findByText('Warning notification saved.');
     const critical = screen.getByRole('group', { name: 'CRITICAL policy' });
     await within(critical).findByRole('option', { name: 'TT-01 — Queue assistance' });
+    expect(within(critical).getByRole('option', { name: 'TT-04 — Saved, unavailable for this event' })).toBeDisabled();
     fireEvent.change(within(critical).getByLabelText('Task type (required when enabled)'), { target: { value: 'TT-01' } });
     fireEvent.click(within(critical).getByRole('button', { name: 'Save critical task dispatch' }));
     await screen.findByText('Critical task dispatch saved.');

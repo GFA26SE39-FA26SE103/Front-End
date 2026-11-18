@@ -87,4 +87,10 @@ describe('SLA policy administration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create SLA policy' }));
     await waitFor(() => expect(saveTaskTypeSlaPolicy).toHaveBeenCalledWith('task-type-1', expect.objectContaining({ expectedVersion: null, priorityCode: 'HIGH' })));
   });
+
+  it('opens the Incident types tab from a catalogue link', async () => {
+    render(<MemoryRouter initialEntries={['/admin/sla-policies?scope=incident']}><SlaPolicies /></MemoryRouter>);
+    expect(screen.getByRole('tab', { name: 'Incident types', selected: true })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Incident types' })).toBeInTheDocument();
+  });
 });

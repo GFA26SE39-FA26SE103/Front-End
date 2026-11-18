@@ -10,7 +10,7 @@ vi.mock('../api/monitoring', () => ({
   listIncidentTypes: vi.fn(),
   updateIncidentType: vi.fn(),
 }));
-vi.mock('../api/slaPolicies', () => ({ listSlaPolicies: vi.fn(), saveSlaPolicy: vi.fn() }));
+vi.mock('../api/slaPolicies', () => ({ listSlaPolicies: vi.fn() }));
 
 const type: IncidentType = {
   incidentTypeId: 'checkout', code: 'CHECKOUT_CAPACITY_ISSUE', name: 'Checkout Capacity Issue',
@@ -49,4 +49,18 @@ it('shows the API error and retains the saved status when the update fails', asy
   expect(await screen.findByRole('alert')).toHaveTextContent('Status update failed.');
   expect(checkbox).toBeChecked();
   expect(checkbox).toBeEnabled();
+});
+
+it('routes the camera event and missing staff incident policy to their own SLA tabs', async () => {
+  vi.mocked(listIncidentTypes).mockResolvedValue([type, {
+    ...type, incidentTypeId: 'other', name: 'Other Operational Issue', code: 'OTHER_OPERATIONAL_ISSUE', sourceType: 'STAFF_REPORTED', measurementType: null,
+  }]);
+  render(<MemoryRouter><IncidentTypes /></MemoryRouter>);
+
+  expect(await screen.findByRole('link', { name: 'Operational event SLA' })).toHaveAttribute('href', '/admin/sla-policies?scope=event');
+  expect(screen.getByText('AI-detected')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Missing incident SLA for Other Operational Issue' })).toHaveAttribute('href', '/admin/sla-policies?scope=incident');
+  fireEvent.click(screen.getByRole('button', { name: /Other Operational Issue/i }));
+  expect(screen.getByRole('button', { name: 'Back to new incident type' })).toBeInTheDocument();
+  expect(screen.queryByLabelText('Priority')).not.toBeInTheDocument();
 });

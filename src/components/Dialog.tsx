@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import s from './Dialog.module.css';
 
-export function Dialog({ title, busy, onClose, children }: { title: string; busy: boolean; onClose: () => void; children: ReactNode }) {
+export function Dialog({ title, busy, onClose, children, className }: { title: string; busy: boolean; onClose: () => void; children: ReactNode; className?: string }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   useEffect(() => {
@@ -14,7 +14,7 @@ export function Dialog({ title, busy, onClose, children }: { title: string; busy
       if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
     };
   }, []);
-  return <dialog ref={ref} className={s.dialog} aria-labelledby={titleId} onCancel={event => {
+  return <dialog ref={ref} className={className ? `${s.dialog} ${className}` : s.dialog} aria-labelledby={titleId} onCancel={event => {
     event.preventDefault();
     if (!busy) onClose();
   }}>

@@ -1,10 +1,13 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { mockNativeDialogs } from '../test/dialog';
 import { CameraRegistration } from './CameraRegistration';
 
 const floorId = '20000000-0000-0000-0000-000000000001';
 const cameraId = '30000000-0000-0000-0000-000000000001';
+
+mockNativeDialogs();
 
 describe('CameraRegistration recovery', () => {
   it('retries only connection configuration when camera creation already succeeded', async () => {
@@ -27,6 +30,7 @@ describe('CameraRegistration recovery', () => {
     const registered = vi.fn();
     const user = userEvent.setup();
     render(<CameraRegistration floors={[{ id: floorId, key: 'F1', label: 'Ground floor' }]} onCancel={() => undefined} onRegistered={registered} />);
+    expect(screen.getByRole('dialog', { name: 'Add camera' })).toBeInTheDocument();
 
     await user.type(screen.getByLabelText('Camera code'), 'CAM-PHONE');
     await user.type(screen.getByLabelText('Stream URL'), 'http://camera/video');
@@ -34,6 +38,7 @@ describe('CameraRegistration recovery', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Camera exists, but its connection was not saved.');
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Close dialog' })).toBeDisabled();
     expect(screen.getByLabelText('Camera code')).toBeDisabled();
     await user.click(screen.getByRole('button', { name: 'Retry connection' }));
 

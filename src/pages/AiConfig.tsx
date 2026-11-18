@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { AdminLayout } from '../components/AdminLayout';
 import { AnnotatedPreview } from '../components/AnnotatedPreview';
 import { Dialog } from '../components/Dialog';
@@ -84,16 +84,12 @@ async function loadConfig(zoneId: string, signal?: AbortSignal) {
   catch (e) { if (e instanceof ApiError && e.status === 404) return null; throw e; }
 }
 const statusTone = (status: string | undefined): Tone => status === 'ACTIVE' ? 'success' : status === 'DRAFT' ? 'warning' : 'neutral';
-const ruleName = (rule: MonitoringRule, types: IncidentType[]) => rule.incidentName ?? types.find(t => t.incidentTypeId === rule.incidentTypeId)?.name ?? 'Unknown operational event type';
+const ruleName = (rule: Pick<MonitoringRule, 'incidentName' | 'incidentTypeId'>, types: IncidentType[]) => rule.incidentName ?? types.find(t => t.incidentTypeId === rule.incidentTypeId)?.name ?? 'Unknown operational event type';
 const ruleMode = (rule: Pick<MonitoringRule, 'incidentTypeId' | 'incidentCode' | 'thresholdUnit' | 'parametersJson'>, types: IncidentType[]) => measurementMode({ ...rule, incidentCode: rule.incidentCode ?? types.find(t => t.incidentTypeId === rule.incidentTypeId)?.code });
 const formatTime = (value: string) => { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString(); };
 
 const units: Record<string, string> = { PEOPLE: 'people', MINUTES: 'minutes', PEOPLE_PER_M2: 'people/m²' };
 const unitName = (unit: string) => units[unit] ?? unit;
-const congestionOptions = (type?: IncidentType) => type?.measurementOptions?.filter(option =>
-  option.supported && (option.mode === 'PEOPLE_COUNT' || option.mode === 'CROWD_DENSITY')) ?? [];
-const congestionLabel = (option: MeasurementOption) => option.mode === 'CROWD_DENSITY'
-  ? 'Crowd density (people/m²)' : 'People currently in ROI';
 
 function responseLabel(summary: PolicySummary, level: PolicyPriority) {
   if (summary === undefined) return 'Checking policy…';
@@ -216,6 +212,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   const [policies, setPolicies] = useState<Record<string, PolicySummary>>({});
   const [policyRevision, setPolicyRevision] = useState(0);
   const [review, setReview] = useState<MonitoringReview | null>(null);
+  const [reviewedAreaM2, setReviewedAreaM2] = useState<number | null>();
   const [previewCameraId, setPreviewCameraId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -226,6 +223,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   const [notice, setNotice] = useState('');
   const [loadFailed, setLoadFailed] = useState(false);
   const [deleting, setDeleting] = useState<MonitoringConfiguration | null>(null);
+  const [ruleToRemove, setRuleToRemove] = useState<RuleInput | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const mounted = useRef(true);
   const typeSelect = useRef<HTMLSelectElement>(null);
@@ -270,15 +268,18 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   const active = config?.status === 'ACTIVE';
   const showForm = editing && !active && !loadFailed;
   const locked = loading || busy || active;
+  const areaM2 = reviewedAreaM2 === undefined ? zone.areaM2 : reviewedAreaM2;
+  const hasMeasuredArea = areaM2 != null && areaM2 >= 0.01 && areaM2 <= 9999999999.99;
+  const needsZoneArea = (rule: MonitoringRule) => rule.enabled && !hasMeasuredArea && ruleMode(rule, types) === 'CROWD_DENSITY';
+  const densityBlocked = config?.rules.some(needsZoneArea) ?? false;
   const available = types.filter(t => t.status === 'ACTIVE' && !rules.some(r => r.incidentTypeId === t.incidentTypeId));
   const ruleChoices = available.flatMap<{ value: string; label: string; type: IncidentType; measurement?: MeasurementOption }>(type => {
-    const measurements = congestionOptions(type);
-    if (measurements.length) return measurements.map(measurement => ({
-      value: measurement.mode === 'PEOPLE_COUNT' ? type.incidentTypeId : `${type.incidentTypeId}:${measurement.mode}`,
-      label: `${type.name} · ${congestionLabel(measurement)}`, type, measurement,
-    }));
+    if (type.code === 'OVERCROWDING_CONGESTION' || type.code === 'CONGESTION') {
+      const measurement = type.measurementOptions?.find(option => option.mode === 'CROWD_DENSITY' && option.supported);
+      return measurement ? [{ value: `${type.incidentTypeId}:CROWD_DENSITY`, label: `${type.name} · Crowd density (people/m²)`, type, measurement }] : [];
+    }
     const supported = type.supported && type.measurementType === 'QUEUE_LENGTH';
-    return [{ value: type.incidentTypeId, label: supported ? type.name : `${type.name} (cannot be enabled here)`, type }];
+    return supported ? [{ value: type.incidentTypeId, label: type.name, type }] : [];
   });
   const policyRule = !showForm && !loading && !loadFailed && config?.rules.find(rule => rule.ruleId === policyRuleId);
   const refreshPolicies = () => { setPolicies({}); setPolicyRevision(value => value + 1); };
@@ -293,6 +294,13 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   }
   const touch = () => { setDirty(true); setReview(null); setPreviewCameraId(null); setNotice(''); setError(''); };
   const changeRule = (id: string, patch: Partial<RuleInput>) => { setRules(all => all.map(r => r.incidentTypeId === id ? { ...r, ...patch } : r)); touch(); };
+  const confirmRemoveRule = () => {
+    if (!ruleToRemove) return;
+    setRules(all => all.filter(rule => rule.incidentTypeId !== ruleToRemove.incidentTypeId));
+    setRuleToRemove(null);
+    touch();
+    requestAnimationFrame(() => typeSelect.current?.focus());
+  };
   const apply = (saved: MonitoringConfiguration) => { setConfig(saved); setPolicies({}); fillForm(saved); setPreviewCameraId(null); onChanged(saved); };
   const confirmDiscard = (text: string) => !dirty || window.confirm(text);
   const reloadSaved = () => {
@@ -342,10 +350,21 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   }
   async function changeActive(value: boolean) {
     const version = value ? review?.configuration.updatedAt : config?.updatedAt;
-    if (!version || (value && (!review?.canActivate || dirty))) return;
+    if (!version || (value && (!review?.canActivate || dirty || densityBlocked))) return;
     await operation(async () => {
       const saved = await setMonitoringActive(zoneId, value, version);
       if (mounted.current) { apply(saved); setReview(null); setNotice(value ? 'Configuration activated. Monitoring worker requested; check live monitoring status to confirm it is running.' : 'Monitoring deactivated. Edit and save a new Draft before reactivation.'); }
+    });
+  }
+  async function reviewConfiguration() {
+    setReview(null);
+    await operation(async () => {
+      const result = await reviewMonitoring(zoneId);
+      if (!mounted.current) return;
+      apply(result.configuration);
+      setReviewedAreaM2(result.zone.areaM2 ?? null);
+      setReview(result);
+      requestAnimationFrame(() => document.getElementById('configuration-review')?.scrollIntoView?.({ block: 'start', behavior: 'smooth' }));
     });
   }
   async function removeConfiguration() {
@@ -407,9 +426,10 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
           </dl>
           <div className={s.activation}>
             <div><h3>{active ? 'Configuration activated' : 'Configuration activation'}</h3><p>{active ? 'Deactivate before editing or deleting this configuration.' : 'Saving creates a Draft. Review the saved camera, ROI and rules, then activate this configuration.'}</p></div>
-            {!active && <Button disabled={busy} onClick={() => { setReview(null); void operation(async () => { const result = await reviewMonitoring(zoneId); if (mounted.current) { apply(result.configuration); setReview(result); requestAnimationFrame(() => document.getElementById('configuration-review')?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })); } }); }}>Review &amp; activate</Button>}
+            {!active && <Button disabled={busy} onClick={() => void reviewConfiguration()}>{densityBlocked ? 'Review configuration' : 'Review & activate'}</Button>}
             {active && <Button variant="secondary" disabled={busy} onClick={() => void changeActive(false)}>Deactivate configuration</Button>}
           </div>
+          {densityBlocked && <p className={s.missingBox}>Crowd density needs a measured zone area before activation. <Link to={`/admin/store-layout?floorId=${encodeURIComponent(zone.floorId)}`}>Set zone area in Store layout</Link>.</p>}
           <h3 className={s.section}>Operational event rules</h3>
           {config.rules.length ? <div className={s.ruleTable} role="table" aria-label="Operational event rules">
             <div role="row" className={s.ruleHeadRow}><span role="columnheader">Operational event type</span><span role="columnheader">Warning</span><span role="columnheader">Critical</span><span role="columnheader">Sustain</span><span role="columnheader">Cooldown</span><span role="columnheader">Rule setting</span><span role="columnheader">Response</span></div>
@@ -419,7 +439,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
               <span role="cell">{band(r.criticalThreshold, r.criticalExitThreshold, unitName(r.thresholdUnit))}</span>
               <span role="cell">{r.sustainSec}s</span>
               <span role="cell">{r.cooldownSec}s</span>
-              <span role="cell"><Chip tone={r.enabled && active ? 'success' : 'neutral'}>{r.enabled ? active ? 'Enabled' : 'Enabled when active' : 'Disabled'}</Chip></span>
+              <span role="cell"><Chip tone={needsZoneArea(r) ? 'warning' : r.enabled && active ? 'success' : 'neutral'}>{needsZoneArea(r) ? 'Needs zone area' : r.enabled ? active ? 'Enabled' : 'Enabled when active' : 'Disabled'}</Chip></span>
               <div role="cell">{r.ruleId && <>
                 <RuleResponses summary={policies[r.ruleId]} />
                 <button type="button" className={s.responsePolicyLink} disabled={busy} aria-expanded={policyRuleId === r.ruleId}
@@ -451,7 +471,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
         <h3 className={s.section}>Operational event rules <span className={s.required}>Required</span></h3>
         <div className={`${s.addRule} ${rulesMissing ? s.addRuleMissing : ''}`}>
           <label className={s.field}>Add a rule<select ref={typeSelect} aria-label="Add a rule" aria-invalid={rulesMissing || undefined} disabled={locked || !ruleChoices.length} value="" onChange={e => addRule(e.target.value)}>
-            <option value="" disabled>{ruleChoices.length ? 'Choose a rule to add…' : 'All available rules have been added'}</option>
+            <option value="" disabled>{ruleChoices.length ? 'Choose a rule to add…' : 'No more rules available'}</option>
             {ruleChoices.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select></label>
         </div>
@@ -461,27 +481,13 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
           const label = t?.name ?? r.incidentName ?? 'Unknown operational event type';
           const mode = ruleMode(r, types);
           const { errors } = validateThresholds(r);
-          const measurements = congestionOptions(t);
-          const supported = measurements.some(option => option.mode === mode) || (!!t?.supported && mode === 'QUEUE_LENGTH');
+          const supported = t?.measurementOptions?.some(option => option.mode === mode && option.supported) || (!!t?.supported && mode === 'QUEUE_LENGTH');
           return <section key={r.incidentTypeId} className={s.rule}>
-            <div className={s.head}><h3>{label}</h3><Button variant="secondary" disabled={locked} onClick={() => { setRules(all => all.filter(x => x.incidentTypeId !== r.incidentTypeId)); touch(); }}>Remove {label}</Button></div>
+            <div className={s.head}><h3>{label}</h3><Button variant="secondary" className={s.deleteButton} disabled={locked} onClick={() => setRuleToRemove(r)}>Remove {label}</Button></div>
             <p className={s.help}>{modeLabel(supported ? mode : 'UNSUPPORTED')}</p>
-            {measurements.length > 1 && <label className={s.field}>Measurement
-              <select aria-label={label + ' measurement'} disabled={locked} value={r.thresholdUnit} onChange={e => {
-                const choice = measurements.find(option => option.unit === e.target.value);
-                if (!choice) return;
-                changeRule(r.incidentTypeId, {
-                  thresholdUnit: choice.unit, warningThreshold: String(choice.defaultWarning ?? ''),
-                  criticalThreshold: String(choice.defaultCritical ?? ''), warningExitThreshold: '', criticalExitThreshold: '',
-                  clearDurationSec: r.clearDurationSec || (choice.mode === 'CROWD_DENSITY' ? '60' : ''),
-                });
-              }}>
-                {!measurements.some(option => option.unit === r.thresholdUnit) && <option value={r.thresholdUnit} disabled>Unsupported measurement</option>}
-                {measurements.map(option => <option key={option.mode} value={option.unit}>{congestionLabel(option)}</option>)}
-              </select>
-            </label>}
-            {mode === 'CROWD_DENSITY' && supported && <p className={s.help}>
-              {zone.areaM2 != null && zone.areaM2 > 0 ? `Measured zone area: ${zone.areaM2} m².` : 'Enter the measured zone area in Store layout before activation.'}
+            {mode === 'PEOPLE_COUNT' && <p className={s.help}>This saved rule uses people count. To switch to density, remove it and add a Crowd density rule.</p>}
+            {mode === 'CROWD_DENSITY' && supported && <p className={hasMeasuredArea || !r.enabled ? s.help : s.missingBox}>
+              {hasMeasuredArea ? `Measured zone area: ${areaM2} m².` : 'You can save this rule as a Draft. Enter the measured zone area in Store layout before activation.'}
               {' '}Use one active ROI covering that floor area.
             </p>}
             {!supported && <p className={s.help}>You can save this rule with Enabled off. This editor cannot enable the selected measurement mode.</p>}
@@ -564,12 +570,20 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       <ul>{review.issues.map((i, n) => <li key={n} className={s.error}><strong>{i.code}: </strong><span>{i.message}</span></li>)}</ul>
       {review.warnings.map(w => <p key={w} className={s.help}>{w}</p>)}
       <p className={s.help}>A camera shared by multiple Zones cannot test Draft confidence while any mapped Zone still has active monitoring. Deactivate every active configuration using the camera, then retry. Boxes use an annotation context; ROI counts can differ between Zones with different confidence filters.</p>
-      <Button disabled={busy || dirty || active || !review.canActivate} onClick={() => void changeActive(true)}>Activate configuration</Button>
+      <Button disabled={busy || dirty || active || !review.canActivate || densityBlocked} onClick={() => void changeActive(true)}>Activate configuration</Button>
       <p className={s.help}>The backend rechecks the source, mapping, ROI and rules at activation, then measures active rules continuously. A ready Response Policy can automatically offer each new Operational Event Task to eligible Staff.</p>
     </section>}
+    {showForm && ruleToRemove && <Dialog title="Remove monitoring rule?" busy={false} onClose={() => setRuleToRemove(null)}>
+      <p className={s.alertBox}><span><strong>{ruleName(ruleToRemove, types)}</strong> will be removed from this draft. Saving the configuration applies the removal to this zone.</span></p>
+      {rules.length === 1 && <p className={s.help}>Add another rule before saving.</p>}
+      <div className={s.actions}>
+        <Button variant="secondary" data-autofocus onClick={() => setRuleToRemove(null)}>Cancel</Button>
+        <Button className={s.confirmDelete} onClick={confirmRemoveRule}>Remove rule</Button>
+      </div>
+    </Dialog>}
     {deleting && <Dialog title="Delete AI configuration?" busy={busy} onClose={() => { setDeleting(null); setError(''); }}>
       <p className={s.help}>Delete <strong>{deleting.name}</strong> for <strong>{zone.name}</strong> on {floorName}?</p>
-      <p className={s.help}>This permanently removes the configuration and its operational event rules. The zone, cameras and ROI mappings are kept.</p>
+      <p className={s.alertBox}>This permanently removes the configuration and its operational event rules. The zone, cameras and ROI mappings are kept.</p>
       {error && <p className={s.alertBox} role="alert">{error}</p>}
       <div className={s.actions}><Button variant="secondary" data-autofocus disabled={busy} onClick={() => { setDeleting(null); setError(''); }}>Cancel</Button><Button className={s.confirmDelete} disabled={busy} onClick={() => void removeConfiguration()}>{busy ? 'Deleting…' : 'Delete configuration'}</Button></div>
     </Dialog>}
@@ -581,7 +595,9 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
           <p className={s.sub}>{ruleName(policyRule, types)} · {zone.name}</p></div>
         <Button variant="secondary" onClick={closePolicy}>Close</Button>
       </div>
-      <ResponsePolicyEditor key={policyRule.ruleId} ruleId={policyRule.ruleId} compact onSaved={refreshPolicies} />
+      <ResponsePolicyEditor key={policyRule.ruleId} ruleId={policyRule.ruleId}
+        eventCode={policyRule.incidentCode ?? types.find(type => type.incidentTypeId === policyRule.incidentTypeId)?.code}
+        compact onSaved={refreshPolicies} />
     </aside>}
   </div>;
 }

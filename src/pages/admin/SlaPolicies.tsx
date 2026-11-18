@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import { listStaffSpecialties } from '../../api/accounts';
 import { listIncidentTypes } from '../../api/monitoring';
@@ -78,7 +79,8 @@ function save(scope: Scope, id: string, body: SlaTimingSave) {
 }
 
 export default function SlaPolicies() {
-  const [scope, setScope] = useState<Scope>('EVENT');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const scope = scopes.find(tab => tab.id.toLowerCase() === searchParams.get('scope'))?.id ?? 'EVENT';
   const [rows, setRows] = useState<Record<Scope, Row[]>>();
   const [selected, setSelected] = useState<string>();
   const [draft, setDraft] = useState<Draft>(emptyDraft);
@@ -100,7 +102,13 @@ export default function SlaPolicies() {
   const chosen = visible.find(row => row.id === selected);
 
   function choose(row: Row) { setSelected(row.id); setDraft(toDraft(row.policy)); setError(''); setNotice(''); }
-  function switchScope(next: Scope) { setScope(next); setSelected(undefined); setError(''); setNotice(''); }
+  function switchScope(next: Scope) {
+    setSearchParams(current => {
+      current.set('scope', next.toLowerCase());
+      return current;
+    }, { replace: true });
+    setSelected(undefined); setError(''); setNotice('');
+  }
 
   async function submit() {
     if (!chosen) return;
