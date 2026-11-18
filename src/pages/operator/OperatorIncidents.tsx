@@ -21,9 +21,9 @@ export default function OperatorIncidents() {
   const load = useCallback((signal: AbortSignal) => listIncidents(state, signal), [state]);
   const { data: incidents, error, checkedAt, refresh } = useTaskPolling(load, !!target);
   const canDismiss = loadSession()?.user.role === 'OPERATOR';
-  return <OperatorLayout title="Incidents" subtitle="Confirmed incidents, corrective tasks, mitigation and closure">
+  return <OperatorLayout title="Incidents">
     <div className={s.page}>
-      <div className={s.heading}><div><h2>Incidents</h2><p className={s.muted}>An incident closes automatically when every mandatory task is verified. Mitigation is recorded separately, when the Operator verifies its mitigation task (TT-12 Isolate Hazardous Area).</p></div>
+      <div className={s.heading}><div><h2>Incidents</h2></div>
         <Button variant="secondary" onClick={refresh}>Refresh incidents</Button></div>
       {notice && <p className={s.success} role="status">{notice}</p>}
       <Card>
@@ -69,7 +69,7 @@ function DismissDialog({ incident, onClose, onDone }: { incident: IncidentRow; o
   }
   return <Dialog title="Dismiss incident" busy={busy} onClose={onClose}>
     <div className={s.form}>
-      <p className={s.muted}>{incident.title} · {incident.zoneName}. Dismissed incidents are excluded from incident KPIs; their tasks stay in Staff performance.</p>
+      <p className={s.muted}>{incident.title} · {incident.zoneName}</p>
       <label>Reason (required)<textarea rows={3} maxLength={2000} value={reason} disabled={busy} onChange={event => setReason(event.target.value)} /></label>
       {error && <p className={s.error} role="alert">{error}</p>}
       <div className={s.actions}><Button variant="secondary" disabled={busy} onClick={onClose}>Cancel</Button>

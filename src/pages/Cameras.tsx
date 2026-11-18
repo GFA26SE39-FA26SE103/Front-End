@@ -202,13 +202,6 @@ export default function Cameras() {
     return () => controller.abort();
   }, [selectedCameraId, selectedLifecycleStatus]);
 
-  const counts = {
-    online: cameras.filter((item) => item.status === 'Online').length,
-    offline: cameras.filter((item) => item.status === 'Offline').length,
-    notChecked: cameras.filter((item) => item.status === 'Not checked').length,
-    inactive: cameras.filter((item) => item.status === 'Inactive').length,
-  };
-
   const selectCamera = (cameraId: string) => {
     if (uploadBusy) return;
     setSelectionError('');
@@ -350,10 +343,10 @@ export default function Cameras() {
   };
 
   return (
-    <AdminLayout title="Cameras" subtitle={cameraSummary(cameras.length, counts)}>
+    <AdminLayout title="Cameras">
       <Card className={s.registry}>
         <div className={s.registryHeader}>
-          <CardHeader title="Camera registry" subtitle="Live records loaded from the MF-01 backend" />
+          <CardHeader title="Camera registry" />
           <div className={s.registryFilters}>
             <SearchBox value={query} onChange={setQuery} placeholder="Search camera" width={170} />
             <div className={s.floorFilter}>
@@ -575,16 +568,6 @@ function displayStatus(camera: CameraRecord): CameraDisplayStatus {
   if (camera.healthStatus === 'ONLINE') return 'Online';
   if (camera.healthStatus === 'OFFLINE') return 'Offline';
   return 'Not checked';
-}
-
-function cameraSummary(total: number, counts: { online: number; offline: number; notChecked: number; inactive: number }): string {
-  return [
-    `${total} cameras`,
-    `${counts.online} online`,
-    `${counts.offline} offline`,
-    `${counts.notChecked} not checked`,
-    counts.inactive ? `${counts.inactive} inactive` : '',
-  ].filter(Boolean).join(' · ');
 }
 
 function withoutKey<T>(record: Record<string, T>, key: string): Record<string, T> {

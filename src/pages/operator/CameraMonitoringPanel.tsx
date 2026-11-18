@@ -58,7 +58,7 @@ export function CameraMonitoringPanel({ state, canDismiss = false }: { state: Ca
       <p>{reasonLabel(runtime.errorCode ?? runtime.reason)}</p>
       {runtime.isStale && <p role="status">Last observed measurements are stale, not current.</p>}
       {runtime.state === 'COMPLETED' && <p>Video completed. Deactivate → Activate configuration to replay monitoring.</p>}
-      {runtime.annotationContext && <p className={s.muted}>Boxes: {runtime.annotationContext}. Counts use each zone's own confidence; not every box belongs to every ROI.</p>}
+      {runtime.annotationContext && <p className={s.muted}>Boxes: {runtime.annotationContext}</p>}
       {runtime.sourceElapsedMs !== null && <p className={s.muted}>Source time: {seconds(runtime.sourceElapsedMs)}s · Last observation: {runtime.observedAt ? new Date(runtime.observedAt).toLocaleString() : '—'}</p>}
       {runtime.zones.map(zone => <article key={zone.zoneId} className={s.incident}>
         <div className={s.zoneRow}><strong>{zone.zoneName}</strong><Chip tone={zone.configurationStatus === 'ACTIVE' ? 'success' : 'neutral'}>{zone.configurationStatus}</Chip></div>
@@ -71,7 +71,6 @@ export function CameraMonitoringPanel({ state, canDismiss = false }: { state: Ca
             <p>Crowd density · Metric: {runtime.isStale || runtimeError || rule.metricValue === null ? 'Unavailable' : densityDisplay.format(rule.metricValue) + ' people/m²'}</p>
             {zone.areaM2 != null && <p className={s.muted}>Measured zone area: {zone.areaM2} m²</p>}
           </> : <p>{rule.mode === 'PEOPLE_COUNT' ? 'People count in ROI' : rule.mode === 'QUEUE_LENGTH' ? 'Queue length (5s continuous dwell)' : rule.mode} · Metric: {count(rule.metricValue)} {rule.unit === 'PEOPLE' ? 'people' : rule.unit}</p>}
-          <p className={s.muted}>Activation ranges as the metric (x) rises</p>
           <p>
             <strong>Warning</strong> · {rule.warningThreshold} ≤ x &lt; {rule.criticalThreshold}<br />
             <span className={s.muted}>Leave Warning when x &lt; {rule.warningExitThreshold ?? rule.warningThreshold}</span>

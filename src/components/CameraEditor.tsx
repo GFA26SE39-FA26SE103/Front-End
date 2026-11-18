@@ -68,7 +68,7 @@ export function CameraEditor({ camera, floorLabel, onClose, onSaved }: {
         <label>Installed date<input aria-label="Installed date" type="date" value={installedAt} onChange={event => setInstalledAt(event.target.value)} /></label>
         <label>Warranty expires<input aria-label="Warranty expires" type="date" value={warrantyExpiresAt} onChange={event => setWarrantyExpiresAt(event.target.value)} /></label>
       </fieldset>
-      <p className={s.note}>Floor: <strong>{floorLabel}</strong>. Move the camera and edit its placement from Store layout.</p>
+      <p className={s.note}>Floor: <strong>{floorLabel}</strong></p>
       {error && <p className={s.error} role="alert">{error}</p>}
       <div className={s.actions}><Button variant="secondary" disabled={busy} onClick={onClose}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save camera'}</Button></div>
     </form>

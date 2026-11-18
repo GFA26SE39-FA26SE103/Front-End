@@ -80,7 +80,7 @@ export default function ResponsePolicies() {
   const location = useLocation();
   const context = location.state as { returnTo?: string; eventName?: string; zoneName?: string } | null;
   const returnTo = context?.returnTo ?? '/admin/ai-config';
-  return <AdminLayout title="Event response policies" subtitle="Configure warning notifications and critical task dispatch.">
+  return <AdminLayout title="Event response policies">
     <div className={s.page}>
       <div className={s.toolbar}>
         <Link className={s.back} to={returnTo}>← Back to AI configuration</Link>
@@ -218,7 +218,6 @@ export function ResponsePolicyEditor({ ruleId, eventCode, onSaved, compact = fal
   }
 
   return <div className={`${s.page} ${compact ? s.compact : ''}`}>
-      <p className={s.help}>Changes apply to this event type across all zones. Existing Tasks retain their saved SLA snapshots.</p>
 
       {!ruleId && <div className={s.feedback} role="alert"><p>Open response policies from a monitoring rule.</p></div>}
       {loadError && !loading && <div className={s.feedback} role="alert"><p>{loadError}</p><Button variant="secondary" onClick={retry}>Reload</Button></div>}

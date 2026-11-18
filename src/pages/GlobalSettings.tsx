@@ -55,10 +55,10 @@ export default function GlobalSettings() {
   };
 
   return (
-    <AdminLayout title="Global settings" subtitle="Control notification delivery without disabling operational records">
+    <AdminLayout title="Global settings">
       <div className={s.settingsPage}>
         <Card>
-          <CardHeader title="Notifications" subtitle="Global FCM delivery policy for Staff mobile devices" />
+          <CardHeader title="Notifications" />
           {!saved || !draft ? (
             <div className={s.state}>
               {error ? <><p role="alert">{error}</p><Button variant="secondary" onClick={() => void load()}>Retry</Button></> : <p role="status">Loading notification settings…</p>}

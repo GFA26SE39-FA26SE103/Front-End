@@ -19,7 +19,7 @@ const NAV = [
   { to: '/admin/live-floor-map', label: 'Live floor map', icon: 'layers' },
 ];
 
-export function AdminLayout({ title, subtitle, actions, children }: { title: string; subtitle: string; actions?: ReactNode; children: ReactNode }) {
+export function AdminLayout({ title, subtitle, actions, children }: { title: string; subtitle?: string; actions?: ReactNode; children: ReactNode }) {
   const [query, setQuery] = useState('');
 
   return (
@@ -48,7 +48,7 @@ export function AdminLayout({ title, subtitle, actions, children }: { title: str
         <header className={s.header}>
           <div>
             <h1 className={s.title}>{title}</h1>
-            <p className={s.subtitle}>{subtitle}</p>
+            {subtitle && <p className={s.subtitle}>{subtitle}</p>}
           </div>
           <div style={{ flex: 1 }} />
           {actions ?? <SearchBox value={query} onChange={setQuery} placeholder="Search" width={220} height={34} iconName="header-search" iconSize={14} />}

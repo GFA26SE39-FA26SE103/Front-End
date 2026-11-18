@@ -18,7 +18,7 @@ const NAV = [
 ];
 
 /** Manager planning and recorded operational analytics. */
-export function ManagerLayout({ title, subtitle, actions, children }: { title: string; subtitle: string; actions?: ReactNode; children: ReactNode }) {
+export function ManagerLayout({ title, subtitle, actions, children }: { title: string; subtitle?: string; actions?: ReactNode; children: ReactNode }) {
   return (
     <div className={s.shell}>
       <nav className={s.nav} aria-label="Manager">
@@ -45,7 +45,7 @@ export function ManagerLayout({ title, subtitle, actions, children }: { title: s
         <header className={s.header}>
           <div>
             <h1 className={s.title}>{title}</h1>
-            <p className={s.subtitle}>{subtitle}</p>
+            {subtitle && <p className={s.subtitle}>{subtitle}</p>}
           </div>
           <div style={{ flex: 1 }} />
           {actions}

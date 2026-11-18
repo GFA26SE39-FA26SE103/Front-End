@@ -25,8 +25,7 @@ const path = (workspace: RecommendationWorkspace) => `/${workspace}/recommendati
 
 function Layout({ workspace, detail, children }: { workspace: RecommendationWorkspace; detail?: boolean; children: ReactNode }) {
   const Shell = workspace === 'manager' ? ManagerLayout : OperatorLayout;
-  return <Shell title={detail ? 'Recommendation details' : 'Recommendations'} subtitle={workspace === 'manager'
-    ? 'Review AI suggestions for operational events' : 'Review recommendations accepted by a Manager'}>
+  return <Shell title={detail ? 'Recommendation details' : 'Recommendations'}>
     <div className={`${s.page} ${workspace === 'operator' ? s.operatorPage : ''}`}>{children}</div>
   </Shell>;
 }
@@ -84,7 +83,7 @@ export function Recommendations({ workspace }: { workspace: RecommendationWorksp
     <div className={selected ? s.splitReview : undefined}><Card>
       <div className={s.toolbar}>
         <div><h2>{workspace === 'manager' ? 'Recommendation history' : 'Accepted recommendations'}</h2>
-          <p className={s.muted}>{workspace === 'manager' ? 'Open an active event to request a recommendation.' : 'Open a recommendation to review its evidence and the source event.'}</p></div>
+          </div>
         <div className={s.actions}>
           {workspace === 'manager' && <Link to="/manager/events?status=ACTIVE">View active events</Link>}
           <Button variant="secondary" onClick={refresh}>Refresh</Button>
@@ -182,7 +181,6 @@ function RecommendationReview({ workspace, value, onSaved }: { workspace: Recomm
       </Card>
       {value.evidence && <Card><details className={s.evidence}>
         <summary>Supporting evidence</summary>
-        <p className={s.muted}>Observation and policy values used when this recommendation was generated.</p>
         <dl className={s.facts}>
           <div><dt>Observation</dt><dd>{value.evidence.signal.metric.toLocaleString()} {value.evidence.signal.unit}</dd></div>
           <div><dt>Observed · Vietnam time</dt><dd>{date(value.evidence.observedAt)}</dd></div>
@@ -321,7 +319,7 @@ export function GenerateFromEvent({ eventId, onGenerated }: { eventId: string; o
       if (!controller.signal.aborted) setBusy(false);
     }
   }
-  return <Card><div className={s.toolbar}><div><h3>AI recommendation</h3><p className={s.muted}>Analyze this event’s latest valid observation.</p></div>
+  return <Card><div className={s.toolbar}><div><h3>AI recommendation</h3></div>
     <Button onClick={() => void generate()} disabled={busy}>{busy ? 'Generating…' : 'Generate recommendation'}</Button>
   </div>{notice && <p className={s.notice} role="status">{notice}</p>}{error && <p className={s.error} role="alert">{error}</p>}</Card>;
 }

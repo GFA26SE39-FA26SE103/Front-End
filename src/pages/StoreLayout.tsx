@@ -190,7 +190,6 @@ export default function StoreLayout() {
   const selectedCamera = cameras.find((camera) => camera.cameraId === selectedCameraId) ?? null;
   const selectedDraft = selectedCameraId ? drafts[selectedCameraId] : undefined;
   const dirtyCameraIds = useMemo(() => new Set(Object.keys(drafts)), [drafts]);
-  const storeName = stores.find((store) => store.supermarketId === selectedFloor?.supermarketId)?.name ?? stores[0]?.name;
   const otherFloorChangesBlocked = uploading || saving || zoneSaving || zoneEditing || adjacencyOpen || dirtyCameraIds.size > 0;
   const floorChangesBlocked = otherFloorChangesBlocked || coverageEditing;
 
@@ -379,14 +378,10 @@ export default function StoreLayout() {
     }
   };
 
-  const subtitle = loading
-    ? 'Loading store configuration…'
-    : `${storeName ?? 'No supermarket'} · ${floors.length} floor${floors.length === 1 ? '' : 's'} · ${cameras.length} camera${cameras.length === 1 ? '' : 's'} on selected floor`;
-
   return (
-    <AdminLayout title="Store layout" subtitle={subtitle}>
+    <AdminLayout title="Store layout">
       <Card className={s.structure}>
-        <CardHeader title="Store structure" subtitle="Configuration loaded from the backend" />
+        <CardHeader title="Store structure" />
         <div className={s.floorActions}>
           <Button disabled={loading || !stores[0] || floorChangesBlocked} onClick={() => setFloorEditor('new')}>Create floor</Button>
           <Button variant="secondary" disabled={loading || !selectedFloor || floorChangesBlocked} onClick={() => selectedFloor && setFloorEditor(selectedFloor)}>Edit floor</Button>
@@ -487,7 +482,7 @@ export default function StoreLayout() {
       <div className={s.workspace}>
         {pickerOpen && selectedFloor && (
           <Card className={s.picker}>
-            <CardHeader title="Place camera on map" subtitle="Choose a registered camera on this floor to place on the floor plan." />
+            <CardHeader title="Place camera on map" />
             {unplacedCameras.length > 0 ? (
               <div className={s.cameraList} aria-label="Cameras not on the map">
                 {unplacedCameras.map((camera) => (
@@ -514,7 +509,6 @@ export default function StoreLayout() {
           <div className={s.canvasHeader}>
             <CardHeader
               title={selectedFloor?.name ?? 'Floor plan'}
-              subtitle={zoneEditing ? 'Draw rectangular zones by dragging. Select an existing zone to move, resize or delete it.' : 'Drag the camera body. Use the amber handle to align its muzzle and field of view.'}
             />
             {selectedFloor && (
               <div className={s.canvasTools}>
@@ -599,7 +593,7 @@ export default function StoreLayout() {
             <p className={s.placementHelp}>This camera is not on the map yet.</p>
             <Button block disabled={mapState.status !== 'ready'} onClick={() => placeCamera(selectedCamera)}>Place on map</Button>
           </>
-        ) : <p className={s.placementHelp}>Drag the camera to position it. Drag its direction handle to rotate.</p>}
+        ) : null}
         <Button
           variant="secondary"
           block

@@ -39,7 +39,6 @@ export function FloorEditor({ storeId, floor, suggestedNumber, onClose, onSaved 
         <label>Floor name<input aria-label="Floor name" maxLength={100} value={name} onChange={e => setName(e.target.value)} /></label>
         <label>Floor number<input aria-label="Floor number" type="number" step="1" value={number} onChange={e => setNumber(e.target.value)} /></label>
       </fieldset>
-      <p className={s.note}>Each floor in this store must have a different number.{floor ? ' Your uploaded floor plan, zones and cameras are kept.' : ' Upload a floor plan after creating the floor.'}</p>
       {error && <p className={s.error} role="alert">{error}</p>}
       <div className={s.actions}><Button variant="secondary" disabled={busy} onClick={onClose}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? 'Saving…' : floor ? 'Save floor' : 'Create floor'}</Button></div>
     </form>

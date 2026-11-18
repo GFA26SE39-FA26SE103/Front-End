@@ -76,7 +76,7 @@ export function SwapRequests() {
   const count = (key: string) => all.filter((r) => key.split(',').includes(r.status)).length;
 
   return (
-    <ManagerLayout title="Shift swap requests" subtitle="Review and decide accepted requests"
+    <ManagerLayout title="Shift swap requests"
       actions={<Button variant="secondary" onClick={() => setReload((n) => n + 1)}>Refresh</Button>}>
       <div className={s.page}>
           <div className={s.tabsBar}>
@@ -89,10 +89,7 @@ export function SwapRequests() {
             </div>
           </div>
           <Card>
-            <CardHeader title={tab === 'PENDING_MANAGER' ? 'Manager actions' : TABS.find((t) => t.key === tab)?.label ?? ''}
-              subtitle={tab === 'PENDING_MANAGER'
-                ? 'Assign cover for Staff who need help, or approve peer-agreed requests.'
-                : 'Decided and closed requests'} />
+            <CardHeader title={tab === 'PENDING_MANAGER' ? 'Manager actions' : TABS.find((t) => t.key === tab)?.label ?? ''} />
             {error ? <p className={s.error} role="alert">{error}</p>
               : !requests ? <p className={s.note} role="status">Loading requests…</p>
               : requests.length === 0 ? <p className={s.note}>{tab === 'PENDING_MANAGER' ? 'No Manager action is needed right now.' : 'No requests here.'}</p>
@@ -199,7 +196,7 @@ export function SwapRequestDetail() {
   const rules = [...new Set(r?.checks.map((c) => c.code) ?? [])]
     .map((code) => ({ code, passed: (r?.checks ?? []).filter((c) => c.code === code).every((c) => c.passed) }));
   return (
-    <ManagerLayout title="Review shift swap" subtitle="Swap requests" actions={<Button variant="secondary" onClick={() => navigate('/manager/swaps')}>Back</Button>}>
+    <ManagerLayout title="Review shift swap" actions={<Button variant="secondary" onClick={() => navigate('/manager/swaps')}>Back</Button>}>
       <div className={s.page}>
         {loadError ? <p className={s.error} role="alert">{loadError}</p>
           : !r ? <p className={s.note} role="status">Loading the request…</p>

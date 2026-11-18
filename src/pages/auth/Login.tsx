@@ -64,7 +64,7 @@ export default function Login() {
     : status === 'error' || status === 'rate-limited' ? { title: 'Unable to sign in', hint: 'We couldn’t complete your sign-in request.' }
     : suspended ? { title: 'Account suspended', hint: 'This account cannot access the operations workspace.' }
     : sessionExpired || accessChanged ? { title: 'Sign in again', hint: 'Re-enter your password to continue securely.' }
-    : { title: 'Sign in', hint: 'Use your operations account to continue.' };
+    : { title: 'Sign in', hint: '' };
 
   const alert =
     status === 'invalid' ? { tone: 'var(--color-danger)', icon: 'auth-alert-danger', title: 'Email or password is incorrect', text: `Check your details and try again. ${MAX_FAILED_ATTEMPTS - failed} attempt${MAX_FAILED_ATTEMPTS - failed === 1 ? '' : 's'} left before the account is locked.` }
@@ -87,7 +87,7 @@ export default function Login() {
       <form className={s.form} onSubmit={submit} noValidate aria-busy={loading}>
         <div>
           <h2 className={s.title}>{heading.title}</h2>
-          <p className={s.hint}>{heading.hint}</p>
+          {heading.hint && <p className={s.hint}>{heading.hint}</p>}
         </div>
 
         {alert && (
@@ -154,7 +154,6 @@ function Blocked({ email, lockLeft }: { email: string; lockLeft: number }) {
       <div className={`${s.form} ${s.wide}`}>
         <div>
           <h2 className={s.title}>Sign in</h2>
-          <p className={s.hint}>Use your operations account to continue.</p>
         </div>
         <div className={s.lockAlert} role="alert">
           <span className={s.lockBadge}>!</span>

@@ -4,7 +4,7 @@ import { Icon } from './Icon';
 import { AccountMenu } from './AccountMenu';
 import s from './OperatorLayout.module.css';
 
-export function OperatorLayout({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
+export function OperatorLayout({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   return (
     <div className={s.shell}>
       <header className={s.header}>
@@ -16,7 +16,7 @@ export function OperatorLayout({ title, subtitle, children }: { title: string; s
         <span className={s.divider} aria-hidden="true" />
         <div className={s.heading}>
           <h1>{title}</h1>
-          <p>{subtitle}</p>
+          {subtitle && <p>{subtitle}</p>}
         </div>
         <nav className={s.nav} aria-label="Operator">
           <NavLink to="/operator/floor-map" className={({ isActive }) => `${s.navLink} ${isActive ? s.active : ''}`}>Floor map</NavLink>

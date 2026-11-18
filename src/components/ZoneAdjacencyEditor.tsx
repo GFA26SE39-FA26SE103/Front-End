@@ -71,7 +71,6 @@ export function ZoneAdjacencyEditor({ zones, onClose, onSaved }: {
   };
 
   return <Dialog title="Zone adjacency" busy={saving} onClose={onClose}>
-    <p className={s.help}>Choose the zones directly next to one another. Saving replaces this zone's current set and stores every link in both directions.</p>
     <label className={s.field}>
       <span>Zone to configure</span>
       <select value={sourceId} disabled={loading || saving} onChange={event => load(event.target.value)}>

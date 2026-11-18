@@ -65,7 +65,7 @@ export default function Schedule() {
   );
 
   return (
-    <ManagerLayout title="Schedule" subtitle="Plan and publish weekly shifts" actions={actions}>
+    <ManagerLayout title="Schedule" actions={actions}>
       <div className={s.page}>
         {notice && <p className={s.success} role="status">{notice}</p>}
         {loadError ? (

@@ -89,7 +89,7 @@ export default function ZoneStaffing() {
   };
 
   return (
-    <ManagerLayout title="Zone staffing" subtitle="Review Staff coverage by date, shift and floor">
+    <ManagerLayout title="Zone staffing">
       <div className={s.page}>
         <section className={s.ownership} aria-label="Minimum staffing ownership">
           <div><strong>Manager staffing baseline</strong><span>Set the minimum Staff required for each Zone. The same baseline applies to every active Work Shift.</span></div>

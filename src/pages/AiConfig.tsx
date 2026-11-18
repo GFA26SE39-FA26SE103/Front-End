@@ -153,7 +153,7 @@ export default function AiConfig() {
     setEditZoneId(edit ? id : null);
     if (id !== zoneId) setParams({ zoneId: id });
   };
-  return <AdminLayout title="AI Configuration" subtitle={zone && floor ? floor.name + ' · ' + zone.name : 'Browse configurations by floor and zone'}>
+  return <AdminLayout title="AI Configuration" subtitle={zone && floor ? floor.name + ' · ' + zone.name : undefined}>
     <div className={s.column}>
       {loading && <p className={s.help} role="status">Loading floors, zones and configurations…</p>}
       {error && <section className={s.panel}><p className={s.alertBox} role="alert">{error}</p><Button variant="secondary" onClick={() => setOverviewKey(k => k + 1)}>Retry loading zones</Button></section>}
@@ -176,7 +176,7 @@ function Overview({ floors, summaries, types, missingZone, floorId, onFloorChang
   const activeCount = Object.values(summaries).filter(c => c && c !== 'error' && c.status === 'ACTIVE').length;
   return <>
     <section className={s.panel}>
-      <div className={s.head}><div><h2 className={s.title}>Configurations by floor & zone</h2><p className={s.help}>Choose a zone to view its saved configuration. Create or edit rules from its detail page.</p></div><Button variant="secondary" onClick={onRefresh}>Refresh configurations</Button></div>
+      <div className={s.head}><div><h2 className={s.title}>Configurations by floor & zone</h2></div><Button variant="secondary" onClick={onRefresh}>Refresh configurations</Button></div>
       {missingZone && <p className={s.alertBox} role="alert">The requested zone was not found. Choose a zone below.</p>}
       <div className={s.stats}><div><strong>{zoneCount}</strong><span>Zones</span></div><div><strong>{configured}</strong><span>Configured</span></div><div><strong>{activeCount}</strong><span>Active configurations</span></div></div>
       <label className={s.floorFilter}>Floor<select aria-label="Filter by floor" value={floorId} onChange={e => onFloorChange(e.target.value)}><option value="">All floors</option>{floors.map(f => <option key={f.floorId} value={f.floorId}>Floor {f.floorNumber} · {f.name}</option>)}</select></label>
@@ -535,8 +535,6 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
             </fieldset>
           </section>;
         })}
-        <p className={s.help}>x is the rule’s measured value. An empty exit uses the entry threshold. A recorded event keeps its highest alert level until it clears.</p>
-        <p className={s.help}>Sustain uses continuous source-video time. Queue length counts people after 5 continuous seconds in the ROI, then applies sustain. Cooldown starts after the event clears.</p>
         <div className={s.actions}>
           <Button type="submit" disabled={locked}>{busy ? 'Saving…' : 'Save configuration'}</Button>
           <Button variant="secondary" disabled={busy} onClick={() => {
@@ -555,7 +553,6 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       <ul>{review.configuration.rules.map(r => <li key={r.incidentTypeId}>{ruleName(r, types)}: {r.enabled ? 'Enabled' : 'Disabled'} · {modeLabel(ruleMode(r, types))} · warning {band(r.warningThreshold, r.warningExitThreshold, '')}, critical {band(r.criticalThreshold, r.criticalExitThreshold, unitName(r.thresholdUnit))} · sustain {r.sustainSec}s · cooldown {r.cooldownSec}s
         {r.enabled && r.ruleId && <RuleResponses summary={policies[r.ruleId]} />}
       </li>)}</ul>
-      <p className={s.help}>Camera readiness controls activation. Rules can detect events once active. Automatic Task creation also needs a ready CRITICAL response.</p>
       <h3>Mapped cameras & camera ROI</h3>
       <p className={s.help}><a href="/admin/store-layout">Review or edit camera ROI in Store layout</a> (deactivate an active configuration before editing).</p>
       {!review.cameras.length && <p>No active camera mapping.</p>}
@@ -569,9 +566,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       {previewCameraId && <div className={s.zonePreview}><AnnotatedPreview cameraId={previewCameraId} zoneId={zoneId} regions={previewRegions} enabled /></div>}
       <ul>{review.issues.map((i, n) => <li key={n} className={s.error}><strong>{i.code}: </strong><span>{i.message}</span></li>)}</ul>
       {review.warnings.map(w => <p key={w} className={s.help}>{w}</p>)}
-      <p className={s.help}>A camera shared by multiple Zones cannot test Draft confidence while any mapped Zone still has active monitoring. Deactivate every active configuration using the camera, then retry. Boxes use an annotation context; ROI counts can differ between Zones with different confidence filters.</p>
       <Button disabled={busy || dirty || active || !review.canActivate || densityBlocked} onClick={() => void changeActive(true)}>Activate configuration</Button>
-      <p className={s.help}>The backend rechecks the source, mapping, ROI and rules at activation, then measures active rules continuously. A ready Response Policy can automatically offer each new Operational Event Task to eligible Staff.</p>
     </section>}
     {showForm && ruleToRemove && <Dialog title="Remove monitoring rule?" busy={false} onClose={() => setRuleToRemove(null)}>
       <p className={s.alertBox}><span><strong>{ruleName(ruleToRemove, types)}</strong> will be removed from this draft. Saving the configuration applies the removal to this zone.</span></p>

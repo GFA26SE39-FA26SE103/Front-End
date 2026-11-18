@@ -43,7 +43,6 @@ export function ForgotPassword() {
     <Shell gap={16}>
       <Circle size={52}>@</Circle>
       <h2 className={s.title} style={{ margin: 0 }}>Reset your password</h2>
-      <p className={s.hint}>Enter the email associated with your operations account. We’ll send you a secure reset link.</p>
       <form onSubmit={submit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <label className={`${s.label} ${s.labelStrong}`}>
           Email
@@ -135,7 +134,6 @@ export function SetNewPassword() {
     <Shell gap={10}>
       <Circle size={48}><Icon name="auth-lock-primary" size={24} /></Circle>
       <h2 className={s.title} style={{ margin: 0 }}>Set a new password</h2>
-      <p className={s.hint}>Create a strong password for your operations account.</p>
       <form onSubmit={submit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {[
           { label: 'New password', value: pw, set: setPw, auto: 'new-password' },

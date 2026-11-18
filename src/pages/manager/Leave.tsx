@@ -31,7 +31,7 @@ export default function Leave() {
   }
 
   return (
-    <ManagerLayout title="Leave" subtitle="Manage staff availability" actions={<Button onClick={() => setAdding(true)}>Add leave</Button>}>
+    <ManagerLayout title="Leave" actions={<Button onClick={() => setAdding(true)}>Add leave</Button>}>
       <div className={s.page}>
         {notice && <p className={s.success} role="status">{notice}</p>}
         <Card>

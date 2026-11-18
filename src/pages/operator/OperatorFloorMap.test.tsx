@@ -112,7 +112,6 @@ describe('OperatorFloorMap', () => {
     expect(within(cards[0]).getByText(/1\/1 cameras online/)).toBeInTheDocument();
     expect(within(cards[1]).getByText('No live camera')).toBeInTheDocument();
     expect(within(cards[2]).getByText('No camera')).toBeInTheDocument();
-    expect(screen.getByText(/1\/2 cameras online/)).toBeInTheDocument();
   });
 
   it('opens a camera popup with its zones and navigates to the live view', async () => {

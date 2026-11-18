@@ -98,7 +98,6 @@ describe('API-backed monitoring configuration', () => {
     fireEvent.click(manage);
     const panel = screen.getByRole('complementary', { name: 'Response policy' });
     expect(panel).toHaveTextContent('Actual queue zone');
-    expect(panel).toHaveTextContent('across all zones');
     expect(screen.getByRole('table', { name: 'Operational event rules' })).toBeVisible();
     const taskType = await within(panel).findByLabelText('Task type (required when enabled)');
     await waitFor(() => expect(taskType).toBeEnabled());

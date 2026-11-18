@@ -162,10 +162,10 @@ export default function UsersRoles() {
   }
 
   return (
-    <AdminLayout title="Users & Roles" subtitle={ready ? `${accounts.length} account${accounts.length === 1 ? '' : 's'} · ${roles.length} roles` : 'Account administration'}>
+    <AdminLayout title="Users & Roles">
       <div className={s.workspace}>
         <Card className={s.users}>
-          <CardHeader title="Users" subtitle="Create accounts and manage their access.">
+          <CardHeader title="Users">
             <Button variant="secondary" disabled={busy || !ready} onClick={refresh}>Refresh</Button>
             <Button disabled={busy || !ready || !roles.length} onClick={() => choose(newUser(roles))}>Create account</Button>
           </CardHeader>
@@ -188,12 +188,11 @@ export default function UsersRoles() {
                 </table>
               </div>
               {!visible.length && <p className={s.note}>{accounts.length ? 'No accounts match your search.' : 'No accounts yet. Create an account to get started.'}</p>}
-              <p className={s.note}>Disabling an account blocks sign-in and invalidates its existing tokens. Keep at least one active Administrator.</p>
             </>}
         </Card>
 
         {ready && <Card className={s.roles}>
-          <CardHeader title="Roles" subtitle="System roles and their responsibilities." />
+          <CardHeader title="Roles" />
           <div className={s.roleGrid}>
             {roles.map((role) => <div className={s.role} key={role.roleId}>
               <Chip tone={roleTone[role.name] ?? 'neutral'} pill>{roleLabel(role.name)}</Chip>

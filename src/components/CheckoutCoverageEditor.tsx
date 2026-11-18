@@ -252,10 +252,9 @@ function CheckoutSession({ camera, zones, onDirtyChange, onBusyChange }: Checkou
 
   return <section className={s.editor} aria-label={`Checkout coverage for ${camera.code}`} aria-busy={busy || loading}>
     <header className={s.header}>
-      <div><h2>Checkout camera coverage</h2><p>{camera.code} · Logical counters with independent Lane and Staff ROI.</p></div>
+      <div><h2>Checkout camera coverage</h2><p>{camera.code}</p></div>
       <Button variant="secondary" disabled={!zoneId || busy || loading} onClick={reload}>Reload saved checkout data</Button>
     </header>
-    <p className={s.notice}>Deactivate monitoring before changing checkout configuration. New counters must be created disabled. No automatic queue-source failover.</p>
     <div className={s.selectors}>
       <label className={s.field}>Checkout zone
         <select value={zoneId} disabled={busy} onChange={e => select(e.target.value, '')}>
@@ -284,7 +283,6 @@ function CheckoutSession({ camera, zones, onDirtyChange, onBusyChange }: Checkou
           <label className={s.field}>Counter code<input value={counter.code} maxLength={50} onChange={e => setCounter(v => ({ ...v, code: e.target.value }))} /></label>
           <label className={s.field}>Counter name<input value={counter.name} maxLength={100} onChange={e => setCounter(v => ({ ...v, name: e.target.value }))} /></label>
           <label className={s.check}><input type="checkbox" checked={counter.isEnabled} disabled={!counterId} onChange={e => setCounter(v => ({ ...v, isEnabled: e.target.checked }))} />Counter enabled</label>
-          <p className={s.help}>Enable only after saving exactly one enabled queue source. Disabling a counter does not alter camera mappings.</p>
           <div className={s.actions}>
             <Button type="submit">{counterId ? 'Save counter' : 'Create disabled counter'}</Button>
             {counterId && <Button variant="dangerGhost" disabled={!canDeleteCounter} onClick={removeCounter}>Delete counter</Button>}
@@ -301,13 +299,11 @@ function CheckoutSession({ camera, zones, onDirtyChange, onBusyChange }: Checkou
       </form>
       <form className={s.roiPanel} noValidate onSubmit={event => { event.preventDefault(); saveMapping(); }}>
         <h3>{activeZone?.name} · {baseline?.code ?? 'Select or create a counter'}</h3>
-        <p className={s.help}>Lane ROI measures the queue; Staff ROI observes the cashier position. The queue-source camera also needs Service ROI at the counter entrance to measure waiting time.</p>
         <div className={s.legend} aria-label="Checkout ROI legend">
           <span><i style={{ backgroundColor: 'var(--color-info)' }} />Lane ROI · {mapping.lane.complete ? 'Closed' : 'Not closed'}</span>
           <span><i style={{ backgroundColor: 'var(--color-purple)' }} />Staff ROI · {mapping.staff.complete ? 'Closed' : 'Not closed'}</span>
           <span><i style={{ backgroundColor: 'var(--color-success)' }} />Service ROI · {mapping.service.complete ? 'Closed' : 'Not closed'}</span>
         </div>
-        <p className={s.help}>Map separate physical queues: overlapping Lane ROIs across counters can count the same person twice. This editor does not deduplicate people between counters.</p>
         <div className={s.actions}>
           <Button variant="secondary" aria-pressed={target === 'lane'} disabled={blocked || !counterId} onClick={() => setTarget('lane')}>Edit Lane ROI</Button>
           <Button variant="secondary" aria-pressed={target === 'staff'} disabled={blocked || !counterId} onClick={() => setTarget('staff')}>Edit Staff ROI</Button>

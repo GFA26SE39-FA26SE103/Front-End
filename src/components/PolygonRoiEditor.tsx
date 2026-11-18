@@ -101,7 +101,6 @@ export function PolygonRoiEditor({ previewUrl, previewLoading = false, cameraCod
         remember(); onChange({ points: [], complete: false, editing: false }); setError('');
       }}>Start over</Button>}
     </div>
-    {complete && <p className={s.hint}>Use arrow keys to move a focused corner point. Hold Shift for larger steps.</p>}
     {error && <p role="alert" className={s.error}>{error}</p>}
   </div>;
 }

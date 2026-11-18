@@ -130,7 +130,7 @@ export default function Analytics() {
   const empty = summary && summary.events.total === 0 && summary.incidents.recorded === 0 && summary.tasks.total === 0;
   const eventFilters = period ? new URLSearchParams({ from: period.from, to: period.to, ...(period.zoneId ? { zoneId: period.zoneId } : {}) }) : null;
 
-  return <ManagerLayout title="Operational analytics" subtitle="Review recorded events, tasks and service performance.">
+  return <ManagerLayout title="Operational analytics">
     <div className={s.page}>
       <Card>
         <form onSubmit={apply} className={s.filters} aria-label="Analytics filters">
@@ -170,7 +170,7 @@ export default function Analytics() {
 
         <div className={s.visualRow}>
           <Card className={s.trendCard}>
-            <div className={s.sectionHeading}><div><h2>Daily activity</h2><p className={s.muted}>Records first detected or created on each day</p></div><select aria-label="Trend metric" value={metric} onChange={event => setMetric(event.target.value as Metric)}>{Object.entries(metrics).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
+            <div className={s.sectionHeading}><div><h2>Daily activity</h2></div><select aria-label="Trend metric" value={metric} onChange={event => setMetric(event.target.value as Metric)}>{Object.entries(metrics).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
             {hasTrend ? <div className={s.chartScroll}><div className={s.chart} role="img" aria-label={`${metrics[metric]} by day. Highest daily count: ${maximum}. Full values are in the daily data table.`} style={{ minWidth: Math.max(360, days.length * 14) }}>
               {days.map((day, index) => <div key={day.date} className={s.chartColumn} title={`${day.date}: ${day.summary[metric].total}`}>
                 <div className={s.barTrack}><div className={s.bar} style={{ height: `${100 * day.summary[metric].total / maximum}%` }} />{days.length <= 14 && <span>{number(day.summary[metric].total)}</span>}</div>
@@ -179,10 +179,10 @@ export default function Analytics() {
             </div></div> : <p className={s.chartEmpty}>No {metric === 'events' ? 'events detected' : metric === 'incidents' ? 'incidents' : 'tasks created'} in this period.</p>}
             <details className={s.dailyData}><summary>View daily data</summary><div className={s.tableScroll}><table><caption>Daily records — {period.timeZone}</caption><thead><tr><th scope="col">Date</th><th scope="col">Events</th><th scope="col">Incidents</th><th scope="col">Tasks</th></tr></thead><tbody>{days.map(day => <tr key={day.date}><th scope="row">{day.date}</th><td>{number(day.summary.events.total)}</td><td>{number(day.summary.incidents.total)}</td><td>{number(day.summary.tasks.total)}</td></tr>)}</tbody></table></div></details>
           </Card>
-          <Card><h2>Task progress</h2><p className={s.muted}>Current status of tasks created in this period</p><div className={s.statuses}>{entries.map(([status, count]) => <div key={status}><div className={s.statusLabel}><span>{statusLabels[status] ?? status}</span><strong>{number(count)}</strong></div><div className={s.statusTrack}><div className={status === 'VERIFIED' ? s.verifiedBar : s.statusBar} style={{ width: `${summary.tasks.total ? count / summary.tasks.total * 100 : 0}%` }} /></div></div>)}</div></Card>
+          <Card><h2>Task progress</h2><div className={s.statuses}>{entries.map(([status, count]) => <div key={status}><div className={s.statusLabel}><span>{statusLabels[status] ?? status}</span><strong>{number(count)}</strong></div><div className={s.statusTrack}><div className={status === 'VERIFIED' ? s.verifiedBar : s.statusBar} style={{ width: `${summary.tasks.total ? count / summary.tasks.total * 100 : 0}%` }} /></div></div>)}</div></Card>
         </div>
 
-        <Card><div className={s.sectionHeading}><div><h2>Service levels</h2><p className={s.muted}>Measured against each task’s saved deadline</p></div><span className={s.muted}>Cancelled tasks excluded</span></div>
+        <Card><div className={s.sectionHeading}><div><h2>Service levels</h2></div></div>
           <div className={s.slaGrid}><SlaCard title="Response SLA" value={summary.tasks.responseSla} /><SlaCard title="Resolution SLA" value={summary.tasks.resolutionSla} /></div>
           <details className={s.method}><summary>How to read these figures</summary><p>Rates include met and breached tasks. Pending and unavailable tasks are excluded. Incomplete work becomes breached once its deadline passes; — means no evaluated tasks.</p><p>Dates use {period.timeZone}. Figures cover records detected or created in the selected period and their latest status, including later progress. They do not reconstruct past daily status or prove camera availability.</p></details>
         </Card>
@@ -192,7 +192,7 @@ export default function Analytics() {
           ['Event clearance', summary.events.clearTime], ['Incident resolution', summary.incidents.resolutionTime],
         ] as [string, AnalyticsDuration][]).map(([label, value]) => <div key={label}><p>{label}</p><strong>{duration(value)}</strong><span>{number(value.samples)} {value.samples === 1 ? 'sample' : 'samples'}</span></div>)}</div></Card>
 
-        <Card><div className={s.sectionHeading}><div><h2>Zone breakdown</h2><p className={s.muted}>Same date range and zone filter as the overview</p></div><span className={s.muted}>{data.zones.zones.length} {data.zones.zones.length === 1 ? 'zone' : 'zones'}</span></div>
+        <Card><div className={s.sectionHeading}><div><h2>Zone breakdown</h2></div><span className={s.muted}>{data.zones.zones.length} {data.zones.zones.length === 1 ? 'zone' : 'zones'}</span></div>
           <div className={s.tableScroll}><table><caption className={s.srOnly}>Zone analytics</caption><thead><tr><th scope="col">Zone</th><th scope="col">Events</th><th scope="col">Active events</th><th scope="col">Incidents</th><th scope="col">Tasks</th><th scope="col">Verified</th><th scope="col">Response SLA</th></tr></thead><tbody>{data.zones.zones.map(zone => <tr key={zone.zoneId}><th scope="row">{zone.zoneName}</th><td>{number(zone.summary.events.total)}</td><td>{number(zone.summary.events.active)}</td><td>{number(zone.summary.incidents.total)}</td><td>{number(zone.summary.tasks.total)}</td><td>{number(zone.summary.tasks.byStatus.VERIFIED ?? 0)}</td><td>{percent(zone.summary.tasks.responseSla.metPercent)}</td></tr>)}{data.zones.zones.length === 0 && <tr><td colSpan={7}>No zones are configured.</td></tr>}</tbody></table></div>
         </Card>
       </>}

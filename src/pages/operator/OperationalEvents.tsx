@@ -13,8 +13,7 @@ type Workspace = 'operator' | 'manager';
 const date = (value: string | null) => value ? new Date(value).toLocaleString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'medium', timeStyle: 'short' }) : '—';
 function Layout({ workspace, detail, children }: { workspace: Workspace; detail?: boolean; children: ReactNode }) {
   const title = detail ? 'Event detail' : 'Operational events';
-  const subtitle = 'Detected conditions, recovery and linked tasks';
-  return workspace === 'manager' ? <ManagerLayout title={title} subtitle={subtitle}>{children}</ManagerLayout> : <OperatorLayout title={title} subtitle={subtitle}>{children}</OperatorLayout>;
+  return workspace === 'manager' ? <ManagerLayout title={title}>{children}</ManagerLayout> : <OperatorLayout title={title}>{children}</OperatorLayout>;
 }
 function Badges({ event }: { event: OperationalEvent }) {
   return <span className={s.badges}><Chip tone={event.priority === 'CRITICAL' ? 'danger' : event.priority === 'WARNING' ? 'warning' : 'neutral'}>{event.priority}</Chip><Chip tone={event.status === 'ACTIVE' ? 'primary' : 'neutral'}>{event.status === 'CLEARED' ? 'Cleared' : event.status === 'ACTIVE' ? 'Active' : event.status}</Chip></span>;
@@ -78,10 +77,9 @@ export default function OperationalEvents({ workspace = 'operator' }: { workspac
   }
   const pageCount = visible ? Math.max(1, Math.ceil(visible.totalCount / visible.pageSize)) : 1;
   return <Layout workspace={workspace}><div className={panelEvent ? s.withPanel : s.workspace}><div className={`${s.page} ${workspace === 'manager' ? s.managerPage : ''}`}>
-    <div className={s.heading}><div><h2>Event history</h2><p>Each row is one detected episode. Events and tasks have independent lifecycles.</p></div><Button variant="secondary" onClick={refresh}>Refresh events</Button></div>
+    <div className={s.heading}><div><h2>Event history</h2></div><Button variant="secondary" onClick={refresh}>Refresh events</Button></div>
     <Card>
       <Filters key={search} query={query} zones={zones} onApply={apply} />
-      <p className={s.note}>Dates filter detection time in {visible?.timeZone || 'the store timezone'}. Blank dates include all recorded history.</p>
       {zoneError && !error && <div className={s.catalogError} role="alert">Zone choices unavailable. {zoneError}<Button variant="secondary" onClick={() => setAttempt(value => value + 1)}>Retry zones</Button></div>}
     </Card>
     {error && <Card><p className={s.error} role="alert">{error} Figures are hidden until a successful refresh.</p><Button variant="secondary" onClick={refresh}>Retry events</Button></Card>}
@@ -122,11 +120,10 @@ export function OperationalEventDetail({ workspace = 'operator' }: { workspace?:
     {visible && event && <>
       <Card><div className={s.heading}><div><h2>{event.eventTypeName}</h2><p>{event.sourceCode}</p></div><Badges event={event} /></div>
         <dl className={s.facts}><div><dt>Zone</dt><dd>{event.zoneName}</dd></div><div><dt>Camera</dt><dd>{workspace === 'operator' ? <Link to={`/operator/cameras/${encodeURIComponent(event.cameraId)}`}>{event.cameraName} · {event.cameraCode}</Link> : `${event.cameraName} · ${event.cameraCode}`}</dd></div><div><dt>Latest recorded metric</dt><dd>{event.metricValue.toLocaleString(undefined, { maximumFractionDigits: 4 })} <span className={s.note}>({event.measurementType === 'CROWD_DENSITY' ? 'people/m²' : event.measurementType === 'UNAVAILABLE' ? 'unit unavailable' : event.measurementType})</span></dd></div><div><dt>Event type</dt><dd>{event.eventTypeCode}</dd></div></dl>
-        <p className={s.note}>Event priority is an alert level, independent of Task SLA priority. Clearing an event does not verify its linked tasks.</p>
       </Card>
       {workspace === 'manager' && event.status === 'ACTIVE' && <GenerateFromEvent key={event.eventId} eventId={event.eventId} />}
       <Card><h3>Timeline · Vietnam time</h3><dl className={s.facts}><div><dt>Detected</dt><dd>{date(event.detectedAt)}</dd></div><div><dt>Last observed</dt><dd>{date(event.lastObservedAt)}</dd></div><div><dt>Cleared</dt><dd>{date(event.clearedAt)}</dd></div><div><dt>Last updated</dt><dd>{date(event.updatedAt)}</dd></div></dl></Card>
-      <Card><h3>Linked tasks · {event.taskCount}</h3>{visible.tasks.length === 0 ? <p className={s.empty}>No linked tasks. An event does not always create a task.</p> : <div className={s.tableWrap}><table className={s.table}><thead><tr><th scope="col">Task</th><th scope="col">Status</th><th scope="col">Assignee</th><th scope="col">Created</th></tr></thead><tbody>{visible.tasks.map(task => <tr key={task.taskId}><th scope="row">{workspace === 'operator' ? <Link to={`/operator/tasks/${encodeURIComponent(task.taskId)}`} state={returnTo ? { recommendationReturn: returnTo } : undefined}>{task.title}</Link> : task.title}</th><td>{task.status}</td><td>{task.assigneeName || 'Unassigned'}</td><td>{date(task.createdAt)}</td></tr>)}</tbody></table></div>}{visible.hasMoreTasks && <p className={s.note}>Showing the 100 most recent linked tasks.</p>}</Card>
+      <Card><h3>Linked tasks · {event.taskCount}</h3>{visible.tasks.length === 0 ? <p className={s.empty}>No linked tasks.</p> : <div className={s.tableWrap}><table className={s.table}><thead><tr><th scope="col">Task</th><th scope="col">Status</th><th scope="col">Assignee</th><th scope="col">Created</th></tr></thead><tbody>{visible.tasks.map(task => <tr key={task.taskId}><th scope="row">{workspace === 'operator' ? <Link to={`/operator/tasks/${encodeURIComponent(task.taskId)}`} state={returnTo ? { recommendationReturn: returnTo } : undefined}>{task.title}</Link> : task.title}</th><td>{task.status}</td><td>{task.assigneeName || 'Unassigned'}</td><td>{date(task.createdAt)}</td></tr>)}</tbody></table></div>}{visible.hasMoreTasks && <p className={s.note}>Showing the 100 most recent linked tasks.</p>}</Card>
     </>}
   </div></Layout>;
 }

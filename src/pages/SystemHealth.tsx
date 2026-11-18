@@ -61,7 +61,7 @@ export default function SystemHealth() {
   const ready = enabled.filter(camera => camera.monitoringReadiness === 'READY').length;
   const overall = !cameras.length ? 'Not configured' : data && data.totals.unresolvedHealthEventCount === 0 && enabled.length > 0 && ready === enabled.length ? 'Healthy' : 'Needs attention';
 
-  return <AdminLayout title="System health" subtitle="Live camera connectivity, visual usability and monitoring readiness"
+  return <AdminLayout title="System health"
     actions={<><span className={s.updated}>{data ? 'Fetched ' + time(data.generatedAt) : 'Loading system health'}</span><Button variant="secondary" disabled={refreshing || checking !== null} onClick={() => setRefreshKey(key => key + 1)}>{refreshing ? 'Refreshing…' : 'Refresh'}</Button></>}>
     <div className={s.page}>
       {error && <div className={s.alert} role="alert">{error}{data && <p>Showing the last successful snapshot. Status may have changed.</p>}<Button variant="secondary" disabled={refreshing} onClick={() => setRefreshKey(key => key + 1)}>Retry loading health</Button></div>}
@@ -75,7 +75,7 @@ export default function SystemHealth() {
         </div>
 
         <section className={s.panel}>
-          <div className={s.head}><div><h2>Camera health</h2><p>Checks receive a real frame from the configured source. Monitoring activation remains separate from runtime health.</p></div><Link className={s.linkButton} to="/admin/cameras">Manage cameras</Link></div>
+          <div className={s.head}><div><h2>Camera health</h2></div><Link className={s.linkButton} to="/admin/cameras">Manage cameras</Link></div>
           {actionError && <p className={s.alert} role="alert">{actionError}</p>}
           {notice && <p className={s.ready} role="status">{notice}</p>}
           {!cameras.length ? <p className={s.empty}>No cameras registered yet. <Link to="/admin/cameras">Add and configure a camera</Link>.</p> :

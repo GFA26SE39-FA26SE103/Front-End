@@ -102,7 +102,7 @@ export default function AuditLog() {
   }
 
   return (
-    <AdminLayout title="Audit logs" subtitle="Who changed what, when and why — recorded by the backend, read-only here"
+    <AdminLayout title="Audit logs"
       actions={<Button onClick={exportCsv} disabled={items.length === 0} style={{ height: 36 }}>Export page CSV</Button>}>
       <div className={s.page}>
         <div className={s.stats}>

@@ -73,7 +73,6 @@ describe('Operational Event history', () => {
     expect(within(screen.getByRole('row', { name: /Long queue/ })).getByText('Cleared')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('link', { name: 'Long queue' }));
     expect(await screen.findByRole('link', { name: 'Assist queue' })).toHaveAttribute('href', '/operator/tasks/task-1');
-    expect(screen.getByText(/Clearing an event does not verify/)).toBeInTheDocument();
   });
   it('applies combined server filters, paginates them and clears to All history', async () => {
     show(); await screen.findByRole('link', { name: 'Long queue' });

@@ -77,13 +77,12 @@ export default function Routing() {
   );
 
   return (
-    <AdminLayout title="Routing & alerts" subtitle="Who gets an incident, how fast, and what happens if nobody answers">
+    <AdminLayout title="Routing & alerts">
       <div className={s.left}>
         <section className={s.card}>
           <div style={{ display: 'flex', alignItems: 'center' }}>
             <div style={{ flex: 1 }}>
               <p className={s.title}>AI confidence routing</p>
-              <p className={s.sub}>Applies to AI-detected incidents only</p>
             </div>
             <Chip tone="primary"><Icon name="sparkles-primary" size={11} /><span style={{ fontSize: 9.5 }}>AI</span></Chip>
           </div>
@@ -112,13 +111,11 @@ export default function Routing() {
               <p className={s.bandText}>Incident created and sent straight to all on-shift staff of that zone.</p>
             </div>
           </div>
-          <p className={s.note}><Icon name="staff-note" size={14} />Staff-reported incidents skip review — a person already confirmed it — and are broadcast directly.</p>
         </section>
 
         <section className={s.card} style={{ flex: 1 }}>
           <div>
             <p className={s.title}>Broadcast, claim &amp; escalation</p>
-            <p className={s.sub}>Business rule: we cannot know which staff is free, so everyone on shift in the zone is notified</p>
           </div>
           <div className={s.steps}>
             {[
@@ -165,7 +162,6 @@ export default function Routing() {
       <Card className={s.example}>
         <div>
           <p className={s.title}>How it plays out</p>
-          <p className={s.sub}>Two real cases from today</p>
         </div>
         <div className={s.case}>
           <p className={s.caseHead}><span>INC-1042 · Long queue</span><Chip tone={92 >= cfg.high ? 'primary' : 'warning'}>92%</Chip></p>

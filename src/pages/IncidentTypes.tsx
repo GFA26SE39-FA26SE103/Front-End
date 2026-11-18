@@ -62,19 +62,19 @@ export default function IncidentTypes() {
     } catch (cause) { setError(problem(cause)); }
     finally { setUpdatingType(undefined); setBusy(false); }
   }
-  return <AdminLayout title="Incident types" subtitle="Manage the types available for incident reporting">
-    <Card className={s.list}><CardHeader title="Incident catalogue" subtitle="Select a policy status to open SLA policies for that category."><SearchBox value={query} onChange={setQuery} placeholder="Search code or name" width={190} /></CardHeader>
+  return <AdminLayout title="Incident types">
+    <Card className={s.list}><CardHeader title="Incident catalogue"><SearchBox value={query} onChange={setQuery} placeholder="Search code or name" width={190} /></CardHeader>
       {error && <p className={s.error} role="alert">{error}</p>}{!types && !error && <p className={s.muted}>Loading catalogue…</p>}
       <div className={`${s.row} ${s.head}`}><span>TYPE</span><span>SOURCE</span><span>MEASUREMENT</span><span>SLA POLICY</span><span>ON</span></div>
       {visible.map(type => <div key={type.incidentTypeId} className={`${s.row} ${type.status !== 'ACTIVE' ? s.disabled : ''}`}>
-        <button type="button" className={s.name} onClick={() => setSelected(type.incidentTypeId)}>{type.name}<small className={s.muted}>{type.code}</small></button><span><Chip tone={type.sourceType === 'AI_DETECTED' ? 'primary' : 'warning'}>{type.sourceType === 'AI_DETECTED' ? 'AI-detected' : 'Staff reported'}</Chip></span>
+        <button type="button" className={s.name} onClick={() => setSelected(type.incidentTypeId)}>{type.name}</button><span><Chip tone={type.sourceType === 'AI_DETECTED' ? 'primary' : 'warning'}>{type.sourceType === 'AI_DETECTED' ? 'AI-detected' : 'Staff reported'}</Chip></span>
         <span className={s.muted}>{type.measurementType ?? 'Staff report'}</span><span><PolicyLink type={type} policies={policies} /></span>
         {updatingType === type.incidentTypeId && <span className={s.saving} role="status">Saving…</span>}
         <input type="checkbox" aria-label={`${type.name} enabled`} checked={type.status === 'ACTIVE'} disabled={busy}
           onChange={event => void toggle(type, event.target.checked)} />
       </div>)}
     </Card>
-    <Card className={s.drawer}>{chosen ? <><CardHeader title={chosen.name} subtitle={`${chosen.code} · ${chosen.sourceType}`} /><p className={s.help}>{chosen.description || 'No description.'}</p><p className={s.help}>Before photo: {chosen.requiresBeforePhoto ? 'Required' : 'Not required'}</p>
+    <Card className={s.drawer}>{chosen ? <><CardHeader title={chosen.name} /><p className={s.help}>{chosen.description || 'No description.'}</p><p className={s.help}>Before photo: {chosen.requiresBeforePhoto ? 'Required' : 'Not required'}</p>
       <p className={s.help}><PolicyLink type={chosen} policies={policies} /></p>
       <Button variant="secondary" onClick={() => setSelected(undefined)}>Back to new incident type</Button>
     </> : <><CardHeader title="New staff-reported type" />

@@ -7,11 +7,11 @@ import { Button } from '../components/ui';
 import s from './NotificationCenter.module.css';
 
 export function OperatorNotifications() {
-  return <OperatorLayout title="Notifications" subtitle="Tasks, escalations and accepted recommendations"><Inbox role="operator" /></OperatorLayout>;
+  return <OperatorLayout title="Notifications"><Inbox role="operator" /></OperatorLayout>;
 }
 
 export function ManagerNotifications() {
-  return <ManagerLayout title="Notifications" subtitle="Schedule and shift-swap updates"><Inbox role="manager" /></ManagerLayout>;
+  return <ManagerLayout title="Notifications"><Inbox role="manager" /></ManagerLayout>;
 }
 
 function Inbox({ role }: { role: 'operator' | 'manager' }) {

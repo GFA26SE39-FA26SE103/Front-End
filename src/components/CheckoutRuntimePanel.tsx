@@ -12,7 +12,7 @@ export function CheckoutRuntimePanel({ zones }: { zones: ZoneRecord[] }) {
   const zoneId = checkoutZones.some(zone => zone.zoneId === selectedId) ? selectedId : checkoutZones[0]?.zoneId;
   if (!zoneId) return null;
   return <Card className={s.panel}>
-    <CardHeader title="Checkout runtime" subtitle="Observed camera measurements, not confirmed staff identity or transactions." />
+    <CardHeader title="Checkout runtime" />
     <label className={s.selector}>Checkout Zone
       <select value={zoneId} onChange={event => setSelectedId(event.target.value)}>
         {checkoutZones.map(zone => <option key={zone.zoneId} value={zone.zoneId}>{zone.name}</option>)}

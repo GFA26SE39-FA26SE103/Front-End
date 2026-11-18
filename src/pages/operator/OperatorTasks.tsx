@@ -46,9 +46,9 @@ export default function OperatorTasks() {
   const [needsAssignment, setNeedsAssignment] = useState(false);
   const load = useCallback((signal: AbortSignal) => listTasks({ status: status === 'ALL' ? taskStatuses.join(',') : status, needsAssignment }, signal), [status, needsAssignment]);
   const { data: tasks, error, checkedAt, refresh } = useTaskPolling(load);
-  return <OperatorLayout title="Task board" subtitle="Coordinate staff responses and assignments">
+  return <OperatorLayout title="Task board">
     <div className={s.page}>
-      <div className={s.heading}><div><h2>Operational tasks</h2><p className={s.muted}>Follow offers, staff responses and work in progress.</p></div><Button variant="secondary" onClick={refresh}>Refresh tasks</Button></div>
+      <div className={s.heading}><div><h2>Operational tasks</h2></div><Button variant="secondary" onClick={refresh}>Refresh tasks</Button></div>
       <div className={s.stats}>
         {[['Shown', tasks?.length], ['Needs assignment', tasks?.filter(t => t.needsAssignment).length], ['In progress', tasks?.filter(t => t.status === 'IN_PROGRESS').length], ['Pending verification', tasks?.filter(t => t.status === 'SUBMITTED').length]].map(([label, count]) => <div className={s.stat} key={label}><span className={s.muted}>{label}</span><strong>{count ?? '—'}</strong></div>)}
       </div>
@@ -69,7 +69,6 @@ export default function OperatorTasks() {
             <td>{task.assigneeName ?? 'Unassigned'}</td><td>{date(task.plannedStartAt)}</td>
           </tr>)}</tbody>
         </table></div>}
-        <p className={s.muted}>Counts reflect this filtered view. Up to 200 recent matching tasks are returned. Updates pause while this tab is hidden.</p>
       </Card>
     </div>
   </OperatorLayout>;
@@ -87,7 +86,7 @@ function TaskDetail({ taskId }: { taskId: string }) {
   const load = useCallback((signal: AbortSignal) => getTask(taskId, signal), [taskId]);
   const { data: task, error, refresh } = useTaskPolling(load, assigning);
   const canAssign = loadSession()?.user.role === 'OPERATOR';
-  return <OperatorLayout title="Task detail" subtitle="Assignment, source and staff progress">
+  return <OperatorLayout title="Task detail">
     <div className={s.page}>
       <Link className={s.back} to={returnTo ?? '/operator/tasks'}>{returnTo ? '← Back to recommendation' : '← Task board'}</Link>
       {notice && <p className={s.success} role="status">{notice}</p>}
@@ -105,11 +104,11 @@ function TaskDetail({ taskId }: { taskId: string }) {
             <dt>Origin</dt><dd>{source(task.origin)}</dd><dt>Source</dt><dd>{task.sourceCode}</dd><dt>Zone</dt><dd>{task.zoneName}</dd><dt>Camera</dt><dd>{task.cameraCode ?? '—'}</dd>
             {task.raisedFrom && <><dt>Priority changed</dt><dd>{task.raisedFrom} → {task.priority}</dd></>}
           </dl></Card>
-          <Card><CardHeader title="Progress" subtitle="All times shown in Vietnam time" /><ol className={s.timeline}>
+          <Card><CardHeader title="Progress" /><ol className={s.timeline}>
             <li>Created · {date(task.createdAt)}</li><li>Assigned · {date(task.assignedAt)}</li><li>Accepted · {date(task.acceptedAt)}</li>
             {task.plannedStartAt && <li>Planned start · {date(task.plannedStartAt)}</li>}<li>Started · {date(task.startedAt)}</li><li>Submitted · {date(task.submittedAt)}</li>
           </ol></Card>
-          <Card><CardHeader title="SLA snapshot" subtitle="Frozen when the task was created" /><dl className={s.kv}>
+          <Card><CardHeader title="SLA snapshot" /><dl className={s.kv}>
             <dt>Priority</dt><dd>{task.slaPriorityCode ?? 'Unavailable'}</dd><dt>Policy version</dt><dd>{task.slaPolicyVersion ?? '—'}</dd>
             <dt>Respond by</dt><dd>{date(task.responseDeadlineAt ?? null)}</dd><dt>Resolve by</dt><dd>{date(task.resolutionDeadlineAt ?? null)}</dd>
           </dl>{!task.slaPolicyId && <p className={s.info}>No SLA policy snapshot is available. The UI does not invent a deadline.</p>}</Card>
@@ -132,7 +131,7 @@ function TaskDetail({ taskId }: { taskId: string }) {
 function TaskOffers({ taskId }: { taskId: string }) {
   const load = useCallback((signal: AbortSignal) => listTaskOffers({ taskId }, signal), [taskId]);
   const { data: offers, error, checkedAt, refresh } = useTaskPolling(load);
-  return <Card><CardHeader title="Dispatch offers" subtitle="Staff invitations for this Task" />
+  return <Card><CardHeader title="Dispatch offers" />
     <div className={s.offerHeader}><span className={s.muted}>{checkedAt ? `Updated ${date(checkedAt.toISOString())}` : 'Waiting for backend'}</span><Button variant="secondary" onClick={refresh}>Refresh offers</Button></div>
     {error && <p className={s.error} role="alert">{error}</p>}
     {!offers && !error && <p className={s.message} role="status">Loading offers…</p>}
@@ -179,7 +178,6 @@ function AssignDialog({ task, onClose, onSaved, onConflict }: { task: Operationa
   }
   return <Dialog title={task.assigneeUserId ? 'Reassign task' : 'Assign task'} busy={busy} onClose={onClose}>
     <form className={s.form} onSubmit={event => void save(event)}>
-      <p className={s.muted}>Checked-in, on-shift Staff with the required specialty and below the workload limit. The Staff member receives an assignment request; the task is assigned only after they accept it.</p>
       <label>Staff member<select value={userId} disabled={busy || !staff || conflict} onChange={event => setUserId(event.target.value)}><option value="">{staff ? 'Choose Staff…' : 'Loading Staff…'}</option>
         {staff?.map(row => <option key={row.userId} value={row.userId}>{row.fullName} · {row.assignedToZone ? 'Assigned to this zone' : 'Assigned to another zone'} · {workload(row.activeTasks)}</option>)}</select></label>
       {staff?.length === 0 && <p className={s.info}>No eligible Staff available. Check shift, check-in and workload, then refresh candidates.</p>}

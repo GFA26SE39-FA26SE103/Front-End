@@ -16,10 +16,10 @@ import s from './SlaPolicies.module.css';
 type Scope = 'EVENT' | 'TASK' | 'INCIDENT';
 type Row = { id: string; code: string; name: string; detail: string; policy: SlaPolicySummary | null; issues: string[]; specialty?: string };
 type Draft = { isEnabled: boolean; priorityCode: SlaPriority; responseTargetSec: string; resolutionTargetSec: string; offerTimeoutSec: string; warningPercent: string };
-const scopes: { id: Scope; label: string; help: string }[] = [
-  { id: 'EVENT', label: 'Operational events', help: 'Camera OperationalEvent types. WARNING/CRITICAL actions are configured per monitoring rule in AI Config.' },
-  { id: 'TASK', label: 'Task types', help: 'StaffReport routine Tasks and Tasks an Operator creates manually. A missing policy blocks those Tasks with a configuration error.' },
-  { id: 'INCIDENT', label: 'Incident types', help: 'Confirmed Incidents and their mandatory corrective Tasks.' },
+const scopes: { id: Scope; label: string }[] = [
+  { id: 'EVENT', label: 'Operational events' },
+  { id: 'TASK', label: 'Task types' },
+  { id: 'INCIDENT', label: 'Incident types' },
 ];
 const roles: EscalationRole[] = ['OPERATOR', 'MANAGER'];
 const emptyDraft: Draft = { isEnabled: true, priorityCode: 'HIGH', responseTargetSec: '120', resolutionTargetSec: '1200', offerTimeoutSec: '60', warningPercent: '80' };
@@ -131,22 +131,21 @@ export default function SlaPolicies() {
     } finally { setBusy(false); }
   }
 
-  return <AdminLayout title="SLA policies" subtitle="Response and resolution targets, offer timeout and escalation (LOW · MEDIUM · HIGH · CRITICAL)">
+  return <AdminLayout title="SLA policies">
     <div className={s.page}>
       <div className={s.tabs} role="tablist">{scopes.map(item => <button key={item.id} type="button" role="tab" aria-selected={scope === item.id}
         className={scope === item.id ? s.active : undefined} onClick={() => switchScope(item.id)}>{item.label}</button>)}</div>
-      <p className={s.muted}>{scopes.find(item => item.id === scope)?.help}</p>
       {error && <p className={s.error} role="alert">{error}</p>}
       {notice && <p className={s.success} role="status">{notice}</p>}
       <div className={s.layout}>
         <Card className={s.list}>
-          <CardHeader title={scopes.find(item => item.id === scope)?.label ?? ''} subtitle="Select a row to edit its SLA" />
+          <CardHeader title={scopes.find(item => item.id === scope)?.label ?? ''} />
           {!rows && !error && <p className={s.muted} role="status">Loading SLA policies…</p>}
           {rows && visible.length === 0 && <p className={s.muted}>Nothing to configure in this catalogue.</p>}
           {visible.length > 0 && <table className={s.table}>
             <thead><tr><th>Type</th><th>Priority</th><th>Respond</th><th>Resolve</th><th>Status</th></tr></thead>
             <tbody>{visible.map(row => <tr key={row.id} className={row.id === selected ? s.selected : undefined} onClick={() => choose(row)}>
-              <td><button type="button" className={s.link} onClick={() => choose(row)}>{row.name}</button><small className={s.muted}>{row.code} · {row.detail}</small>
+              <td><button type="button" className={s.link} onClick={() => choose(row)}>{row.name}</button>
                 {row.specialty && <small className={s.muted}>Required specialty · {row.specialty}</small>}
               </td>
               <td>{row.policy ? <Chip tone={row.policy.priorityCode === 'CRITICAL' ? 'danger' : row.policy.priorityCode === 'HIGH' ? 'warning' : 'neutral'}>{row.policy.priorityCode}</Chip> : '—'}</td>
@@ -156,7 +155,7 @@ export default function SlaPolicies() {
           </table>}
         </Card>
         <Card className={s.drawer}>{chosen ? <>
-          <CardHeader title={chosen.name} subtitle={`${chosen.code} · ${chosen.policy ? `policy v${chosen.policy.version}` : 'no policy yet'}`} />
+          <CardHeader title={chosen.name} subtitle={chosen.policy ? `Policy v${chosen.policy.version}` : 'No policy yet'} />
           {chosen.specialty && <p className={s.muted}>Required Staff specialty · {chosen.specialty}</p>}
           <fieldset className={s.form} disabled={busy}>
             <label>Priority<select value={draft.priorityCode} onChange={event => setDraft(d => ({ ...d, priorityCode: event.target.value as SlaPriority }))}>

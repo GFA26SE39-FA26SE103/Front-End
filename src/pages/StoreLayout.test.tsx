@@ -221,7 +221,6 @@ describe('StoreLayout', () => {
     expect(screen.queryByRole('heading', { name: 'Camera placement' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /CAM-01 Entrance camera/i }));
     expect(screen.getByRole('heading', { name: 'Camera placement' })).toBeInTheDocument();
-    expect(screen.getByText('Drag the camera to position it. Drag its direction handle to rotate.')).toBeInTheDocument();
     expect(screen.queryByText('Normalized coordinates persist across screen sizes')).not.toBeInTheDocument();
     expect(screen.queryByText('X position')).not.toBeInTheDocument();
     expect(screen.queryByText('Y position')).not.toBeInTheDocument();
@@ -377,7 +376,6 @@ describe('StoreLayout', () => {
 
     await user.click(screen.getByRole('button', { name: 'Place camera on map' }));
     expect(screen.getByRole('heading', { name: 'Place camera on map' })).toBeInTheDocument();
-    expect(screen.getByText('Choose a registered camera on this floor to place on the floor plan.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /place cam-01 entrance camera on the map/i })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Register a new camera' })).toHaveAttribute('href', '/admin/cameras');
     expect(screen.queryByLabelText(/camera code/i)).not.toBeInTheDocument();

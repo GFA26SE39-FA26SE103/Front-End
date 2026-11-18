@@ -31,7 +31,7 @@ function CoverageSession({ camera, zones, onClose, onDirtyChange, onBusyChange }
   const floorZones = zones.filter(z => z.floorId === camera.floorId);
   return <section className={s.editor} aria-label={`Coverage configuration for ${camera.code}`}>
     <div className={s.header}>
-      <CardHeader title="Camera coverage" subtitle={`${camera.code} · Draw the regions seen by this camera.`} />
+      <CardHeader title="Camera coverage" subtitle={camera.code} />
       <Button variant="secondary" disabled={busy} onClick={() => { if (discard()) onClose(); }}>Back to floor plan</Button>
     </div>
     <div className={s.modeBar} role="group" aria-label="ROI mode">

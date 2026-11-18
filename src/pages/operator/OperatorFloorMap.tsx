@@ -31,7 +31,6 @@ type FloorMapWorkspace = 'operator' | 'admin' | 'manager';
 export default function OperatorFloorMap({ workspace = 'operator' }: { workspace?: FloorMapWorkspace }) {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const [storeName, setStoreName] = useState('');
   const [floors, setFloors] = useState<FloorRecord[] | null>(null);
   const [loaded, setLoaded] = useState<{ floorId: string; details: FloorDetails } | null>(null);
   const [error, setError] = useState('');
@@ -48,9 +47,8 @@ export default function OperatorFloorMap({ workspace = 'operator' }: { workspace
     const controller = new AbortController();
     void (async () => {
       try {
-        const { stores, floors: loadedFloors } = await loadStoreFloors(controller.signal);
+        const { floors: loadedFloors } = await loadStoreFloors(controller.signal);
         if (controller.signal.aborted) return;
-        setStoreName(stores[0]?.name ?? '');
         setFloors(loadedFloors);
       } catch (reason) {
         if (!controller.signal.aborted) {
@@ -113,15 +111,11 @@ export default function OperatorFloorMap({ workspace = 'operator' }: { workspace
     return undefined;
   }, [details, selectedCameraId, selectedZoneId]);
   const unplaced = details.cameras.filter((camera) => camera.mapX === null || camera.mapY === null).length;
-  const online = details.cameras.filter((camera) => healthTone(camera) === 'success').length;
   const liveCameras = details.cameras.filter((camera) => healthTone(camera) === 'success');
   const cameraPath = (cameraId: string) => workspace === 'admin'
     ? `/admin/live-cameras/${cameraId}`
     : `/operator/cameras/${cameraId}`;
 
-  const subtitle = selectedFloor
-    ? `${storeName ? `${storeName} · ` : ''}${selectedFloor.name || `Floor ${selectedFloor.floorNumber}`} · ${online}/${details.cameras.length} cameras online`
-    : 'Live store overview';
 
   const content = (
     <>
@@ -152,7 +146,6 @@ export default function OperatorFloorMap({ workspace = 'operator' }: { workspace
           ))}
           <li><span className={`${s.swatch} ${s.swatchCamera}`} />Camera</li>
         </ul>
-        <p className={s.hint}>Zone colours show live camera coverage. Queue and crowd states appear once AI monitoring (MF-02) is connected.</p>
       </aside>
 
       <section className={s.center}>
@@ -290,7 +283,7 @@ export default function OperatorFloorMap({ workspace = 'operator' }: { workspace
 
   if (workspace === 'admin') {
     return (
-      <AdminLayout title="Live floor map" subtitle={subtitle}>
+      <AdminLayout title="Live floor map">
         <div className={s.adminWorkspace}>{content}</div>
       </AdminLayout>
     );
@@ -298,13 +291,13 @@ export default function OperatorFloorMap({ workspace = 'operator' }: { workspace
 
   if (workspace === 'manager') {
     return (
-      <ManagerLayout title="Floor map" subtitle={subtitle}>
+      <ManagerLayout title="Floor map">
         <div className={s.adminWorkspace}>{content}</div>
       </ManagerLayout>
     );
   }
 
-  return <OperatorLayout title="Floor map" subtitle={subtitle}>{content}</OperatorLayout>;
+  return <OperatorLayout title="Floor map">{content}</OperatorLayout>;
 }
 
 function ManagerCameraPopup({ camera, zones, onClose }: { camera: CameraRecord; zones: ZoneRecord[]; onClose: () => void }) {

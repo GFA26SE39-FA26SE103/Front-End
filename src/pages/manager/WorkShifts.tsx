@@ -47,7 +47,7 @@ export default function WorkShifts() {
   );
 
   return (
-    <ManagerLayout title="Work Shifts" subtitle="Configure 4, 6 or 8-hour shifts for each week" actions={actions}>
+    <ManagerLayout title="Work Shifts" actions={actions}>
       <div className={s.page}>
         {notice && <p className={s.success} role="status">{notice}</p>}
         {actionError && <p className={s.error} role="alert">{actionError}</p>}

@@ -179,7 +179,6 @@ describe('Operator Task Board', () => {
     page('/operator/tasks/task-1');
     await user.click(await screen.findByRole('button', { name: 'Assign task' }));
     const dialog = within(screen.getByRole('dialog'));
-    expect(dialog.getByText(/assigned only after they accept it/)).toBeInTheDocument();
     await dialog.findByRole('option', { name: /Linh/ });
     await user.selectOptions(dialog.getByLabelText('Staff member'), 'staff-1');
     await user.click(dialog.getByRole('button', { name: 'Confirm assignment' }));
