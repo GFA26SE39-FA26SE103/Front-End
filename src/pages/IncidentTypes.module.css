@@ -34,8 +34,9 @@
   overflow-wrap: anywhere;
 }
 
-.available { text-align: center; width: 90px; }
-.action { width: 88px; }
+.status { text-align: center; width: 90px; }
+.action { width: 1%; }
+.rowActions { display: flex; gap: 8px; }
 
 .name { color: inherit; text-align: left; font-weight: 600; overflow-wrap: anywhere; }
 .name small { display: block; margin-top: 3px; font-weight: 400; }
