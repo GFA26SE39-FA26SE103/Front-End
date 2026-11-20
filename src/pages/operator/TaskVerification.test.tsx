@@ -44,6 +44,25 @@ describe('Operator evidence verification', () => {
     expect(decided).toHaveBeenCalledWith('Task verified.');
   });
 
+  it('shows submitted AUTO evidence as waiting for recovery without manual review actions', async () => {
+    vi.mocked(getTaskEvidence).mockResolvedValue({ ...evidence(), verificationMode: 'AUTO' });
+    render(<TaskVerification task={{ ...task, origin: 'OPERATIONAL_EVENT' }} canReview onDecided={vi.fn()} />);
+
+    expect(await screen.findByText('Waiting for the source event to clear before automatic verification.')).toBeInTheDocument();
+    expect(screen.getByText('Mopped and dried the floor')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Verify task' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reject' })).not.toBeInTheDocument();
+  });
+
+  it('exposes review actions when the evidence reports a manual metric exception', async () => {
+    vi.mocked(getTaskEvidence).mockResolvedValue({ ...evidence(), verificationMode: 'MANUAL', verificationMethod: 'OPERATOR_METRIC_EXCEPTION' });
+    render(<TaskVerification task={{ ...task, origin: 'OPERATIONAL_EVENT', verificationMode: 'AUTO' }} canReview onDecided={vi.fn()} />);
+
+    expect(await screen.findByText(/switched this task to manual verification/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Verify task' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeEnabled();
+  });
+
   it('requires a reason to reject and warns before the rejection that reassigns the task', async () => {
     const user = userEvent.setup(); const decided = vi.fn();
     const earlier = [{ submissionId: 'sub-1', submittedByUserId: 'staff-1', submittedByName: 'Linh', note: 'Mopped', submittedAt: '2026-10-25T04:10:00Z',

@@ -16,15 +16,16 @@ const date = (value: string | null) => value ? new Date(value).toLocaleString('e
 const source = (origin: string) => ({ OPERATIONAL_EVENT: 'Operational event', INCIDENT: 'Incident', STAFF_REPORT: 'Staff report', MANUAL: 'Manual' }[origin] ?? origin);
 const problem = (error: unknown) => error instanceof Error ? error.message : 'The request could not be completed.';
 const workload = (count: number) => count === 0 ? 'No active tasks' : `${count} active ${count === 1 ? 'task' : 'tasks'}`;
-function Status({ task }: { task: OperationalTask }) {
-  return <Chip tone={task.status === 'VERIFIED' ? 'success' : task.status === 'IN_PROGRESS' ? 'primary' : task.status === 'SUBMITTED' ? 'purple' : 'neutral'}>{labels[task.status] ?? task.status}</Chip>;
+function TaskStatusBadges({ task }: { task: OperationalTask }) {
+  if (task.status === 'SUBMITTED' && task.verificationMode === 'AUTO') {
+    return <Chip tone="primary">Awaiting auto verification</Chip>;
+  }
+  return <>
+    <Chip tone={task.status === 'VERIFIED' ? 'success' : task.status === 'IN_PROGRESS' ? 'primary' : task.status === 'SUBMITTED' ? 'purple' : 'neutral'}>{labels[task.status] ?? task.status}</Chip>
+    {task.verificationMode && <Chip tone={task.verificationMode === 'AUTO' ? 'primary' : 'purple'}>{task.verificationMode} verification</Chip>}
+  </>;
 }
 function Priority({ value }: { value: string }) { return <Chip tone={value === 'CRITICAL' ? 'danger' : value === 'HIGH' || value === 'WARNING' ? 'warning' : 'neutral'}>{value}</Chip>; }
-/** L4: how completion is verified. AUTO falls back to MANUAL when metrics/checklist are missing or invalid. */
-function Verification({ task }: { task: Pick<OperationalTask, 'verificationMode'> }) {
-  if (!task.verificationMode) return null;
-  return task.verificationMode === 'AUTO' ? <Chip tone="primary">AUTO verification</Chip> : <Chip tone="purple">MANUAL verification</Chip>;
-}
 const endReason: Record<string, string> = {
   REJECTED_TWICE: 'Re-dispatched after 2 rejections',
   REJECTED_AFTER_REASSIGNMENT: 'Replacement rejected · Operator must assign',
@@ -65,7 +66,7 @@ export default function OperatorTasks() {
           <tbody>{tasks.map(task => <tr key={task.taskId}>
             <td><Link className={s.taskLink} to={`/operator/tasks/${encodeURIComponent(task.taskId)}`}>{task.title}</Link><p className={s.muted}>{source(task.origin)} · {task.sourceCode}</p>{task.eventClearedAt && <p className={s.muted}>Source event cleared</p>}</td>
             <td>{task.zoneName}<p className={s.muted}>{task.cameraCode ?? '—'}</p></td>
-            <td><Priority value={task.priority} /></td><td><div className={s.badges}><Status task={task} /><Verification task={task} />{task.needsAssignment && <Chip tone="warning">Needs assignment</Chip>}<AssignmentFlags task={task} /></div></td>
+            <td><Priority value={task.priority} /></td><td><div className={s.badges}><TaskStatusBadges task={task} />{task.needsAssignment && <Chip tone="warning">Needs assignment</Chip>}<AssignmentFlags task={task} /></div></td>
             <td>{task.assigneeName ?? 'Unassigned'}</td><td>{date(task.plannedStartAt)}</td>
           </tr>)}</tbody>
         </table></div>}
@@ -94,7 +95,7 @@ function TaskDetail({ taskId }: { taskId: string }) {
       {!task && !error && <p className={s.message} role="status">Loading task…</p>}
       <div className={s.heading}><div><h2>{task?.title ?? 'Task unavailable'}</h2><p className={s.muted}>Task ID: {taskId}</p></div><Button variant="secondary" onClick={refresh}>Refresh task</Button></div>
       {task && <>
-        <div className={s.badges}><Priority value={task.priority} /><Status task={task} /><Verification task={task} />{task.needsAssignment && <Chip tone="warning">Needs assignment</Chip>}<AssignmentFlags task={task} /></div>
+        <div className={s.badges}><Priority value={task.priority} /><TaskStatusBadges task={task} />{task.needsAssignment && <Chip tone="warning">Needs assignment</Chip>}<AssignmentFlags task={task} /></div>
         {task.needsAssignment && <p className={s.error}>Operator exception: {task.lastAssignmentEndReason === 'REJECTED_AFTER_REASSIGNMENT'
           ? 'the replacement Staff member\'s work was rejected, so automatic dispatch stopped.'
           : 'every eligible Staff member in the dispatch rings declined or let the offer expire.'} Assign the task manually; it is assigned only after the Staff member accepts.</p>}

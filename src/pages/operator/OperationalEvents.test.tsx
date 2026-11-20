@@ -74,6 +74,16 @@ describe('Operational Event history', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Long queue' }));
     expect(await screen.findByRole('link', { name: 'Assist queue' })).toHaveAttribute('href', '/operator/tasks/task-1');
   });
+  it('shows that an open event with a zero last reading still requires observed recovery', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(json({
+      event: { ...event, status: 'ACTIVE', clearedAt: null, metricValue: 0 }, tasks: [], hasMoreTasks: false,
+    }));
+    show('/operator/events/event-1');
+
+    expect(await screen.findByText(/clears once monitoring records continuous recovery/)).toBeInTheDocument();
+    expect(screen.getByText('Active')).toBeInTheDocument();
+    expect(screen.queryByText('Cleared', { selector: 'span' })).not.toBeInTheDocument();
+  });
   it('applies combined server filters, paginates them and clears to All history', async () => {
     show(); await screen.findByRole('link', { name: 'Long queue' });
     fireEvent.change(screen.getByLabelText('Event status'), { target: { value: 'ACTIVE' } });

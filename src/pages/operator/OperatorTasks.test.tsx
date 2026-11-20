@@ -72,6 +72,15 @@ describe('Operator Task Board', () => {
     expect(within(acceptedRow).getByText('Accepted')).toBeInTheDocument();
     expect(within(inProgressRow).getByText('In progress')).toBeInTheDocument();
   });
+  it('uses a single status badge for a submitted task awaiting automatic verification', async () => {
+    vi.mocked(listTasks).mockResolvedValue([{ ...task, status: 'SUBMITTED', verificationMode: 'AUTO', needsAssignment: false }]);
+    page();
+
+    const row = within(await screen.findByRole('row', { name: new RegExp(task.title) }));
+    expect(row.getByText('Awaiting auto verification')).toBeInTheDocument();
+    expect(row.queryByText('Pending verification')).not.toBeInTheDocument();
+    expect(row.queryByText('AUTO verification')).not.toBeInTheDocument();
+  });
   it('shows a backend failure without substituting mock tasks', async () => {
     vi.mocked(listTasks).mockRejectedValue(new ApiError(503, 'TASK_SCHEMA_NOT_READY', 'Task schema is not ready.'));
     page();

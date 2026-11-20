@@ -34,9 +34,9 @@ function EvidenceThumb({ photo }: { photo: EvidencePhoto }) {
   </figure>;
 }
 
-function Submission({ submission }: { submission: TaskSubmission }) {
+function Submission({ submission, awaitingAuto }: { submission: TaskSubmission; awaitingAuto?: boolean }) {
   return <div className={s.submission}>
-    <div className={s.badges}><Chip tone={reviewTone[submission.reviewStatus]}>{reviewLabel[submission.reviewStatus]}</Chip>
+    <div className={s.badges}><Chip tone={awaitingAuto ? 'primary' : reviewTone[submission.reviewStatus]}>{awaitingAuto ? 'Submitted' : reviewLabel[submission.reviewStatus]}</Chip>
       <span className={s.muted}>{submission.submittedByName ?? 'Staff'} · {date(submission.submittedAt)}</span></div>
     <p className={s.instructions}>{submission.note}</p>
     {submission.photos.length > 0 ? <div className={s.photos}>{submission.photos.map(photo => <EvidenceThumb key={photo.evidenceId} photo={photo} />)}</div>
@@ -77,6 +77,8 @@ export function TaskVerification({ task, canReview, onDecided }: { task: Operati
   // BR-36: rejection 2 re-dispatches automatically; a rejected replacement goes back to the Operator.
   const isReplacement = !!pending && evidence.submissions.some(x => x.submittedByUserId !== pending.submittedByUserId);
   const mode = evidence.verificationMode ?? task.verificationMode;
+  const awaitingAuto = mode === 'AUTO';
+  const metricException = mode === 'MANUAL' && (evidence.verificationMethod ?? task.verificationMethod) === 'OPERATOR_METRIC_EXCEPTION';
 
   async function decide(action: 'verify' | 'reject') {
     if (action === 'reject' && !reason.trim()) return setError('Write why the work is rejected so the Staff member can fix it.');
@@ -98,33 +100,37 @@ export function TaskVerification({ task, canReview, onDecided }: { task: Operati
 
   if (!pending && earlier.length === 0) return null;
   return <Card>
-    <CardHeader title={pending ? 'Evidence verification' : 'Submissions'} subtitle={pending ? 'Check the completion record before verifying' : 'Completion records and review decisions'} />
+    <CardHeader title={pending && !awaitingAuto ? 'Evidence verification' : 'Submissions'} />
     {pending && <>
       <div className={s.badges}>
         {evidence.requiresBeforePhoto && <Chip tone={has('BEFORE_PHOTO') ? 'success' : 'danger'}>Before photo required</Chip>}
         {evidence.requiresAfterPhoto && <Chip tone={has('AFTER_PHOTO') ? 'success' : 'danger'}>After photo required</Chip>}
-        {mode && <Chip tone={mode === 'AUTO' ? 'primary' : 'purple'}>{mode} verification</Chip>}
+        {mode === 'MANUAL' && <Chip tone="purple">MANUAL verification</Chip>}
         {!evidence.requiresBeforePhoto && !evidence.requiresAfterPhoto && <Chip tone="neutral">{task.origin === 'INCIDENT' ? 'After photo or completion note · before photo optional' : 'Completion note required · photos optional'}</Chip>}
       </div>
-      <Submission submission={pending} />
-      {missing.length > 0 && <p className={s.error}>Missing {missing.join(' and ')}. Reject the submission so the Staff member can add it.</p>}
-      {mode === 'AUTO' && <p className={s.info}>This task is AUTO-eligible but reached manual review because its metrics or checklist could not confirm completion.</p>}
-      {isReplacement
-        ? <p className={s.info}>This is the replacement Staff member's work. Rejecting it stops automatic dispatch and returns the task to you for manual assignment.</p>
-        : priorRejections > 0 && <p className={s.info}>This Staff member's work was rejected {priorRejections === 1 ? 'once' : `${priorRejections} times`} before. Another rejection sends the task to a different Staff member automatically.</p>}
-      {canReview ? <>
-        {rejecting && <label className={s.form}>Rejection reason (required)<textarea rows={3} maxLength={2000} value={reason} disabled={busy} onChange={event => setReason(event.target.value)} placeholder="What still needs to be done?" /></label>}
-        {error && <p className={s.error} role="alert">{error}</p>}
-        <div className={s.actions}>
-          {rejecting ? <>
-            <Button variant="secondary" disabled={busy} onClick={() => { setRejecting(false); setError(''); }}>Cancel</Button>
-            <Button variant="dangerGhost" disabled={busy} onClick={() => void decide('reject')}>{busy ? 'Rejecting…' : 'Confirm rejection'}</Button>
-          </> : <>
-            <Button variant="secondary" disabled={busy} onClick={() => setRejecting(true)}>Reject</Button>
-            <Button disabled={busy || missing.length > 0} onClick={() => void decide('verify')}>{busy ? 'Verifying…' : 'Verify task'}</Button>
-          </>}
-        </div>
-      </> : <p className={s.muted}>Verification requires an Operator account.</p>}
+      <Submission submission={pending} awaitingAuto={awaitingAuto} />
+      {awaitingAuto ? <p className={s.info}>{task.eventClearedAt
+        ? 'Automatic verification is pending.'
+        : 'Waiting for the source event to clear before automatic verification.'}</p> : <>
+        {missing.length > 0 && <p className={s.error}>Missing {missing.join(' and ')}. Reject the submission so the Staff member can add it.</p>}
+        {metricException && <p className={s.info}>The backend switched this task to manual verification because it could not validate the recovery evidence.</p>}
+        {isReplacement
+          ? <p className={s.info}>This is the replacement Staff member's work. Rejecting it stops automatic dispatch and returns the task to you for manual assignment.</p>
+          : priorRejections > 0 && <p className={s.info}>This Staff member's work was rejected {priorRejections === 1 ? 'once' : `${priorRejections} times`} before. Another rejection sends the task to a different Staff member automatically.</p>}
+        {canReview ? <>
+          {rejecting && <label className={s.form}>Rejection reason (required)<textarea rows={3} maxLength={2000} value={reason} disabled={busy} onChange={event => setReason(event.target.value)} placeholder="What still needs to be done?" /></label>}
+          {error && <p className={s.error} role="alert">{error}</p>}
+          <div className={s.actions}>
+            {rejecting ? <>
+              <Button variant="secondary" disabled={busy} onClick={() => { setRejecting(false); setError(''); }}>Cancel</Button>
+              <Button variant="dangerGhost" disabled={busy} onClick={() => void decide('reject')}>{busy ? 'Rejecting…' : 'Confirm rejection'}</Button>
+            </> : <>
+              <Button variant="secondary" disabled={busy} onClick={() => setRejecting(true)}>Reject</Button>
+              <Button disabled={busy || missing.length > 0} onClick={() => void decide('verify')}>{busy ? 'Verifying…' : 'Verify task'}</Button>
+            </>}
+          </div>
+        </> : <p className={s.muted}>Verification requires an Operator account.</p>}
+      </>}
     </>}
     {earlier.length > 0 && <div className={s.stack}>{pending && <h3 className={s.subheading}>Earlier submissions</h3>}
       {earlier.map(x => <Submission key={x.submissionId} submission={x} />)}</div>}
