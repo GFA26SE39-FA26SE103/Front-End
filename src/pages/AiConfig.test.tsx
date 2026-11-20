@@ -9,7 +9,7 @@ mockNativeDialogs();
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const zone = { zoneId: 'zone-1', floorId: 'floor-1', code: 'QUEUE', name: 'Actual queue zone', zoneType: 'QUEUE', mapPolygon: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }], colorHex: '#123456', minStaff: 0, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z' };
 const type = { incidentTypeId: 'type-1', code: 'LONG_QUEUE', name: 'Long Queue', description: null, sourceType: 'AI_DETECTED', measurementType: 'QUEUE_LENGTH', status: 'ACTIVE', supported: true, thresholdUnit: 'PEOPLE', defaultWarningThreshold: 3, defaultCriticalThreshold: 5, unsupportedReason: null };
-const savedConfig = (status = 'DRAFT') => ({ configId: 'config-1', zoneId: 'zone-1', name: 'Queue monitoring', confidenceThreshold: .6, status, updatedAt: '2026-10-03T01:00:00Z', rules: [{ ruleId: 'rule-1', incidentTypeId: 'type-1', warningThreshold: 3, criticalThreshold: 5, thresholdUnit: 'PEOPLE', sustainSec: 30, cooldownSec: 300, enabled: true, parametersJson: '{}' }] });
+const savedConfig = (status = 'DRAFT') => ({ configId: 'config-1', zoneId: 'zone-1', name: 'Queue monitoring', confidenceThreshold: .6, status, updatedAt: '2026-10-03T01:00:00Z', rules: [{ ruleId: 'rule-1', incidentTypeId: 'type-1', warningThreshold: 3, warningExitThreshold: 2, criticalThreshold: 5, criticalExitThreshold: 4, thresholdUnit: 'PEOPLE', sustainSec: 30, cooldownSec: 300, enabled: true, parametersJson: '{}' }] });
 let config: Record<string, unknown> | null;
 let writes: { path: string; method: string; body: Record<string, unknown>; bearer: string | null }[];
 let failSave: boolean;
@@ -28,7 +28,11 @@ function HistoryBack() { const navigate = useNavigate(); return <button onClick=
 const show = (path = '/admin/ai-config?zoneId=zone-1') => render(<MemoryRouter initialEntries={[path]}><HistoryBack /><AiConfig /></MemoryRouter>);
 async function create() { show(); fireEvent.click(await screen.findByRole('button', { name: 'Create configuration' })); await screen.findByLabelText('Add a rule'); }
 const chooseRule = (value = 'type-1') => fireEvent.change(screen.getByLabelText('Add a rule'), { target: { value } });
-async function saveRule() { chooseRule(); fireEvent.click(screen.getByRole('button', { name: 'Save configuration' })); await screen.findByText('Configuration saved as Draft. Review it before activating.'); }
+function setQueueExits() {
+  fireEvent.change(screen.getByLabelText('Long Queue warning exit'), { target: { value: '2' } });
+  fireEvent.change(screen.getByLabelText('Long Queue critical exit'), { target: { value: '4' } });
+}
+async function saveRule() { chooseRule(); setQueueExits(); fireEvent.click(screen.getByRole('button', { name: 'Save configuration' })); await screen.findByText('Configuration saved as Draft. Review it before activating.'); }
 
 describe('API-backed monitoring configuration', () => {
   beforeEach(() => {
@@ -158,12 +162,14 @@ describe('API-backed monitoring configuration', () => {
     expect(screen.getByLabelText(label + ' warning')).toHaveValue(2);
     expect(screen.getByText(/Enter the measured zone area in Store layout/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(label + ' warning'), { target: { value: '0.60' } });
+    fireEvent.change(screen.getByLabelText(label + ' warning exit'), { target: { value: '0.50' } });
     fireEvent.change(screen.getByLabelText(label + ' critical'), { target: { value: '1.00' } });
+    fireEvent.change(screen.getByLabelText(label + ' critical exit'), { target: { value: '0.90' } });
     fireEvent.change(screen.getByLabelText(label + ' clear duration'), { target: { value: '5' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
     await screen.findByText('Configuration saved as Draft. Review it before activating.');
     expect(writes[0].body.rules).toEqual([expect.objectContaining({
-      enabled: true, thresholdUnit: 'PEOPLE_PER_M2', warningThreshold: 0.60, criticalThreshold: 1.00, clearDurationSec: 5,
+      enabled: true, thresholdUnit: 'PEOPLE_PER_M2', warningThreshold: 0.60, warningExitThreshold: 0.50, criticalThreshold: 1.00, criticalExitThreshold: 0.90, clearDurationSec: 5,
     })]);
     expect(screen.getByText('Needs zone area')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Set zone area in Store layout' })).toHaveAttribute('href', '/admin/store-layout?floorId=floor-1');
@@ -265,6 +271,7 @@ describe('API-backed monitoring configuration', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Add at least one operational event rule before saving');
     expect(screen.getByLabelText('Add a rule')).toHaveFocus(); expect(writes).toHaveLength(0);
     chooseRule();
+    setQueueExits();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Save configuration' })); await screen.findByText('Configuration saved as Draft. Review it before activating.');
     expect(screen.queryByLabelText('Configuration name')).not.toBeInTheDocument();
@@ -294,12 +301,12 @@ describe('API-backed monitoring configuration', () => {
   });
 
   it('saves numeric rules with bearer and versioned review/activation', async () => {
-    await create(); chooseRule();
+    await create(); chooseRule(); setQueueExits();
     fireEvent.change(screen.getByLabelText('Detection confidence'), { target: { value: '0.7' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save configuration' })); await screen.findByText('Configuration saved as Draft. Review it before activating.');
     const saved = writes.find(r => r.method === 'PUT')!;
     expect(saved.path).toBe('/api/zones/zone-1/monitoring'); expect(saved.bearer).toBe('Bearer admin-token'); expect(saved.body.confidenceThreshold).toBe(.7);
-    expect(saved.body.rules).toEqual([{ incidentTypeId: 'type-1', warningThreshold: 3, criticalThreshold: 5, thresholdUnit: 'PEOPLE', sustainSec: 30, cooldownSec: 300, enabled: true, parametersJson: null, warningExitThreshold: null, criticalExitThreshold: null }]);
+    expect(saved.body.rules).toEqual([{ incidentTypeId: 'type-1', warningThreshold: 3, criticalThreshold: 5, thresholdUnit: 'PEOPLE', sustainSec: 30, cooldownSec: 300, enabled: true, parametersJson: null, warningExitThreshold: 2, criticalExitThreshold: 4 }]);
     fireEvent.click(screen.getByRole('button', { name: 'Review & activate' })); await screen.findByText('CAM-01');
     fireEvent.click(screen.getByRole('button', { name: 'Activate configuration' }));
     await waitFor(() => expect(writes.some(r => r.path.endsWith('/activate'))).toBe(true));
@@ -309,7 +316,7 @@ describe('API-backed monitoring configuration', () => {
   });
 
   it('preserves draft input and never claims a failed save succeeded', async () => {
-    failSave = true; await create(); chooseRule();
+    failSave = true; await create(); chooseRule(); setQueueExits();
     fireEvent.change(screen.getByLabelText('Configuration name'), { target: { value: 'Keep my edit' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save configuration' })); await screen.findByText('Save failed; retry.');
     expect(screen.getByLabelText('Configuration name')).toHaveValue('Keep my edit');
@@ -338,19 +345,57 @@ describe('API-backed monitoring configuration', () => {
     await screen.findByText('Monitoring deactivated. Edit and save a new Draft before reactivation.');
     fireEvent.click(screen.getByRole('button', { name: 'Edit configuration' }));
     expect(screen.getByLabelText('Detection confidence')).toBeEnabled();
+    expect(screen.getByLabelText('Long Queue warning exit')).toHaveValue(2);
+    expect(screen.getByLabelText('Long Queue critical exit')).toHaveValue(4);
     fireEvent.click(screen.getByRole('button', { name: 'Save configuration' })); await screen.findByText('Configuration saved as Draft. Review it before activating.');
     const saved = writes.find(r => r.method === 'PUT')!;
     expect(saved.body.expectedUpdatedAt).toBe('2026-10-03T01:00:00Z');
     expect((saved.body.rules as Record<string, unknown>[])[0].parametersJson).toBe('{}');
   });
 
-  it('saves optional exit thresholds as a dead band and validates them locally', async () => {
+  it('requires both exit thresholds and rejects entries that equal their exits', async () => {
+    await create(); chooseRule();
+    const warningExit = screen.getByLabelText('Long Queue warning exit');
+    const criticalExit = screen.getByLabelText('Long Queue critical exit');
+    expect(warningExit).toHaveValue(null);
+    expect(criticalExit).toHaveValue(null);
+    expect(warningExit).toBeRequired();
+    expect(criticalExit).toBeRequired();
+    fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
+    expect(warningExit).toHaveAccessibleDescription('Enter a threshold.');
+    expect(criticalExit).toHaveAccessibleDescription('Enter a threshold.');
+    await waitFor(() => expect(warningExit).toHaveFocus());
+    fireEvent.change(warningExit, { target: { value: '3' } });
+    fireEvent.change(criticalExit, { target: { value: '5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
+    expect(warningExit).toHaveAccessibleDescription('Warning exit must be below Warning entry.');
+    expect(criticalExit).toHaveAccessibleDescription('Critical exit must be above Warning entry and below Critical entry.');
+    expect(writes).toHaveLength(0);
+  });
+
+  it('blocks activation of a saved legacy rule until its exit thresholds are updated', async () => {
+    const saved = savedConfig();
+    config = { ...saved, rules: saved.rules.map(rule => ({ ...rule, warningExitThreshold: null, criticalExitThreshold: rule.criticalThreshold })) };
+    show();
+    expect(await screen.findByText(/Edit and save valid Warning and Critical thresholds before activation/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Review & activate' }));
+    expect(await screen.findByRole('button', { name: 'Activate configuration' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit configuration' }));
+    expect(screen.getByLabelText('Long Queue warning exit')).toHaveValue(null);
+    expect(screen.getByLabelText('Long Queue critical exit')).toHaveValue(5);
+    setQueueExits();
+    fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
+    await screen.findByText('Configuration saved as Draft. Review it before activating.');
+    expect(screen.queryByText(/Edit and save valid Warning and Critical thresholds before activation/)).not.toBeInTheDocument();
+  });
+
+  it('saves lower exit thresholds as a dead band and validates them locally', async () => {
     await create(); chooseRule();
     fireEvent.change(screen.getByLabelText('Long Queue warning'), { target: { value: '10' } });
     fireEvent.change(screen.getByLabelText('Long Queue critical'), { target: { value: '20' } });
     fireEvent.change(screen.getByLabelText('Long Queue warning exit'), { target: { value: '11' } });
     const warningExit = screen.getByLabelText('Long Queue warning exit');
-    expect(warningExit).toHaveAccessibleDescription('Warning exit must be at or below the warning threshold.');
+    expect(warningExit).toHaveAccessibleDescription('Warning exit must be below Warning entry.');
     fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
     await waitFor(() => expect(warningExit).toHaveFocus()); expect(writes).toHaveLength(0);
     fireEvent.change(warningExit, { target: { value: '0' } });
@@ -358,7 +403,7 @@ describe('API-backed monitoring configuration', () => {
     fireEvent.change(screen.getByLabelText('Long Queue warning exit'), { target: { value: '8' } });
     fireEvent.change(screen.getByLabelText('Long Queue critical exit'), { target: { value: '10' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
-    expect(screen.getByLabelText('Long Queue critical exit')).toHaveAccessibleDescription('Critical exit must be above warning and at or below critical.'); expect(writes).toHaveLength(0);
+    expect(screen.getByLabelText('Long Queue critical exit')).toHaveAccessibleDescription('Critical exit must be above Warning entry and below Critical entry.'); expect(writes).toHaveLength(0);
     fireEvent.change(screen.getByLabelText('Long Queue critical exit'), { target: { value: '18' } });
     expect(within(screen.getByRole('group', { name: 'WARNING' })).getByText('8 ≤ x < 10')).toBeInTheDocument();
     expect(within(screen.getByRole('group', { name: 'CRITICAL' })).getByText('18 ≤ x < 20')).toBeInTheDocument();
@@ -367,7 +412,9 @@ describe('API-backed monitoring configuration', () => {
   });
 
   it('rejects invalid thresholds locally and clears review when Edit opens', async () => {
-    await create(); chooseRule();
+    await create(); chooseRule(); setQueueExits();
+    fireEvent.change(screen.getByLabelText('Long Queue warning'), { target: { value: '4' } });
+    expect(screen.getByLabelText('Long Queue critical')).toHaveAccessibleDescription(/at least 2 people above Warning entry/);
     fireEvent.change(screen.getByLabelText('Long Queue warning'), { target: { value: '6' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
     expect(screen.getByLabelText('Long Queue critical')).toHaveAccessibleDescription('Critical must be higher than warning.'); expect(writes).toHaveLength(0);

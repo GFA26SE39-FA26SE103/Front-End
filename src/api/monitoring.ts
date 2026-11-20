@@ -18,7 +18,9 @@ export type MonitoringRule = {
   warningExitThreshold?: number | null; criticalExitThreshold?: number | null;
 };
 export type MonitoringRequest = {
-  name: string; confidenceThreshold: number; rules: MonitoringRule[]; expectedUpdatedAt?: string;
+  name: string; confidenceThreshold: number;
+  rules: (MonitoringRule & { warningExitThreshold: number; criticalExitThreshold: number })[];
+  expectedUpdatedAt?: string;
 };
 export type MonitoringConfiguration = {
   configId: string; zoneId: string; name: string; confidenceThreshold: number; status: string;

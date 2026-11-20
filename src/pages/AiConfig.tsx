@@ -16,7 +16,6 @@ type MeasurementOption = NonNullable<IncidentType['measurementOptions']>[number]
 type RuleInput = Omit<MonitoringRule, 'warningThreshold' | 'criticalThreshold' | 'sustainSec' | 'cooldownSec' | 'clearDurationSec' | 'warningExitThreshold' | 'criticalExitThreshold'> & {
   warningThreshold: string; criticalThreshold: string; sustainSec: string; cooldownSec: string;
   clearDurationSec: string;
-  /** '' = no dead band (exit equals the enter threshold). */
   warningExitThreshold: string; criticalExitThreshold: string;
 };
 type FloorGroup = { floorId: string; floorNumber: number; name: string; zones: ZoneRecord[] };
@@ -26,7 +25,8 @@ type PolicySummary = ResponsePolicy[] | 'error' | undefined;
 
 const inputRule = (r: MonitoringRule): RuleInput => ({ ...r, warningThreshold: String(r.warningThreshold), criticalThreshold: String(r.criticalThreshold), sustainSec: String(r.sustainSec), cooldownSec: String(r.cooldownSec),
   clearDurationSec: r.clearDurationSec == null ? '' : String(r.clearDurationSec),
-  warningExitThreshold: r.warningExitThreshold == null ? '' : String(r.warningExitThreshold), criticalExitThreshold: r.criticalExitThreshold == null ? '' : String(r.criticalExitThreshold) });
+  warningExitThreshold: r.warningExitThreshold == null ? '' : String(r.warningExitThreshold),
+  criticalExitThreshold: r.criticalExitThreshold == null ? '' : String(r.criticalExitThreshold) });
 /** Shows "≥ enter" and, when a dead band is configured, "held until < exit". */
 const band = (enter: number, exit: number | null | undefined, unit: string) => `≥ ${enter}${exit != null && exit !== enter ? ` · held until < ${exit}` : ''} ${unit}`;
 const message = (e: unknown) => e instanceof Error ? e.message : 'The request could not be completed.';
@@ -43,9 +43,8 @@ type ThresholdField = typeof thresholdFields[number]['entry' | 'exit'];
 
 function validateThresholds(rule: RuleInput) {
   const errors: Partial<Record<ThresholdField, string>> = {};
-  const parse = (field: ThresholdField, optional = false) => {
+  const parse = (field: ThresholdField) => {
     const input = rule[field].trim();
-    if (!input && optional) return null;
     const value = Number(input);
     if (!input) errors[field] = 'Enter a threshold.';
     else if (!/^\d+(\.\d{1,4})?$/.test(input) || value >= 1e14) {
@@ -57,20 +56,25 @@ function validateThresholds(rule: RuleInput) {
   };
   const warning = parse('warningThreshold');
   const critical = parse('criticalThreshold');
-  const warningExit = parse('warningExitThreshold', true);
-  const criticalExit = parse('criticalExitThreshold', true);
-  if (warning !== null && critical !== null && warning >= critical) {
-    errors.criticalThreshold = 'Critical must be higher than warning.';
+  const warningExit = parse('warningExitThreshold');
+  const criticalExit = parse('criticalExitThreshold');
+  if (warning !== null && critical !== null) {
+    if (warning >= critical) errors.criticalThreshold = 'Critical must be higher than warning.';
+    else if (rule.thresholdUnit === 'PEOPLE' && critical - warning < 2) {
+      errors.criticalThreshold = 'Set Critical entry at least 2 people above Warning entry to allow a whole-number exit between them.';
+    }
   }
-  if (warningExit !== null && warning !== null && warningExit > warning) {
-    errors.warningExitThreshold = 'Warning exit must be at or below the warning threshold.';
+  if (rule.enabled && rule.thresholdUnit === 'PEOPLE' && warning !== null && warning < 2) {
+    errors.warningThreshold = 'Set Warning entry to at least 2 people so its exit can be positive and lower.';
   }
-  if (rule.enabled && (warningExit ?? warning) === 0) {
-    if (warningExit === 0) errors.warningExitThreshold = 'Use a value above 0 so the event can clear.';
-    else errors.warningThreshold = 'Use a value above 0 so the event can clear.';
+  if (warningExit !== null && warning !== null && warningExit >= warning) {
+    errors.warningExitThreshold = 'Warning exit must be below Warning entry.';
   }
-  if (criticalExit !== null && ((warning !== null && criticalExit <= warning) || (critical !== null && criticalExit > critical))) {
-    errors.criticalExitThreshold = 'Critical exit must be above warning and at or below critical.';
+  if (rule.enabled && warningExit === 0) {
+    errors.warningExitThreshold = 'Use a value above 0 so the event can clear.';
+  }
+  if (criticalExit !== null && ((warning !== null && criticalExit <= warning) || (critical !== null && criticalExit >= critical))) {
+    errors.criticalExitThreshold = 'Critical exit must be above Warning entry and below Critical entry.';
   }
   return { warning, critical, warningExit, criticalExit, errors };
 }
@@ -272,6 +276,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   const hasMeasuredArea = areaM2 != null && areaM2 >= 0.01 && areaM2 <= 9999999999.99;
   const needsZoneArea = (rule: MonitoringRule) => rule.enabled && !hasMeasuredArea && ruleMode(rule, types) === 'CROWD_DENSITY';
   const densityBlocked = config?.rules.some(needsZoneArea) ?? false;
+  const needsThresholdUpdate = config?.rules.some(rule => rule.enabled && Object.keys(validateThresholds(inputRule(rule)).errors).length > 0) ?? false;
   const available = types.filter(t => t.status === 'ACTIVE' && !rules.some(r => r.incidentTypeId === t.incidentTypeId));
   const ruleChoices = available.flatMap<{ value: string; label: string; type: IncidentType; measurement?: MeasurementOption }>(type => {
     if (type.code === 'OVERCROWDING_CONGESTION' || type.code === 'CONGESTION') {
@@ -332,7 +337,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       const parsed = rules.map(r => {
         const label = types.find(t => t.incidentTypeId === r.incidentTypeId)?.name ?? 'Rule';
         const { warning, critical, warningExit, criticalExit, errors } = validateThresholds(r);
-        if (warning === null || critical === null || Object.keys(errors).length) {
+        if (warning === null || critical === null || warningExit === null || criticalExit === null || Object.keys(errors).length) {
           throw new Error(label + ': check the threshold fields.');
         }
         if (!r.thresholdUnit.trim()) throw new Error(label + ': threshold unit is required.');
@@ -350,7 +355,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   }
   async function changeActive(value: boolean) {
     const version = value ? review?.configuration.updatedAt : config?.updatedAt;
-    if (!version || (value && (!review?.canActivate || dirty || densityBlocked))) return;
+    if (!version || (value && (!review?.canActivate || dirty || densityBlocked || needsThresholdUpdate))) return;
     await operation(async () => {
       const saved = await setMonitoringActive(zoneId, value, version);
       if (mounted.current) { apply(saved); setReview(null); setNotice(value ? 'Configuration activated. Monitoring worker requested; check live monitoring status to confirm it is running.' : 'Monitoring deactivated. Edit and save a new Draft before reactivation.'); }
@@ -430,6 +435,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
             {active && <Button variant="secondary" disabled={busy} onClick={() => void changeActive(false)}>Deactivate configuration</Button>}
           </div>
           {densityBlocked && <p className={s.missingBox}>Crowd density needs a measured zone area before activation. <Link to={`/admin/store-layout?floorId=${encodeURIComponent(zone.floorId)}`}>Set zone area in Store layout</Link>.</p>}
+          {!active && needsThresholdUpdate && <p className={s.missingBox}>Edit and save valid Warning and Critical thresholds before activation.</p>}
           <h3 className={s.section}>Operational event rules</h3>
           {config.rules.length ? <div className={s.ruleTable} role="table" aria-label="Operational event rules">
             <div role="row" className={s.ruleHeadRow}><span role="columnheader">Operational event type</span><span role="columnheader">Warning</span><span role="columnheader">Critical</span><span role="columnheader">Sustain</span><span role="columnheader">Cooldown</span><span role="columnheader">Rule setting</span><span role="columnheader">Response</span></div>
@@ -495,9 +501,8 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
             <div className={s.thresholdPairs}>
               {thresholdFields.map(({ level, entry, exit }) => {
                 const entryValue = r[entry].trim();
-                const exitValue = r[exit].trim() || entryValue;
-                const validPair = entryValue && !errors[entry] && !errors[exit];
-                const dual = validPair && Number(exitValue) < Number(entryValue);
+                const exitValue = r[exit].trim();
+                const validPair = !errors[entry] && !errors[exit];
                 return <fieldset key={level} disabled={locked} className={s.thresholdPair}>
                   <legend>{level}</legend>
                   <div className={s.thresholdInputs}>
@@ -506,20 +511,18 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
                       const error = showRequiredThresholds || r[key].trim() ? errors[key] : undefined;
                       const errorId = `${r.incidentTypeId}-${key}-error`;
                       return <label key={key} className={s.field}>
-                        {isExit ? 'Leave level when x < (optional)' : 'Reach level when x ≥'}
+                        {isExit ? 'Leave level when x <' : 'Reach level when x ≥'}
                         <input aria-label={`${label} ${level.toLowerCase()}${isExit ? ' exit' : ''}`}
                           aria-invalid={Boolean(error) || undefined} aria-describedby={error ? errorId : undefined}
-                          type="number" min="0" step={r.thresholdUnit === 'PEOPLE' ? '1' : '.0001'}
-                          placeholder={isExit ? entryValue || 'Same as entry' : undefined}
+                          type="number" min="0" step={r.thresholdUnit === 'PEOPLE' ? '1' : '.0001'} required
                           value={r[key]} onChange={e => changeRule(r.incidentTypeId, { [key]: e.target.value })} />
                         {error && <span id={errorId} className={s.fieldError}>{error}</span>}
                       </label>;
                     })}
                   </div>
-                  <p className={s.thresholdHint}>{dual
+                  <p className={s.thresholdHint}>{validPair
                     ? <><strong>Dual threshold</strong> · <code>{exitValue} ≤ x &lt; {entryValue}</code> keeps this rule level if already entered.</>
-                    : validPair ? 'Single threshold. Set a lower exit to keep the level through small fluctuations.'
-                      : 'Enter the thresholds to see when the rule keeps this level.'}</p>
+                    : 'Set the exit below the entry threshold.'}</p>
                 </fieldset>;
               })}
             </div>
@@ -566,7 +569,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       {previewCameraId && <div className={s.zonePreview}><AnnotatedPreview cameraId={previewCameraId} zoneId={zoneId} regions={previewRegions} enabled /></div>}
       <ul>{review.issues.map((i, n) => <li key={n} className={s.error}><strong>{i.code}: </strong><span>{i.message}</span></li>)}</ul>
       {review.warnings.map(w => <p key={w} className={s.help}>{w}</p>)}
-      <Button disabled={busy || dirty || active || !review.canActivate || densityBlocked} onClick={() => void changeActive(true)}>Activate configuration</Button>
+      <Button disabled={busy || dirty || active || !review.canActivate || densityBlocked || needsThresholdUpdate} onClick={() => void changeActive(true)}>Activate configuration</Button>
     </section>}
     {showForm && ruleToRemove && <Dialog title="Remove monitoring rule?" busy={false} onClose={() => setRuleToRemove(null)}>
       <p className={s.alertBox}><span><strong>{ruleName(ruleToRemove, types)}</strong> will be removed from this draft. Saving the configuration applies the removal to this zone.</span></p>
