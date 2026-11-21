@@ -1,24 +1,16 @@
 import { useEffect, useState } from 'react';
 import { getCheckoutRuntime, listCheckoutCounters, type CheckoutCounter, type CheckoutRuntime } from '../api/checkout';
 import type { ZoneRecord } from '../api/floors';
-import { Card, CardHeader } from './ui';
+import { Card, CardHeader, Chip } from './ui';
 import s from './CheckoutRuntimePanel.module.css';
 
 const count = (value: number | null | undefined) => value == null ? 'Unavailable' : String(value);
 
-export function CheckoutRuntimePanel({ zones }: { zones: ZoneRecord[] }) {
-  const checkoutZones = zones.filter(zone => zone.zoneType === 'CHECKOUT');
-  const [selectedId, setSelectedId] = useState('');
-  const zoneId = checkoutZones.some(zone => zone.zoneId === selectedId) ? selectedId : checkoutZones[0]?.zoneId;
-  if (!zoneId) return null;
+export function CheckoutRuntimePanel({ zone }: { zone: ZoneRecord }) {
+  if (zone.zoneType !== 'CHECKOUT') return null;
   return <Card className={s.panel}>
-    <CardHeader title="Checkout runtime" />
-    <label className={s.selector}>Checkout Zone
-      <select value={zoneId} onChange={event => setSelectedId(event.target.value)}>
-        {checkoutZones.map(zone => <option key={zone.zoneId} value={zone.zoneId}>{zone.name}</option>)}
-      </select>
-    </label>
-    <CheckoutRuntimeContent key={zoneId} zoneId={zoneId} />
+    <CardHeader title="Checkout measurements" subtitle={zone.name} />
+    <CheckoutRuntimeContent key={zone.zoneId} zoneId={zone.zoneId} />
   </Card>;
 }
 
@@ -52,10 +44,24 @@ function CheckoutRuntimeContent({ zoneId }: { zoneId: string }) {
   }, [zoneId]);
 
   const observations = new Map(runtime?.counters.map(counter => [counter.counterId, counter]));
+  const stateLabel = runtime?.state === 'READY' ? 'Ready' : runtime?.state === 'NOT_ACTIVE' ? 'Not active' : 'Unavailable';
   return <>
     {loading && <p role="status">Loading checkout runtime…</p>}
     {error && <p role="alert">{error} {runtime && 'Showing last received data; it may be stale.'}</p>}
-    {runtime && <p className={s.summary}>State: {runtime.state} · Queue Q: {count(runtime.queueCount)} · Staffed S: {count(runtime.staffedCounterCount)} · Q/S: {count(runtime.queuePerStaffedCounter)} · Longest wait: {runtime.maxWaitSeconds == null ? 'Unavailable' : `${Math.round(runtime.maxWaitSeconds)}s`}{runtime.noStaffedCapacity ? ' · No staffed capacity' : ''}{runtime.issueCode ? ` · ${runtime.issueCode}` : ''}</p>}
+    {runtime && <>
+      <div className={s.state}>
+        <Chip tone={runtime.state === 'READY' ? 'success' : 'neutral'}>{stateLabel}</Chip>
+        {runtime.state === 'NOT_ACTIVE' && <span>Review and activate a checkout measurement rule to start collecting data.</span>}
+        {runtime.state === 'UNAVAILABLE' && <span>Check the checkout counter mappings and camera source.</span>}
+        {runtime.noStaffedCapacity && <span>Queue detected while no counter is staffed.</span>}
+      </div>
+      <dl className={s.metrics}>
+        <div><dt>People in queue</dt><dd>{count(runtime.queueCount)}</dd></div>
+        <div><dt>Staffed counters</dt><dd>{count(runtime.staffedCounterCount)}</dd></div>
+        <div><dt>Queue per staffed counter</dt><dd>{count(runtime.queuePerStaffedCounter)}</dd></div>
+        <div><dt>Longest wait</dt><dd>{runtime.maxWaitSeconds == null ? 'Unavailable' : `${Math.round(runtime.maxWaitSeconds)} s`}</dd></div>
+      </dl>
+    </>}
     {!loading && !error && counters.length === 0 && <p>No checkout counters configured for this Zone.</p>}
     {counters.length > 0 && <div className={s.scroll}><table className={s.table}>
       <thead><tr><th scope="col">Counter</th><th scope="col">Configuration</th><th scope="col">Presence</th><th scope="col">Queue</th></tr></thead>

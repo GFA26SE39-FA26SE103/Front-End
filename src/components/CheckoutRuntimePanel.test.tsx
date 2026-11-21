@@ -28,14 +28,15 @@ describe('CheckoutRuntimePanel', () => {
   });
 
   it('shows unavailable measurements without treating them as zero', async () => {
-    render(<CheckoutRuntimePanel zones={[zone]} />);
-    expect(await screen.findByText(/State: UNAVAILABLE/)).toHaveTextContent('Queue Q: Unavailable');
+    render(<CheckoutRuntimePanel zone={zone} />);
+    expect(await screen.findByText('People in queue')).toBeInTheDocument();
+    expect(screen.getByText('Longest wait').parentElement).toHaveTextContent('Unavailable');
     expect(screen.getByRole('row', { name: /C01/ })).toHaveTextContent('UNKNOWN');
     expect(screen.getByRole('row', { name: /C01/ })).toHaveTextContent('Unavailable');
   });
 
   it('does not poll when there is no checkout zone', () => {
-    render(<CheckoutRuntimePanel zones={[]} />);
+    render(<CheckoutRuntimePanel zone={{ ...zone, zoneType: 'AISLES' }} />);
     expect(getCheckoutRuntime).not.toHaveBeenCalled();
   });
 });

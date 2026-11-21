@@ -97,6 +97,8 @@
   position: fixed;
   z-index: 1000;
   width: min(290px, calc(100vw - 16px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -137,7 +139,6 @@
   cursor: grabbing;
 }
 
-.tools,
 .actions,
 .palette {
   display: flex;
@@ -146,7 +147,6 @@
   flex-wrap: wrap;
 }
 
-.tools button,
 .actions button,
 .closePolygon {
   min-height: 30px;
@@ -169,11 +169,9 @@
 }
 .deleteConfirm p { margin: 0; }
 
-.tools button[aria-pressed='true'] {
-  border-color: var(--color-primary);
-  background: var(--color-primary-tint);
-  color: var(--color-primary);
-  font-weight: 700;
+.drawHint {
+  margin: 0;
+  color: var(--color-text-muted);
 }
 
 .swatch {
@@ -239,6 +237,59 @@
   margin: 0;
   color: var(--color-danger);
   font-size: 10px;
+}
+
+.usage {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  background: var(--color-surface-2);
+}
+
+.usage p,
+.usage ul {
+  margin: 0;
+}
+
+.usage ul {
+  padding-inline-start: 16px;
+}
+
+.usage ul:empty {
+  display: none;
+}
+
+.usage small {
+  display: block;
+  color: var(--color-text-muted);
+}
+
+.monitoringUsage {
+  display: grid;
+  gap: 3px;
+  overflow-wrap: anywhere;
+}
+
+.usageStatus {
+  display: inline-block;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--color-primary-tint);
+  color: var(--color-primary);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.usageLink {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .actions button:first-child {

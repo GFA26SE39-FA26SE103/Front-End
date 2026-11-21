@@ -1,7 +1,10 @@
-.panel { display: grid; gap: 12px; min-width: 0; }
-.selector { display: grid; gap: 6px; max-width: 320px; font-size: 13px; font-weight: 600; }
-.selector select { min-height: 38px; padding: 8px; border: 1px solid var(--color-border); border-radius: 7px; background: var(--color-surface); color: var(--color-text); }
-.summary { margin: 0; color: var(--color-text-muted); overflow-wrap: anywhere; }
+.panel { display: grid; gap: 16px; min-width: 0; }
+.state { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; color: var(--color-text-muted); }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 168px), 1fr)); gap: 12px; margin: 0; }
+.metrics > div { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface-2); }
+.metrics dt { font-size: 13px; color: var(--color-text-muted); }
+.metrics dd { margin: 0; font-size: 20px; font-weight: 650; }
 .scroll { overflow-x: auto; }
-.table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
-.table th, .table td { padding: 10px; border-bottom: 1px solid var(--color-border); }
+.table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
+.table thead { background: var(--color-surface-2); }
+.table th, .table td { padding: 12px; border-bottom: 1px solid var(--color-border); }

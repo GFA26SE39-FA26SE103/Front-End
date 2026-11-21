@@ -21,6 +21,8 @@ let requests: string[];
 let crowdCatalog: boolean;
 let densityCatalog: boolean;
 let checkoutCatalog: boolean;
+let checkoutZone: boolean;
+let checkoutSupported: boolean;
 let reviewedAreaM2: number | null;
 let criticalTaskType: string | null;
 const crowdType = { ...type, incidentTypeId: 'crowd', code: 'OVERCROWDING_CONGESTION', name: 'Overcrowding / Congestion', measurementType: 'PEOPLE_COUNT', supported: true, thresholdUnit: 'PEOPLE', defaultWarningThreshold: 3, defaultCriticalThreshold: 5, unsupportedReason: null, measurementOptions: [{ mode: 'PEOPLE_COUNT', unit: 'PEOPLE', supported: true, reason: null }] };
@@ -37,7 +39,7 @@ async function saveRule() { chooseRule(); setQueueExits(); fireEvent.click(scree
 describe('API-backed monitoring configuration', () => {
   beforeEach(() => {
     failDelete = false;
-    config = null; writes = []; requests = []; failSave = false; ready = true; failLoad = false; multipleFloors = false; crowdCatalog = false; densityCatalog = false; checkoutCatalog = false; reviewedAreaM2 = null; criticalTaskType = null;
+    config = null; writes = []; requests = []; failSave = false; ready = true; failLoad = false; multipleFloors = false; crowdCatalog = false; densityCatalog = false; checkoutCatalog = false; checkoutZone = false; checkoutSupported = false; reviewedAreaM2 = null; criticalTaskType = null;
     URL.createObjectURL = vi.fn(() => 'blob:zone-confidence'); URL.revokeObjectURL = vi.fn();
     saveSession({ accessToken: 'admin-token', expiresAt: '2099-01-01T00:00:00Z', user: { userId: 'admin', email: 'admin@example.test', fullName: 'Admin', roleId: 'role', role: 'ADMIN', status: 'ACTIVE' } }, true);
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -48,12 +50,19 @@ describe('API-backed monitoring configuration', () => {
         const floor = { floorId: 'floor-1', supermarketId: 'store-1', floorNumber: 1, name: 'Real floor', mapAssetUrl: null, mapWidth: null, mapHeight: null, status: 'ACTIVE' };
         return json(multipleFloors ? [floor, { ...floor, floorId: 'floor-2', floorNumber: 2, name: 'Upper floor' }] : [floor]);
       }
-      if (path === '/api/floors/floor-1/zones') return json([zone]);
+      if (path === '/api/floors/floor-1/zones') return json([checkoutZone ? { ...zone, zoneType: 'CHECKOUT' } : zone]);
       if (path === '/api/floors/floor-2/zones') return json([{ ...zone, zoneId: 'zone-2', floorId: 'floor-2', name: 'Fresh food zone', code: 'FOOD' }]);
       if (path === '/api/incident-types' && checkoutCatalog) return json([type,
-        { ...type, incidentTypeId: 'checkout', code: 'CHECKOUT_CAPACITY_ISSUE', name: 'Checkout Capacity Issue', measurementType: 'CHECKOUT_CAPACITY', supported: false },
-        { ...type, incidentTypeId: 'wait', code: 'EXCESSIVE_WAITING_TIME', name: 'Excessive Waiting Time', measurementType: 'WAITING_TIME', supported: false },
+        { ...type, incidentTypeId: 'checkout', code: 'CHECKOUT_CAPACITY_ISSUE', name: 'Checkout Capacity Issue', measurementType: 'CHECKOUT_CAPACITY',
+          supported: checkoutSupported, thresholdUnit: 'PEOPLE_PER_STAFFED_COUNTER', unsupportedReason: checkoutSupported ? null : 'Checkout AI is disabled in this environment.' },
+        { ...type, incidentTypeId: 'wait', code: 'EXCESSIVE_WAITING_TIME', name: 'Excessive Waiting Time', measurementType: 'WAITING_TIME',
+          supported: checkoutSupported, thresholdUnit: 'MINUTES', defaultWarningThreshold: 4, defaultCriticalThreshold: 8,
+          unsupportedReason: checkoutSupported ? null : 'Checkout AI is disabled in this environment.' },
       ]);
+      if (path.endsWith('/checkout-counters')) return json([]);
+      if (path.endsWith('/checkout-runtime')) return json({
+        state: 'NOT_ACTIVE', queueCount: null, staffedCounterCount: null, queuePerStaffedCounter: null, maxWaitSeconds: null, counters: [],
+      });
       if (path === '/api/incident-types') return json(densityCatalog
         ? [{ ...crowdType, measurementOptions: [...crowdType.measurementOptions,
           { mode: 'CROWD_DENSITY', unit: 'PEOPLE_PER_M2', supported: true, reason: null, defaultWarning: 2, defaultCritical: 3 }] }]
@@ -134,6 +143,52 @@ describe('API-backed monitoring configuration', () => {
     expect(within(picker).queryByRole('option', { name: /Checkout Capacity|Excessive Waiting/ })).not.toBeInTheDocument();
     chooseRule('checkout');
     expect(screen.queryByLabelText('Checkout Capacity Issue warning')).not.toBeInTheDocument();
+  });
+
+  it('shows Checkout measurements and explains why checkout-only rules are unavailable', async () => {
+    checkoutCatalog = true; checkoutZone = true;
+    show();
+    expect(await screen.findByRole('heading', { name: 'Checkout measurements' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Create configuration' }));
+    const picker = screen.getByLabelText('Add a rule');
+    expect(within(picker).getByRole('option', { name: /Excessive Waiting Time.*Unavailable/ })).toBeDisabled();
+    expect(within(picker).getByRole('option', { name: /Checkout Capacity Issue.*Unavailable/ })).toBeDisabled();
+    expect(screen.getByText('Excessive Waiting Time: Checkout AI is disabled in this environment.')).toBeInTheDocument();
+  });
+
+  it('saves a supported checkout waiting rule with minutes and explicit exit thresholds', async () => {
+    checkoutCatalog = true; checkoutZone = true; checkoutSupported = true;
+    await create();
+    expect(within(screen.getByLabelText('Add a rule')).getByRole('option', { name: 'Excessive Waiting Time' })).toBeEnabled();
+    chooseRule('wait');
+    expect(screen.getByLabelText('Excessive Waiting Time unit')).toHaveValue('minutes');
+    expect(screen.getByText(/Review requires.*Service ROI/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Excessive Waiting Time warning exit'), { target: { value: '3' } });
+    fireEvent.change(screen.getByLabelText('Excessive Waiting Time critical exit'), { target: { value: '6' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
+    await screen.findByText('Configuration saved as Draft. Review it before activating.');
+    expect(writes[0].body.rules).toEqual([expect.objectContaining({
+      incidentTypeId: 'wait', thresholdUnit: 'MINUTES', enabled: true, warningThreshold: 4, criticalThreshold: 8,
+      warningExitThreshold: 3, criticalExitThreshold: 6,
+    })]);
+  });
+
+  it('saves operator-entered capacity thresholds and the no-staffed-counter response', async () => {
+    checkoutCatalog = true; checkoutZone = true; checkoutSupported = true;
+    await create();
+    chooseRule('checkout');
+    expect(screen.getByLabelText('Checkout Capacity Issue warning')).toHaveValue(null);
+    for (const [field, value] of [['warning', '3'], ['warning exit', '2'], ['critical', '5'], ['critical exit', '4']]) {
+      fireEvent.change(screen.getByLabelText('Checkout Capacity Issue ' + field), { target: { value } });
+    }
+    fireEvent.change(screen.getByLabelText('Minimum queue (people)'), { target: { value: '4' } });
+    fireEvent.change(screen.getByLabelText('Alert when no counter is staffed'), { target: { value: 'CRITICAL' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
+    await screen.findByText('Configuration saved as Draft. Review it before activating.');
+    expect(writes[0].body.rules).toEqual([expect.objectContaining({
+      incidentTypeId: 'checkout', thresholdUnit: 'PEOPLE_PER_STAFFED_COUNTER', enabled: true,
+      parametersJson: '{"minQueue":4,"noStaffedAlertLevel":"CRITICAL"}',
+    })]);
   });
 
   it('opens an overview grouped by real floors with saved rules and no edit form', async () => {

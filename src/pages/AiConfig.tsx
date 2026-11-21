@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AdminLayout } from '../components/AdminLayout';
 import { AnnotatedPreview } from '../components/AnnotatedPreview';
+import { CheckoutRuntimePanel } from '../components/CheckoutRuntimePanel';
 import { Dialog } from '../components/Dialog';
 import { Button, Chip, type Tone } from '../components/ui';
 import { ApiError } from '../api/client';
@@ -92,8 +93,19 @@ const ruleName = (rule: Pick<MonitoringRule, 'incidentName' | 'incidentTypeId'>,
 const ruleMode = (rule: Pick<MonitoringRule, 'incidentTypeId' | 'incidentCode' | 'thresholdUnit' | 'parametersJson'>, types: IncidentType[]) => measurementMode({ ...rule, incidentCode: rule.incidentCode ?? types.find(t => t.incidentTypeId === rule.incidentTypeId)?.code });
 const formatTime = (value: string) => { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString(); };
 
-const units: Record<string, string> = { PEOPLE: 'people', MINUTES: 'minutes', PEOPLE_PER_M2: 'people/m²' };
+const units: Record<string, string> = { PEOPLE: 'people', MINUTES: 'minutes', PEOPLE_PER_M2: 'people/m²', PEOPLE_PER_STAFFED_COUNTER: 'people/staffed counter' };
 const unitName = (unit: string) => units[unit] ?? unit;
+const isCheckoutMode = (mode: string | null | undefined) => mode === 'WAITING_TIME' || mode === 'CHECKOUT_CAPACITY';
+
+function checkoutParameters(rule: Pick<MonitoringRule, 'parametersJson'>): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(rule.parametersJson ?? '{}');
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
+  } catch {
+    // An existing malformed draft still needs editable fields.
+  }
+  return {};
+}
 
 function responseLabel(summary: PolicySummary, level: PolicyPriority) {
   if (summary === undefined) return 'Checking policy…';
@@ -277,8 +289,15 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   const needsZoneArea = (rule: MonitoringRule) => rule.enabled && !hasMeasuredArea && ruleMode(rule, types) === 'CROWD_DENSITY';
   const densityBlocked = config?.rules.some(needsZoneArea) ?? false;
   const needsThresholdUpdate = config?.rules.some(rule => rule.enabled && Object.keys(validateThresholds(inputRule(rule)).errors).length > 0) ?? false;
-  const available = types.filter(t => t.status === 'ACTIVE' && !rules.some(r => r.incidentTypeId === t.incidentTypeId));
-  const ruleChoices = available.flatMap<{ value: string; label: string; type: IncidentType; measurement?: MeasurementOption }>(type => {
+  const available = types.filter(t => !rules.some(r => r.incidentTypeId === t.incidentTypeId));
+  const ruleChoices = available.flatMap<{ value: string; label: string; type: IncidentType; measurement?: MeasurementOption; unavailableReason?: string }>(type => {
+    if (isCheckoutMode(type.measurementType)) {
+      if (zone.zoneType !== 'CHECKOUT') return [];
+      const unavailableReason = type.status !== 'ACTIVE' || !type.supported
+        ? type.unsupportedReason ?? 'Checkout measurement is unavailable in this environment.' : undefined;
+      return [{ value: type.incidentTypeId, label: type.name, type, unavailableReason }];
+    }
+    if (type.status !== 'ACTIVE') return [];
     if (type.code === 'OVERCROWDING_CONGESTION' || type.code === 'CONGESTION') {
       const measurement = type.measurementOptions?.find(option => option.mode === 'CROWD_DENSITY' && option.supported);
       return measurement ? [{ value: `${type.incidentTypeId}:CROWD_DENSITY`, label: `${type.name} · Crowd density (people/m²)`, type, measurement }] : [];
@@ -345,6 +364,15 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
         if (clearDurationSec !== undefined && (clearDurationSec < 1 || clearDurationSec > 86400)) {
           throw new Error(label + ': clear duration must be between 1 and 86400 seconds.');
         }
+        if (r.enabled && ruleMode(r, types) === 'CHECKOUT_CAPACITY') {
+          const { minQueue, noStaffedAlertLevel } = checkoutParameters(r);
+          if (typeof minQueue !== 'number' || !Number.isInteger(minQueue) || minQueue < 1 || minQueue > 2147483647) {
+            throw new Error('Enter a minimum checkout queue of at least one person.');
+          }
+          if (noStaffedAlertLevel !== 'WARNING' && noStaffedAlertLevel !== 'CRITICAL') {
+            throw new Error('Choose an alert level for a queue with no staffed counter.');
+          }
+        }
         return { incidentTypeId: r.incidentTypeId, warningThreshold: warning, criticalThreshold: critical, thresholdUnit: r.thresholdUnit, sustainSec: seconds(r.sustainSec, label + ' sustain time'), cooldownSec: seconds(r.cooldownSec, label + ' cooldown'), enabled: r.enabled, parametersJson: r.parametersJson,
           warningExitThreshold: warningExit, criticalExitThreshold: criticalExit,
           ...(clearDurationSec !== undefined ? { clearDurationSec } : {}) };
@@ -386,17 +414,21 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   }
   function addRule(value: string) {
     const choice = ruleChoices.find(option => option.value === value);
-    if (!choice) return;
+    if (!choice || choice.unavailableReason) return;
     const { type: selectedType, measurement } = choice;
     const rule = inputRule({
       incidentTypeId: selectedType.incidentTypeId, incidentCode: selectedType.code,
       warningThreshold: measurement?.defaultWarning ?? selectedType.defaultWarningThreshold ?? 0,
       criticalThreshold: measurement?.defaultCritical ?? selectedType.defaultCriticalThreshold ?? 1,
       thresholdUnit: measurement?.unit ?? selectedType.thresholdUnit ?? '',
-      sustainSec: 30, cooldownSec: 300, enabled: measurement !== undefined || (selectedType.supported && selectedType.measurementType === 'QUEUE_LENGTH'),
-      clearDurationSec: measurement?.mode === 'CROWD_DENSITY' ? 60 : undefined,
+      sustainSec: 30, cooldownSec: 300, enabled: true,
+      clearDurationSec: measurement?.mode === 'CROWD_DENSITY' || isCheckoutMode(selectedType.measurementType) ? 60 : undefined,
       parametersJson: null,
     });
+    if (selectedType.measurementType === 'CHECKOUT_CAPACITY') {
+      rule.warningThreshold = '';
+      rule.criticalThreshold = '';
+    }
     setRules(all => [rule, ...all]);
     touch(); setRulesMissing(false);
   }
@@ -478,8 +510,13 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
         <div className={`${s.addRule} ${rulesMissing ? s.addRuleMissing : ''}`}>
           <label className={s.field}>Add a rule<select ref={typeSelect} aria-label="Add a rule" aria-invalid={rulesMissing || undefined} disabled={locked || !ruleChoices.length} value="" onChange={e => addRule(e.target.value)}>
             <option value="" disabled>{ruleChoices.length ? 'Choose a rule to add…' : 'No more rules available'}</option>
-            {ruleChoices.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            {ruleChoices.map(option => <option key={option.value} value={option.value} disabled={!!option.unavailableReason}>
+              {option.label}{option.unavailableReason ? ' · Unavailable' : ''}
+            </option>)}
           </select></label>
+          {ruleChoices.filter(choice => choice.unavailableReason).map(choice => (
+            <p key={choice.value} className={s.help}>{choice.label}: {choice.unavailableReason}</p>
+          ))}
         </div>
         {!rules.length && <p className={rulesMissing ? s.error : s.help}>No operational event rules yet. A configuration needs at least one rule before it can be saved.</p>}
         {rules.map(r => {
@@ -487,7 +524,11 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
           const label = t?.name ?? r.incidentName ?? 'Unknown operational event type';
           const mode = ruleMode(r, types);
           const { errors } = validateThresholds(r);
-          const supported = t?.measurementOptions?.some(option => option.mode === mode && option.supported) || (!!t?.supported && mode === 'QUEUE_LENGTH');
+          const checkoutMode = isCheckoutMode(mode);
+          const supported = checkoutMode
+            ? zone.zoneType === 'CHECKOUT' && !!t?.supported
+            : t?.measurementOptions?.some(option => option.mode === mode && option.supported) || (!!t?.supported && mode === 'QUEUE_LENGTH');
+          const parameters = mode === 'CHECKOUT_CAPACITY' ? checkoutParameters(r) : {};
           return <section key={r.incidentTypeId} className={s.rule}>
             <div className={s.head}><h3>{label}</h3><Button variant="secondary" className={s.deleteButton} disabled={locked} onClick={() => setRuleToRemove(r)}>Remove {label}</Button></div>
             <p className={s.help}>{modeLabel(supported ? mode : 'UNSUPPORTED')}</p>
@@ -498,6 +539,11 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
             </p>}
             {!supported && <p className={s.help}>You can save this rule with Enabled off. This editor cannot enable the selected measurement mode.</p>}
             {!supported && t?.unsupportedReason && <p className={s.help}>{t.unsupportedReason}</p>}
+            {checkoutMode && supported && <p className={s.help}>
+              {mode === 'WAITING_TIME'
+                ? 'Review requires an enabled checkout queue source with a Service ROI.'
+                : 'Review requires enabled checkout counters with Lane and Staff ROIs and a selected queue source.'}
+            </p>}
             <div className={s.thresholdPairs}>
               {thresholdFields.map(({ level, entry, exit }) => {
                 const entryValue = r[entry].trim();
@@ -530,12 +576,25 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
               <label className={s.field}>Threshold unit<input aria-label={label + ' unit'} value={t?.thresholdUnit && supported ? unitName(r.thresholdUnit) : r.thresholdUnit} maxLength={30} readOnly={!!t?.thresholdUnit} onChange={e => changeRule(r.incidentTypeId, { thresholdUnit: e.target.value })} /></label>
               <label className={s.field}>Sustain time (seconds)<input aria-label={label + ' sustain time'} type="number" min="0" step="1" value={r.sustainSec} onChange={e => changeRule(r.incidentTypeId, { sustainSec: e.target.value })} /></label>
               <label className={s.field}>Cooldown (seconds)<input aria-label={label + ' cooldown'} type="number" min="0" step="1" value={r.cooldownSec} onChange={e => changeRule(r.incidentTypeId, { cooldownSec: e.target.value })} /></label>
-              {mode === 'CROWD_DENSITY' && supported && <label className={s.field}>Clear duration (seconds)
+              {(mode === 'CROWD_DENSITY' || checkoutMode) && supported && <label className={s.field}>Clear duration (seconds)
                 <input aria-label={label + ' clear duration'} type="number" min="1" max="86400" step="1" value={r.clearDurationSec}
                   onChange={e => changeRule(r.incidentTypeId, { clearDurationSec: e.target.value })} />
               </label>}
               <label className={s.check}><input type="checkbox" aria-label={label + ' enabled'} checked={r.enabled} disabled={!r.enabled && (!supported || t?.status !== 'ACTIVE')} onChange={e => changeRule(r.incidentTypeId, { enabled: e.target.checked })} />Enabled</label>
             </fieldset>
+            {mode === 'CHECKOUT_CAPACITY' && <fieldset disabled={locked} className={s.fields}>
+              <label className={s.field}>Minimum queue (people)
+                <input type="number" min="1" max="2147483647" step="1"
+                  value={typeof parameters.minQueue === 'number' ? parameters.minQueue : ''}
+                  onChange={e => changeRule(r.incidentTypeId, { parametersJson: JSON.stringify({ ...parameters, minQueue: e.target.value === '' ? null : Number(e.target.value) }) })} />
+              </label>
+              <label className={s.field}>Alert when no counter is staffed
+                <select value={typeof parameters.noStaffedAlertLevel === 'string' ? parameters.noStaffedAlertLevel : ''}
+                  onChange={e => changeRule(r.incidentTypeId, { parametersJson: JSON.stringify({ ...parameters, noStaffedAlertLevel: e.target.value }) })}>
+                  <option value="">Choose an alert level</option><option value="WARNING">Warning</option><option value="CRITICAL">Critical</option>
+                </select>
+              </label>
+            </fieldset>}
           </section>;
         })}
         <div className={s.actions}>
@@ -548,6 +607,8 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
         <div className={s.actions}><Button variant="secondary" disabled={busy} onClick={reloadSaved}>Reload saved configuration</Button></div>
       </form>}
     </section>
+
+    {!loading && !showForm && zone.zoneType === 'CHECKOUT' && <CheckoutRuntimePanel zone={zone} />}
 
     {review && !showForm && <section className={`${s.panel} ${s.review}`} id="configuration-review" aria-labelledby="configuration-review-title">
       <h2 className={s.title} id="configuration-review-title">Review & activate</h2>

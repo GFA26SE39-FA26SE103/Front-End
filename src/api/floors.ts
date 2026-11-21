@@ -47,6 +47,16 @@ export type ZoneRequest = {
 
 export type AdjacentZoneRecord = Pick<ZoneRecord, 'zoneId' | 'floorId' | 'code' | 'name' | 'status'>;
 
+export type ZoneUsage = {
+  dependencies: { kind: string; label: string; count: number }[];
+  monitoring: {
+    name: string;
+    status: string;
+    rules: { ruleId: string; name: string; enabled: boolean }[];
+  } | null;
+  recentStaffNames: string[];
+};
+
 export type FloorMapView = {
   floorId: string;
   mapUrl: string;
@@ -56,6 +66,9 @@ export type FloorMapView = {
   updatedAt: string;
 };
 export type FloorDetailsRequest = { floorNumber: number; name: string };
+
+export const getZoneUsage = (zoneId: string, signal?: AbortSignal) =>
+  apiFetch<ZoneUsage>(`/api/zones/${encodeURIComponent(zoneId)}/usage`, { signal });
 export const createFloor = (storeId: string, body: FloorDetailsRequest, signal?: AbortSignal) =>
   apiFetch<FloorRecord>(`/api/supermarkets/${encodeURIComponent(storeId)}/floors`, { method: 'POST', body: JSON.stringify({ ...body, mapAssetUrl: null, mapWidth: null, mapHeight: null }), signal });
 export const updateFloorDetails = (floorId: string, body: FloorDetailsRequest, signal?: AbortSignal) =>

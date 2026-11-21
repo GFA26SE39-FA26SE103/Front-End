@@ -3,6 +3,10 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ZoneEditorOverlay } from './ZoneEditorOverlay';
 
+vi.mock('../api/floors', () => ({
+  getZoneUsage: vi.fn().mockResolvedValue({ dependencies: [], monitoring: null, recentStaffNames: [] }),
+}));
+
 const rectangleZone = {
   zoneId: 'zone-rectangle', floorId: 'floor-1', code: 'PRODUCE', name: 'Produce', zoneType: 'AISLES',
   mapPolygon: [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.1 }, { x: 0.5, y: 0.5 }, { x: 0.1, y: 0.5 }],
@@ -44,7 +48,6 @@ describe('ZoneEditorOverlay', () => {
     const user = userEvent.setup();
     const { layer, onSave } = renderEditor();
 
-    await user.click(screen.getByRole('button', { name: 'Rectangle' }));
     fireEvent.pointerDown(layer, { pointerId: 7, clientX: 180, clientY: 90 });
     fireEvent.pointerMove(layer, { pointerId: 7, clientX: 500, clientY: 250 });
     fireEvent.pointerUp(layer, { pointerId: 7, clientX: 500, clientY: 250 });
@@ -67,10 +70,10 @@ describe('ZoneEditorOverlay', () => {
     });
   });
 
-  it('offers rectangle drawing and saves a measured area only after editing it', async () => {
+  it('removes the Rectangle tool switch and saves a measured area only after editing it', async () => {
     const user = userEvent.setup();
     const { onSave } = renderEditor([rectangleZone]);
-    expect(screen.getByRole('button', { name: 'Rectangle' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Rectangle' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Polygon' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Edit zone Produce' }));
     const area = screen.getByLabelText('Zone area (m²)');
@@ -97,7 +100,7 @@ describe('ZoneEditorOverlay', () => {
     fireEvent.pointerUp(handle, { pointerId: 9, clientX: 820, clientY: 120 });
 
     expect(toolbar).toHaveStyle({ position: 'fixed', left: '716px', top: '66px' });
-    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    expect(screen.getByText(/drag on empty space/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Move' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Resize' })).not.toBeInTheDocument();
   });

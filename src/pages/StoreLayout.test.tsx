@@ -2,8 +2,8 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getCameraPreview, listCameraMappings, listCameras, saveCameraMapping, updateCamera, type CameraZoneMapping } from '../api/cameras';
-import { createFloor, createZone, deleteZone, getFloorMap, listFloors, listSupermarkets, listZoneAdjacency, listZones, replaceZoneAdjacency, updateFloorDetails, updateZone, uploadFloorMap } from '../api/floors';
+import { createCameraRoi, getCameraPreview, listCameraMappings, listCameras, updateCamera, type CameraZoneMapping } from '../api/cameras';
+import { createFloor, createZone, deleteZone, getFloorMap, getZoneUsage, listFloors, listSupermarkets, listZoneAdjacency, listZones, replaceZoneAdjacency, updateFloorDetails, updateZone, uploadFloorMap } from '../api/floors';
 import StoreLayout from './StoreLayout';
 import { ApiError } from '../api/client';
 import { mockNativeDialogs } from '../test/dialog';
@@ -13,8 +13,7 @@ vi.mock('../api/cameras', () => ({
   getCameraPreview: vi.fn(),
   listCameraMappings: vi.fn(),
   listCameras: vi.fn(),
-  removeCameraMapping: vi.fn(),
-  saveCameraMapping: vi.fn(),
+  createCameraRoi: vi.fn(),
   updateCamera: vi.fn(),
 }));
 
@@ -23,6 +22,7 @@ vi.mock('../api/floors', () => ({
   createZone: vi.fn(),
   deleteZone: vi.fn(),
   getFloorMap: vi.fn(),
+  getZoneUsage: vi.fn(),
   listFloors: vi.fn(),
   listSupermarkets: vi.fn(),
   listZoneAdjacency: vi.fn(),
@@ -70,6 +70,7 @@ describe('StoreLayout', () => {
     vi.mocked(listFloors).mockResolvedValue([floor]);
     vi.mocked(createFloor).mockResolvedValue({ ...floor, floorId: 'floor-2', floorNumber: 2, name: 'Upper floor', mapAssetUrl: null, mapWidth: null, mapHeight: null });
     vi.mocked(deleteZone).mockResolvedValue(undefined);
+    vi.mocked(getZoneUsage).mockResolvedValue({ dependencies: [], monitoring: null, recentStaffNames: [] });
     vi.mocked(updateFloorDetails).mockResolvedValue({ ...floor, floorNumber: 0, name: 'Lobby' });
     vi.mocked(listZones).mockResolvedValue([]);
     vi.mocked(listZoneAdjacency).mockResolvedValue([]);
@@ -299,7 +300,7 @@ describe('StoreLayout', () => {
 
     it.each(dismissals)('blocks $action during ROI save and allows clean dismissal once saving completes', async ({ name }) => {
       let finishSave!: (mapping: CameraZoneMapping) => void;
-      vi.mocked(saveCameraMapping).mockReturnValueOnce(new Promise(resolve => { finishSave = resolve; }));
+      vi.mocked(createCameraRoi).mockReturnValueOnce(new Promise(resolve => { finishSave = resolve; }));
       const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
       const user = await openCoverage();
       const layer = screen.getByTestId('roi-drawing-layer');
@@ -309,7 +310,7 @@ describe('StoreLayout', () => {
       for (const [clientX, clientY] of [[10, 10], [80, 10], [70, 80]]) fireEvent.click(layer, { clientX, clientY });
       await user.click(screen.getByRole('button', { name: 'Finish shape' }));
       await user.click(screen.getByRole('button', { name: 'Save ROI to zone' }));
-      await waitFor(() => expect(saveCameraMapping).toHaveBeenCalledOnce());
+      await waitFor(() => expect(createCameraRoi).toHaveBeenCalledOnce());
 
       await user.click(screen.getByRole('button', { name }));
       expect(confirm).not.toHaveBeenCalled();
@@ -485,7 +486,6 @@ describe('StoreLayout', () => {
     vi.spyOn(layer, 'getBoundingClientRect').mockReturnValue({
       left: 100, top: 50, width: 800, height: 400, right: 900, bottom: 450, x: 100, y: 50, toJSON: () => ({}),
     });
-    await user.click(screen.getByRole('button', { name: 'Rectangle' }));
     fireEvent.pointerDown(layer, { pointerId: 4, clientX: 180, clientY: 90 });
     fireEvent.pointerMove(layer, { pointerId: 4, clientX: 500, clientY: 250 });
     fireEvent.pointerUp(layer, { pointerId: 4, clientX: 500, clientY: 250 });
@@ -523,5 +523,43 @@ describe('StoreLayout', () => {
 
     await waitFor(() => expect(deleteZone).toHaveBeenCalledWith('zone-1'));
     expect(await screen.findByText('Zone deleted.')).toBeInTheDocument();
+  });
+
+  it('shows the selected zone draft rule, linked staff and the server reason for blocked deletion', async () => {
+    const zone = {
+      zoneId: 'zone-density', floorId: floor.floorId, code: 'DENSITY', name: 'Section B', zoneType: 'AISLES',
+      mapPolygon: [{ x: .1, y: .1 }, { x: .5, y: .1 }, { x: .5, y: .5 }, { x: .1, y: .5 }],
+      colorHex: '#F59E0B', minStaff: 0, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z',
+    };
+    vi.mocked(listZones).mockResolvedValue([zone]);
+    vi.mocked(getZoneUsage).mockResolvedValue({
+      dependencies: [
+        { kind: 'MONITORING', label: 'Monitoring configurations', count: 1 },
+        { kind: 'SHIFT', label: 'Staff zone assignments', count: 1 },
+      ],
+      monitoring: {
+        name: 'Household Aisle Crowd Monitoring', status: 'DRAFT',
+        rules: [{ ruleId: 'rule-density', name: 'Crowd Density', enabled: true }],
+      },
+      recentStaffNames: ['Floor Staff A'],
+    });
+    const message = 'Cannot delete Section B. Still used by monitoring configurations (1), staff zone assignments (1). You can still edit and save the zone.';
+    vi.mocked(deleteZone).mockRejectedValueOnce(new ApiError(409, 'ZONE_IN_USE', message));
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole('img', { name: /uploaded floor plan/i });
+    await user.click(screen.getByRole('button', { name: 'Edit zones' }));
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Edit zone Section B' }), { key: 'Enter' });
+
+    const usage = within(screen.getByRole('region', { name: 'Zone usage' }));
+    expect(await usage.findByText('Crowd Density · Enabled')).toBeInTheDocument();
+    expect(usage.getByText('DRAFT')).toBeInTheDocument();
+    expect(usage.getByText('Recent staff: Floor Staff A')).toBeInTheDocument();
+    expect(usage.getByRole('link', { name: /view ai configuration/i })).toHaveAttribute('href', '/admin/ai-config?zoneId=zone-density');
+
+    await user.click(screen.getByRole('button', { name: 'Delete zone' }));
+    await user.click(screen.getByRole('button', { name: 'Delete permanently' }));
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save zone' })).toBeEnabled();
   });
 });

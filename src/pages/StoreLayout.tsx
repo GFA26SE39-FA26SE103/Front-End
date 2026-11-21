@@ -18,7 +18,6 @@ import {
 } from '../api/floors';
 import { AdminLayout } from '../components/AdminLayout';
 import { CameraCoverageEditor } from '../components/CameraCoverageEditor';
-import { CheckoutRuntimePanel } from '../components/CheckoutRuntimePanel';
 import { Dialog } from '../components/Dialog';
 import { FloorPlanSurface, type PlacementChange } from '../components/FloorPlanSurface';
 import { FloorEditor } from '../components/FloorEditor';
@@ -369,10 +368,6 @@ export default function StoreLayout() {
       await deleteZone(zoneId);
       setZones(current => current.filter(zone => zone.zoneId !== zoneId));
       setActionMessage('Zone deleted.');
-    } catch (reason) {
-      const message = messageOf(reason, 'Could not delete the zone.');
-      setActionError(message);
-      throw reason instanceof Error ? reason : new Error(message);
     } finally {
       setZoneSaving(false);
     }
@@ -570,7 +565,6 @@ export default function StoreLayout() {
           )}
           </>}
         </Card>
-        <CheckoutRuntimePanel zones={zones} />
         {(loadError || cameraSelectionError || actionError || actionMessage) && (
           <div className={s.feedback}>
             {loadError && <p className={s.error} role="alert">{loadError}</p>}

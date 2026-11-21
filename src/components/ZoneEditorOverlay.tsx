@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
+import { ApiError } from '../api/client';
 import type { MapPoint, ZoneRecord } from '../api/floors';
 import { clientToNormalized } from './floorPlanGeometry';
+import { ZoneUsageSummary } from './ZoneUsageSummary';
 import s from './ZoneEditorOverlay.module.css';
 
 export type ZoneEditorSave = {
@@ -12,8 +14,6 @@ export type ZoneEditorSave = {
   mapPolygon: MapPoint[];
   areaM2?: number | null;
 };
-
-type Tool = 'edit' | 'rectangle';
 
 export type ZoneEditorOverlayProps = {
   zones: ZoneRecord[];
@@ -100,11 +100,10 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onDelete, onCancel }:
   const rootRef = useRef<HTMLDivElement>(null);
   const drawingLayerRef = useRef<SVGSVGElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
-  const rectangleDrag = useRef<{ pointerId: number; start: MapPoint } | null>(null);
+  const rectangleDrag = useRef<{ pointerId: number; start: MapPoint; drawing: boolean } | null>(null);
   const moveDrag = useRef<{ pointerId: number; start: MapPoint; original: MapPoint[]; moved: boolean } | null>(null);
   const resizeDrag = useRef<{ pointerId: number; index: number; original: MapPoint[]; rectangle: boolean } | null>(null);
   const toolbarDrag = useRef<{ pointerId: number; clientX: number; clientY: number; x: number; y: number } | null>(null);
-  const [tool, setTool] = useState<Tool>('edit');
   const [points, setPoints] = useState<MapPoint[]>([]);
   const [history, setHistory] = useState<MapPoint[][]>([]);
   const [complete, setComplete] = useState(false);
@@ -115,6 +114,7 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onDelete, onCancel }:
   const [areaEdited, setAreaEdited] = useState(false);
   const [colorHex, setColorHex] = useState(DEFAULT_COLOR);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [usageRevision, setUsageRevision] = useState(0);
   const [error, setError] = useState('');
   const [toolbarPosition, setToolbarPosition] = useState({ x: 16, y: 16 });
 
@@ -130,11 +130,6 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onDelete, onCancel }:
     setColorHex(DEFAULT_COLOR);
     setConfirmDelete(false);
     setError('');
-  };
-
-  const chooseTool = (next: Tool) => {
-    if (next === 'rectangle' || (!selectedZoneId && points.length > 0)) resetDraft();
-    setTool(next);
   };
 
   const pointForClient = (clientX: number, clientY: number) => {
@@ -191,14 +186,22 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onDelete, onCancel }:
   };
 
   useEffect(() => {
-    const keepToolbarOnScreen = () => setToolbarPosition((current) => clampToolbarPosition(current.x, current.y));
+    const keepToolbarOnScreen = () => setToolbarPosition((current) => {
+      const next = clampToolbarPosition(current.x, current.y);
+      return current.x === next.x && current.y === next.y ? current : next;
+    });
     window.addEventListener('resize', keepToolbarOnScreen);
-    return () => window.removeEventListener('resize', keepToolbarOnScreen);
+    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(keepToolbarOnScreen);
+    if (toolbarRef.current) observer?.observe(toolbarRef.current);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', keepToolbarOnScreen);
+    };
   }, []);
 
   const startMove = (event: PointerEvent<SVGPolygonElement>, zone: ZoneRecord) => {
-    if (tool !== 'edit') return;
     event.stopPropagation();
+    if (saving || event.button !== 0) return;
     const original = selectedZoneId === zone.zoneId ? clonePoints(points) : clonePoints(zone.mapPolygon);
     selectZone(zone);
     moveDrag.current = { pointerId: event.pointerId, start: pointForClient(event.clientX, event.clientY), original, moved: false };
@@ -272,7 +275,7 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onDelete, onCancel }:
     if (history.length > 0) {
       setPoints(clonePoints(history[history.length - 1]));
       setHistory((current) => current.slice(0, -1));
-    } else if (!selectedZoneId && tool === 'rectangle') {
+    } else if (!selectedZoneId) {
       setPoints([]);
       setComplete(false);
     }
@@ -294,7 +297,6 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onDelete, onCancel }:
       await onSave({ zoneId: selectedZoneId, name: trimmedName, zoneType, colorHex: colorHex.toUpperCase(), mapPolygon: points,
         ...(areaEdited ? { areaM2: area } : {}) });
       resetDraft();
-      setTool('edit');
     } catch (reason) {
       setError(reason instanceof Error && reason.message ? reason.message : 'Could not save the zone.');
     }
@@ -306,14 +308,14 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onDelete, onCancel }:
     try {
       await onDelete(selectedZoneId);
       resetDraft();
-      setTool('edit');
     } catch (reason) {
       setConfirmDelete(false);
+      if (reason instanceof ApiError && reason.code === 'ZONE_IN_USE') setUsageRevision(value => value + 1);
       setError(reason instanceof Error && reason.message ? reason.message : 'Could not delete the zone.');
     }
   };
 
-  const canUndo = history.length > 0 || (!selectedZoneId && points.length > 0 && tool === 'rectangle');
+  const canUndo = history.length > 0 || (!selectedZoneId && points.length > 0);
   const toolbar = (
     <div
       ref={toolbarRef}
@@ -341,13 +343,7 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onDelete, onCancel }:
         <span aria-hidden="true">⋮⋮</span> Zone editor
       </button>
 
-      <div className={s.tools}>
-        {(['edit', 'rectangle'] as const).map((item) => (
-          <button key={item} type="button" aria-pressed={tool === item} onClick={() => chooseTool(item)}>
-            {item[0].toUpperCase() + item.slice(1)}
-          </button>
-        ))}
-      </div>
+      <p className={s.drawHint}>Select a zone to edit it, or drag on empty space to draw a new zone.</p>
 
       <div className={s.palette} aria-label="Preset zone colors">
         {colors.map(([label, value]) => (
@@ -376,6 +372,7 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onDelete, onCancel }:
           onChange={(event) => { setAreaM2(event.target.value); setAreaEdited(true); }} />
         <small id="zone-area-help">Enter the measured floor area covered by the single camera ROI for crowd density.</small>
       </label>
+      {selectedZoneId && <ZoneUsageSummary key={`${selectedZoneId}:${usageRevision}`} zoneId={selectedZoneId} />}
       {error && <p className={s.error} role="alert">{error}</p>}
       {confirmDelete && <div className={s.deleteConfirm} role="alert">
         <p>Delete <strong>{name}</strong>? This cannot be undone.</p>
@@ -403,20 +400,21 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onDelete, onCancel }:
         preserveAspectRatio="none"
         aria-label="Zone drawing area"
         onPointerDown={(event) => {
-          if (tool !== 'rectangle') return;
+          if (saving || event.button !== 0 || rectangleDrag.current || moveDrag.current || resizeDrag.current) return;
           const start = pointForClient(event.clientX, event.clientY);
-          rectangleDrag.current = { pointerId: event.pointerId, start };
+          rectangleDrag.current = { pointerId: event.pointerId, start, drawing: false };
           event.currentTarget.setPointerCapture?.(event.pointerId);
-          setSelectedZoneId(undefined);
-          setHistory([]);
-          setPoints(rectanglePoints(start, start));
-          setComplete(false);
-          setError('');
         }}
         onPointerMove={(event) => {
           const drag = rectangleDrag.current;
           if (!drag || drag.pointerId !== event.pointerId) return;
-          setPoints(rectanglePoints(drag.start, pointForClient(event.clientX, event.clientY)));
+          const end = pointForClient(event.clientX, event.clientY);
+          if (!drag.drawing && (Math.abs(end.x - drag.start.x) < MIN_ZONE_SPAN || Math.abs(end.y - drag.start.y) < MIN_ZONE_SPAN)) return;
+          if (!drag.drawing) {
+            drag.drawing = true;
+            resetDraft();
+          }
+          setPoints(rectanglePoints(drag.start, end));
         }}
         onPointerUp={(event) => {
           const drag = rectangleDrag.current;
@@ -425,10 +423,17 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onDelete, onCancel }:
           rectangleDrag.current = null;
           event.currentTarget.releasePointerCapture?.(event.pointerId);
           const valid = Math.abs(end.x - drag.start.x) >= MIN_ZONE_SPAN && Math.abs(end.y - drag.start.y) >= MIN_ZONE_SPAN;
+          if (!drag.drawing && !valid) return;
+          if (!drag.drawing) resetDraft();
           setPoints(valid ? rectanglePoints(drag.start, end) : []);
           setComplete(valid);
         }}
-        onPointerCancel={() => { rectangleDrag.current = null; }}
+        onPointerCancel={(event) => {
+          const drag = rectangleDrag.current;
+          if (drag?.pointerId !== event.pointerId) return;
+          rectangleDrag.current = null;
+          if (drag.drawing) resetDraft();
+        }}
       >
         {zones.map((zone) => {
           const displayPoints = selectedZoneId === zone.zoneId ? points : zone.mapPolygon;
@@ -438,21 +443,20 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onDelete, onCancel }:
               points={pointsAttribute(displayPoints)}
               fill={selectedZoneId === zone.zoneId ? colorHex : zone.colorHex ?? DEFAULT_COLOR}
               stroke={selectedZoneId === zone.zoneId ? colorHex : zone.colorHex ?? DEFAULT_COLOR}
-              className={`${s.zone} ${selectedZoneId === zone.zoneId ? s.selected : ''} ${tool === 'edit' ? s.movable : ''}`}
+              className={`${s.zone} ${s.movable} ${selectedZoneId === zone.zoneId ? s.selected : ''}`}
               role="button"
-              tabIndex={tool === 'edit' ? 0 : -1}
+              tabIndex={0}
               aria-label={`Edit zone ${zone.name}`}
               onPointerDown={(event) => startMove(event, zone)}
               onPointerMove={continueMove}
               onPointerUp={finishMove}
               onPointerCancel={() => { moveDrag.current = null; }}
               onClick={(event) => {
-                if (tool !== 'edit') return;
                 event.stopPropagation();
-                selectZone(zone);
+                if (!saving) selectZone(zone);
               }}
               onKeyDown={(event) => {
-                if ((event.key === 'Enter' || event.key === ' ') && tool === 'edit') {
+                if (!saving && (event.key === 'Enter' || event.key === ' ')) {
                   event.preventDefault();
                   selectZone(zone);
                 }
@@ -487,7 +491,7 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onDelete, onCancel }:
         );
       })}
 
-      {points.map((point, index) => tool === 'edit' && selectedZoneId ? (
+      {points.map((point, index) => selectedZoneId ? (
         <button
           key={`resize-${selectedZoneId}-${index}`}
           type="button"
