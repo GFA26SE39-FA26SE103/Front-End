@@ -160,7 +160,6 @@ describe('Manager console', () => {
     expect(screen.getByText('Inactive')).toBeInTheDocument();
     expect(screen.queryByText('Old shift')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Assign staff to Morning/ })).not.toBeInTheDocument();
-    expect(screen.getByText('Dashed: draft')).toBeInTheDocument();
   });
 
   it('warns when published schedule history still references an inactive Zone', async () => {

@@ -175,10 +175,6 @@ export default function Schedule() {
                   </table>
                 </div>
               )}
-              <div className={s.legend}>
-                <span>Dashed: draft</span>
-                <span>Red: below minimum</span>
-              </div>
             </Card>
           </>
         )}

@@ -57,7 +57,6 @@
 .covUnset { border: 1px solid var(--color-primary); background: var(--color-primary-tint); color: var(--color-primary); }
 .add { align-self: flex-start; font-size: 12px; font-weight: 600; color: var(--color-primary); padding: 2px 0; }
 .add:hover { text-decoration: underline; }
-.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--color-text-muted); }
 
 /* Dialog forms */
 .form { display: flex; flex-direction: column; gap: 16px; }
