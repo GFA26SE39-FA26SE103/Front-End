@@ -207,7 +207,7 @@ export default function UsersRoles() {
               <fieldset disabled={busy}>
                 <label>Full name<input autoComplete="name" required maxLength={150} value={editor.fullName} onChange={(event) => setEditor({ ...editor, fullName: event.target.value })} /></label>
                 <label>Email<input type="email" autoComplete="off" required maxLength={255} readOnly={Boolean(editor.userId)} value={editor.email} onChange={(event) => setEditor({ ...editor, email: event.target.value })} /></label>
-                {!editor.userId && <label>Password<input type="password" autoComplete="new-password" required minLength={5} maxLength={128} pattern=".*[^A-Za-z0-9\s].*" title="At least 5 characters and 1 special character" value={editor.password} onChange={(event) => setEditor({ ...editor, password: event.target.value })} /><span className={s.note}>At least 5 characters with 1 special character. Share the initial password with the account owner privately.</span></label>}
+                {!editor.userId && <label>Password<input type="password" autoComplete="new-password" required minLength={8} maxLength={128} pattern=".*[^A-Za-z0-9\s].*" title="At least 8 characters and 1 special character" value={editor.password} onChange={(event) => setEditor({ ...editor, password: event.target.value })} /><span className={s.note}>At least 8 characters with 1 special character. Share the initial password with the account owner privately.</span></label>}
                 <label>Role<select required value={editor.roleId} onChange={(event) => {
                   const roleId = event.target.value;
                   const nextRole = roles.find((role) => role.roleId === roleId);
