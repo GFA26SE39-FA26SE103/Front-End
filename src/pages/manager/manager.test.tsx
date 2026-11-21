@@ -46,7 +46,6 @@ function scheduleWith(): ScheduleView {
     }],
     coverage: [
       { workDate: day, shiftId: morning.shiftId, shiftName: 'Morning', zoneId: 'z-b', zoneName: 'Checkout', minStaff: 1, planned: 1, published: 0, belowMinimum: false },
-      { workDate: day, shiftId: morning.shiftId, shiftName: 'Morning', zoneId: 'z-c', zoneName: 'Produce', minStaff: 0, planned: 1, published: 1, belowMinimum: false },
       { workDate: day, shiftId: evening.shiftId, shiftName: 'Evening', zoneId: 'z-b', zoneName: 'Checkout', minStaff: 1, planned: 0, published: 0, belowMinimum: true },
     ],
   };
@@ -77,19 +76,31 @@ describe('Manager console', () => {
 
   it('shows the week with drafts and coverage gaps, and reports a refused publish', async () => {
     storeRoutes();
-    routes['GET /api/schedule'] = () => json(scheduleWith());
+    const schedule = scheduleWith();
+    routes['GET /api/schedule'] = () => json({ ...schedule, gapCount: 2, coverage: [
+      ...schedule.coverage,
+      { workDate: day, shiftId: morning.shiftId, shiftName: 'Morning', zoneId: 'z-c', zoneName: 'Produce', minStaff: 1, planned: 0, published: 0, belowMinimum: true },
+    ] });
     routes['GET /api/shifts'] = () => json([evening, morning]);
     routes['GET /api/swap-requests'] = () => json([]);
     routes['POST /api/schedule/publish'] = () => problemJson(409, 'COVERAGE_GAPS', 'Evening Sun: Checkout has 0 of 1 staff.');
     show('/manager/schedule', <Schedule />);
 
-    const draft = await screen.findByRole('button', { name: /Nguyễn An, Morning .*, draft/ });
-    expect(within(draft).getByText('Draft')).toBeInTheDocument();
+    const morningRoster = await screen.findByRole('button', { name: /View roster for Morning.*1 staff · 2 zones.*1 zone below minimum.*1 draft/ });
+    expect(screen.queryByText('Nguyễn An')).not.toBeInTheDocument();
     expect(calls.find((c) => c.path === '/api/schedule')!.query).toBe(`?from=${monday}&to=${addDays(monday, 6)}`);
     // Rows follow the start time, not the API order.
     expect(screen.getAllByRole('row')[1]).toHaveTextContent('Morning');
-    expect(screen.getByText('Checkout · 0 of 1')).toBeInTheDocument();
-    expect(screen.getByText('Produce · 1 staff')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /View roster for Evening.*0 staff · 1 zone.*1 zone below minimum/ })).toBeVisible();
+
+    await userEvent.click(morningRoster);
+    const roster = within(screen.getByRole('dialog'));
+    expect(roster.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)).toEqual(['Produce', 'Checkout']);
+    expect(roster.getByText('0 of 1 staff · Below minimum')).toBeVisible();
+    expect(roster.getByText('No staff assigned')).toBeVisible();
+    expect(roster.getByRole('button', { name: 'Nguyễn An Draft' })).toBeVisible();
+    await userEvent.click(roster.getByRole('button', { name: 'Close' }));
+    expect(morningRoster).toHaveFocus();
 
     await userEvent.click(screen.getByRole('button', { name: 'Publish week (1)' }));
     await userEvent.click(screen.getByRole('button', { name: 'Publish' }));
@@ -97,7 +108,7 @@ describe('Manager console', () => {
     expect(calls.at(-1)).toMatchObject({ method: 'POST', path: '/api/schedule/publish', body: { from: monday, to: addDays(monday, 6) } });
   });
 
-  it('shows the actual check-in time and marks only late arrivals in the grid and details', async () => {
+  it('shows the actual check-in time and marks only late arrivals in the roster and details', async () => {
     storeRoutes();
     const schedule = scheduleWith();
     const startsAt = new Date(`${day}T08:00:00`).toISOString();
@@ -112,12 +123,13 @@ describe('Manager console', () => {
     routes['GET /api/swap-requests'] = () => json([]);
     show('/manager/schedule', <Schedule />);
 
-    const late = await screen.findByRole('button', { name: /Nguyễn An, Morning/ });
+    await userEvent.click(await screen.findByRole('button', { name: /View roster for Morning/ }));
+    const roster = within(screen.getByRole('dialog'));
+    const late = roster.getByRole('button', { name: /Nguyễn An.*Checked in at 10:00.*Late by 2h/ });
     expect(within(late).getByText('Checked in at 10:00')).toHaveAttribute('datetime', lateCheckIn);
     expect(within(late).getByText('Late by 2h')).toBeVisible();
-    expect(late).toHaveAccessibleDescription('Checked in at 10:00 Late by 2h');
 
-    const early = screen.getByRole('button', { name: /Nguyễn Bình, Morning/ });
+    const early = roster.getByRole('button', { name: /Nguyễn Bình/ });
     expect(within(early).getByText('Checked in at 07:50')).toBeVisible();
     expect(within(early).queryByText(/Late by/)).not.toBeInTheDocument();
 
@@ -127,6 +139,8 @@ describe('Manager console', () => {
     expect(details.getByText('Check-in')).toBeVisible();
     expect(details.getByText('Checked in at 10:00')).toBeVisible();
     expect(details.getByText('Late by 2h')).toBeVisible();
+    await userEvent.click(details.getByRole('button', { name: 'Back to roster' }));
+    expect(screen.getByRole('dialog', { name: /Roster · Morning/ })).toBeVisible();
   });
 
   it('distinguishes a published assignment from a recorded check-in', async () => {
@@ -138,9 +152,9 @@ describe('Manager console', () => {
     routes['GET /api/swap-requests'] = () => json([]);
     show('/manager/schedule', <Schedule />);
 
-    const slot = await screen.findByRole('button', { name: /Nguyễn An, Morning/ });
-    expect(within(slot).queryByText(/Checked in at|Late by/)).not.toBeInTheDocument();
-    await userEvent.click(slot);
+    await userEvent.click(await screen.findByRole('button', { name: /View roster for Morning/ }));
+    const person = within(screen.getByRole('dialog')).getByRole('button', { name: 'Nguyễn An Not checked in' });
+    await userEvent.click(person);
     const details = within(await screen.findByRole('dialog'));
     expect(details.getByText('Published')).toBeVisible();
     expect(details.getByText('Not checked in')).toBeVisible();
@@ -155,7 +169,7 @@ describe('Manager console', () => {
     routes['GET /api/swap-requests'] = () => json([]);
     show('/manager/schedule', <Schedule />);
 
-    const assigned = await screen.findByRole('button', { name: /Nguyễn An, Morning/ });
+    const assigned = await screen.findByRole('button', { name: /View roster for Morning/ });
     expect(assigned).toBeInTheDocument();
     expect(screen.getByText('Inactive')).toBeInTheDocument();
     expect(screen.queryByText('Old shift')).not.toBeInTheDocument();
@@ -181,8 +195,10 @@ describe('Manager console', () => {
     show('/manager/schedule', <Schedule />);
 
     expect(await screen.findByText(/Published assignments in this week still reference inactive Zone: Old storage/)).toBeInTheDocument();
-    expect(screen.getByText('Old storage (inactive)')).toBeInTheDocument();
-    expect(screen.getByText('Old storage · inactive · 1 of 1')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /View roster for Morning/ }));
+    const roster = within(screen.getByRole('dialog'));
+    expect(roster.getByRole('heading', { name: 'Old storage (inactive)' })).toBeVisible();
+    expect(roster.getByText('1 of 1 staff')).toBeVisible();
   });
 
   it('assigns an eligible Staff member as a draft; ineligible ones show why', async () => {
@@ -231,7 +247,10 @@ describe('Manager console', () => {
     routes[`PATCH /api/schedule/assignments/${existing.shiftAssignmentId}`] = () => json({ ...existing, zones: [existing.zones[0]] });
     show('/manager/schedule', <Schedule />);
 
-    await userEvent.click(await screen.findByRole('button', { name: /Nguyễn An, Morning .*, draft/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /View roster for Morning.*1 staff · 2 zones/ }));
+    const people = within(screen.getByRole('dialog')).getAllByRole('button', { name: 'Nguyễn An Draft' });
+    expect(people).toHaveLength(2);
+    await userEvent.click(people[0]);
     expect(await screen.findByRole('combobox', { name: 'Zone' })).toHaveValue('z-b');
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 

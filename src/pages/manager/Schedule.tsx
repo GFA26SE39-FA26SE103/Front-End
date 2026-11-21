@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import {
   assignShift, cancelAssignment, directShiftChange, getSchedule, getStaffOptions, listWorkShifts, listSwapRequests, publishSchedule, updateAssignment,
-  type ScheduleView, type ScheduledShift, type WorkShift, type StaffOption,
+  type ScheduleView, type ScheduledShift, type WorkShift, type StaffOption, type ZoneCoverage,
 } from '../../api/planning';
 import { Dialog } from '../../components/Dialog';
 import { ManagerLayout } from '../../components/ManagerLayout';
@@ -13,15 +13,19 @@ import { useLoad } from './useLoad';
 import s from './manager.module.css';
 
 type Loaded = { schedule: ScheduleView; workShifts: WorkShift[]; zones: StoreZone[]; pendingSwaps: number };
-type Editing = { kind: 'assign'; shift: WorkShift; workDate: string } | { kind: 'edit'; assignment: ScheduledShift } | { kind: 'publish' };
+type ShiftSlot = { shift: WorkShift; workDate: string };
+type Editing =
+  | (ShiftSlot & { kind: 'assign' | 'roster' })
+  | (ShiftSlot & { kind: 'edit'; assignment: ScheduledShift })
+  | { kind: 'publish' };
 
 const live = (a: ScheduledShift) => a.status !== 'CANCELLED';
 
-function AssignmentCheckIn({ assignment, id }: { assignment: ScheduledShift; id?: string }) {
+function AssignmentCheckIn({ assignment }: { assignment: ScheduledShift }) {
   const { checkInAt, startsAt } = assignment;
   if (!checkInAt) return null;
   const checkedAt = Date.parse(checkInAt);
-  if (!Number.isFinite(checkedAt)) return <span id={id} className={s.checkedIn}>Checked in</span>;
+  if (!Number.isFinite(checkedAt)) return <span className={s.checkedIn}>Checked in</span>;
 
   const delay = checkedAt - Date.parse(startsAt);
   const minutes = Math.floor(delay / 60_000);
@@ -30,11 +34,15 @@ function AssignmentCheckIn({ assignment, id }: { assignment: ScheduledShift; id?
   const lateBy = minutes === 0 ? '<1m' : [hours && `${hours}h`, remaining && `${remaining}m`].filter(Boolean).join(' ');
 
   return (
-    <span id={id} className={s.checkInDetails}>
+    <span className={s.checkInDetails}>
       <time dateTime={checkInAt} title={dateTime(checkInAt)} className={s.checkedIn}>Checked in at {time(checkInAt)}</time>
       {delay > 0 && <>{' '}<span className={s.lateCheckIn}>Late by {lateBy}</span></>}
     </span>
   );
+}
+
+function coverageForSlot(coverage: ZoneCoverage[], shiftId: string, workDate: string) {
+  return coverage.filter((zone) => zone.shiftId === shiftId && zone.workDate === workDate && (zone.minStaff > 0 || zone.planned > 0));
 }
 
 export default function Schedule() {
@@ -134,32 +142,31 @@ export default function Schedule() {
                           </td>
                           {days.map((day) => {
                             const people = assignments.filter((a) => a.shiftId === shift.shiftId && a.workDate === day);
-                            const coverage = data.schedule.coverage.filter((c) => c.shiftId === shift.shiftId && c.workDate === day && (c.minStaff > 0 || c.planned > 0));
+                            const coverage = coverageForSlot(data.schedule.coverage, shift.shiftId, day);
+                            const zoneCount = new Set([
+                              ...coverage.map((zone) => zone.zoneId),
+                              ...people.flatMap((person) => person.zones.map((zone) => zone.zoneId)),
+                            ]).size;
+                            const gapCount = coverage.filter((zone) => zone.belowMinimum).length;
+                            const draftCount = people.filter((person) => person.status === 'DRAFT').length;
+                            const summary = `${people.length} staff · ${zoneCount} ${zoneCount === 1 ? 'zone' : 'zones'}`;
+                            const gapLabel = `${gapCount} ${gapCount === 1 ? 'zone' : 'zones'} below minimum`;
+                            const draftLabel = `${draftCount} ${draftCount === 1 ? 'draft' : 'drafts'}`;
                             const past = day < today;
                             return (
                               <td key={day} className={past ? s.past : undefined}>
                                 <div className={s.cell}>
-                                  {people.map((a) => (
-                                    <button key={a.shiftAssignmentId} type="button" className={`${s.person} ${a.status === 'DRAFT' ? s.draft : ''}`}
-                                      onClick={() => setEditing({ kind: 'edit', assignment: a })}
-                                      aria-describedby={a.checkInAt ? `assignment-check-in-${a.shiftAssignmentId}` : undefined}
-                                      aria-label={`${a.fullName}, ${shift.name} ${dayLabel(day)}, ${a.status === 'DRAFT' ? 'draft' : 'published'}`}>
-                                      <strong>{a.fullName}</strong>
-                                      <span>{a.zones.map((z) => `${z.zoneName}${activeZoneIds.has(z.zoneId) ? '' : ' (inactive)'}`).join(', ') || 'No zone'}</span>
-                                      {a.status === 'DRAFT' && <span>Draft</span>}
-                                      {a.pendingSwapRequestId && <span className={s.flag}>Swap pending</span>}
-                                      <AssignmentCheckIn assignment={a} id={`assignment-check-in-${a.shiftAssignmentId}`} />
+                                  {(people.length > 0 || zoneCount > 0) && (
+                                    <button type="button" className={s.slotSummary}
+                                      onClick={() => setEditing({ kind: 'roster', shift, workDate: day })}
+                                      aria-haspopup="dialog"
+                                      aria-label={[`View roster for ${shift.name} on ${dayLabel(day)}`, summary, gapCount > 0 && gapLabel, draftCount > 0 && draftLabel].filter(Boolean).join(', ')}>
+                                      <span className={s.slotSummaryLine}>
+                                        <strong>{summary}</strong><span aria-hidden="true">›</span>
+                                      </span>
+                                      {gapCount > 0 && <span className={s.coverageGap}>{gapLabel}</span>}
+                                      {draftCount > 0 && <span className={s.draftCount}>{draftLabel}</span>}
                                     </button>
-                                  ))}
-                                  {coverage.length > 0 && (
-                                    <div className={s.coverage}>
-                                      {coverage.map((c) => (
-                                        <span key={c.zoneId} className={!activeZoneIds.has(c.zoneId) ? s.covInactive : c.minStaff === 0 ? s.covUnset : c.belowMinimum ? s.covGap : s.cov}
-                                          title={`${c.zoneName}${activeZoneIds.has(c.zoneId) ? '' : ' (inactive)'}: ${c.planned} planned, ${c.published} published, ${c.minStaff === 0 ? 'no minimum configured' : `${c.minStaff} required`}`}>
-                                          {c.zoneName}{activeZoneIds.has(c.zoneId) ? '' : ' · inactive'} · {c.minStaff === 0 ? `${c.planned} staff` : `${c.planned} of ${c.minStaff}`}
-                                        </span>
-                                      ))}
-                                    </div>
                                   )}
                                   {!shiftHasStarted(day, shift.startTime) && shift.status === 'ACTIVE' && (
                                     <button type="button" className={s.add} onClick={() => setEditing({ kind: 'assign', shift, workDate: day })}
@@ -189,13 +196,90 @@ export default function Schedule() {
           workDate={editing.workDate} zones={data.zones} onClose={() => setEditing(null)}
           onDone={(name) => refresh(`${name} added as a draft. Publish the week so they can see it.`)} />
       )}
+      {editing?.kind === 'roster' && data && (
+        <ShiftRosterDialog slot={editing}
+          people={assignments.filter((person) => person.shiftId === editing.shift.shiftId && person.workDate === editing.workDate)}
+          coverage={coverageForSlot(data.schedule.coverage, editing.shift.shiftId, editing.workDate)}
+          activeZoneIds={activeZoneIds} onClose={() => setEditing(null)}
+          onSelect={(assignment) => setEditing({ ...editing, kind: 'edit', assignment })} />
+      )}
       {editing?.kind === 'edit' && data && (
         <AssignmentDialog shiftId={editing.assignment.shiftId} assignment={editing.assignment}
           title={`${editing.assignment.shiftName} · ${longDayLabel(editing.assignment.workDate)}`}
-          workDate={editing.assignment.workDate} zones={data.zones} assignments={assignments} onClose={() => setEditing(null)}
+          workDate={editing.assignment.workDate} zones={data.zones} assignments={assignments}
+          onClose={() => setEditing({ kind: 'roster', shift: editing.shift, workDate: editing.workDate })}
           onDone={(name) => refresh(`${name}'s shift was updated.`)} />
       )}
     </ManagerLayout>
+  );
+}
+
+type RosterGroup = { name: string; coverage?: ZoneCoverage; people: ScheduledShift[] };
+
+function ShiftRosterDialog({ slot, people, coverage, activeZoneIds, onClose, onSelect }: {
+  slot: ShiftSlot; people: ScheduledShift[]; coverage: ZoneCoverage[]; activeZoneIds: Set<string>;
+  onClose: () => void; onSelect: (assignment: ScheduledShift) => void;
+}) {
+  const groups = new Map<string | null, RosterGroup>();
+  for (const zone of coverage) {
+    groups.set(zone.zoneId, { name: zone.zoneName, coverage: zone, people: [] });
+  }
+  for (const person of people) {
+    const zones = person.zones.length ? person.zones : [{ zoneId: null, zoneName: 'No zone' }];
+    for (const zone of zones) {
+      const group = groups.get(zone.zoneId) ?? { name: zone.zoneName, people: [] };
+      group.people.push(person);
+      groups.set(zone.zoneId, group);
+    }
+  }
+  const orderedGroups = [...groups].sort(([leftId, left], [rightId, right]) =>
+    Number(!!right.coverage?.belowMinimum) - Number(!!left.coverage?.belowMinimum)
+    || Number(leftId === null) - Number(rightId === null)
+    || left.name.localeCompare(right.name));
+
+  return (
+    <Dialog title={`Roster · ${slot.shift.name} · ${longDayLabel(slot.workDate)}`}
+      className={s.rosterDialog} busy={false} onClose={onClose}>
+      <div className={s.rosterList}>
+        {orderedGroups.map(([zoneId, group]) => {
+          const minStaff = group.coverage?.minStaff ?? 0;
+          const planned = group.coverage?.planned ?? group.people.length;
+          const inactive = zoneId !== null && !activeZoneIds.has(zoneId);
+          return (
+            <section key={zoneId ?? 'unassigned'} className={s.rosterGroup}>
+              <div className={s.rosterGroupHeader}>
+                <h3>{group.name}{inactive ? ' (inactive)' : ''}</h3>
+                <span className={group.coverage?.belowMinimum ? s.coverageGap : s.rosterCount}
+                  title={group.coverage ? `${planned} planned, ${group.coverage.published} published` : undefined}>
+                  {minStaff > 0 ? `${planned} of ${minStaff} staff` : `${planned} staff`}
+                  {group.coverage?.belowMinimum && ' · Below minimum'}
+                </span>
+              </div>
+              {group.people.length > 0 ? (
+                <ul className={s.rosterPeople}>
+                  {group.people.map((person) => (
+                    <li key={person.shiftAssignmentId}>
+                      <button type="button" className={s.rosterPerson} onClick={() => onSelect(person)} aria-haspopup="dialog">
+                        <strong>{person.fullName}</strong>{' '}
+                        <span className={s.rosterPersonStatus}>
+                          {person.status === 'DRAFT' && <><span className={s.draftCount}>Draft</span>{' '}</>}
+                          {person.pendingSwapRequestId && <><span className={s.draftCount}>Swap pending</span>{' '}</>}
+                          {person.checkInAt
+                            ? <AssignmentCheckIn assignment={person} />
+                            : person.status !== 'DRAFT' && <span className={s.rosterCount}>Not checked in</span>}
+                          <span className={s.rosterChevron} aria-hidden="true">›</span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className={s.rosterEmpty}>No staff assigned</p>}
+            </section>
+          );
+        })}
+      </div>
+      <div className={s.formActions}><Button variant="secondary" onClick={onClose}>Close</Button></div>
+    </Dialog>
   );
 }
 
@@ -330,7 +414,7 @@ function AssignmentDialog({ shiftId, workDate, title, zones, assignment, assignm
             : 'This shift has started or the Staff member checked in, so it can no longer be changed (BR-35).'}
         </p>
         {assignment.pendingSwapRequestId && <Link className={s.back} to={`/manager/swaps/${assignment.pendingSwapRequestId}`}>Open the swap request</Link>}
-        <div className={s.formActions}><Button variant="secondary" onClick={onClose}>Close</Button></div>
+        <div className={s.formActions}><Button variant="secondary" onClick={onClose}>Back to roster</Button></div>
       </Dialog>
     );
   }
@@ -402,7 +486,7 @@ function AssignmentDialog({ shiftId, workDate, title, zones, assignment, assignm
         <div className={assignment ? s.split : s.formActions}>
           {assignment && <Button variant="dangerGhost" disabled={busy} onClick={() => void cancel()}>Remove from shift</Button>}
           <div className={s.actions}>
-            <Button variant="secondary" disabled={busy} onClick={onClose}>Close</Button>
+            <Button variant="secondary" disabled={busy} onClick={onClose}>{assignment ? 'Back to roster' : 'Close'}</Button>
             <Button type="submit" disabled={busy || (directType === 'COVER' && !chosen?.eligible) || (directType === 'SWAP' && !targetAssignment)}>
               {busy ? 'Saving…' : assignment?.status === 'SCHEDULED' && directType === 'SWAP' ? 'Apply direct swap'
                 : assignment?.status === 'SCHEDULED' && userId !== assignment.userId ? 'Assign cover' : assignment ? 'Save changes' : 'Add as draft'}

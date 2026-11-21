@@ -31,10 +31,53 @@
 .shiftTime { font-size: 12px; color: var(--color-text-muted); margin-top: 2px; }
 .cell { display: flex; flex-direction: column; gap: 6px; min-height: 64px; }
 .past { background: var(--color-surface-2); }
-.person { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 7px 8px; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-surface); text-align: left; font-size: 12px; }
-.person:hover { border-color: var(--color-primary); }
-.person strong { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.person span { color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slotSummary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  text-align: left;
+}
+.slotSummary:hover, .rosterPerson:hover { border-color: var(--color-primary); background: var(--color-primary-tint); }
+.slotSummaryLine { display: flex; align-items: center; justify-content: space-between; gap: 4px; width: 100%; font-size: 12px; }
+.slotSummaryLine strong { font-weight: 650; }
+.slotSummaryLine > span, .rosterChevron { color: var(--color-text-muted); font-size: 16px; line-height: 1; }
+.coverageGap, .draftCount, .rosterCount { padding: 2px 6px; border-radius: 5px; font-size: 11px; font-weight: 600; }
+.coverageGap { background: var(--color-danger-tint); color: var(--color-danger-text); }
+.draftCount { background: var(--color-warning-tint); color: var(--color-warning-text); }
+.rosterCount { background: var(--color-surface-2); color: var(--color-text-muted); }
+.add { align-self: flex-start; font-size: 12px; font-weight: 600; color: var(--color-primary); padding: 2px 0; }
+.add:hover { text-decoration: underline; }
+
+/* Shift roster */
+dialog.rosterDialog { width: 560px; }
+.rosterList { display: grid; gap: 12px; min-height: 0; max-height: 58dvh; overflow-y: auto; padding: 2px; }
+.rosterGroup { padding: 10px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface-2); }
+.rosterGroupHeader { display: flex; justify-content: space-between; align-items: center; gap: 6px 12px; flex-wrap: wrap; }
+.rosterGroupHeader h3 { margin: 0; font-size: 13px; font-weight: 650; overflow-wrap: anywhere; }
+.rosterPeople { display: grid; gap: 5px; margin: 8px 0 0; padding: 0; list-style: none; }
+.rosterPerson {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  font-size: 13px;
+  text-align: left;
+}
+.rosterPerson strong { font-weight: 600; overflow-wrap: anywhere; }
+.rosterPersonStatus { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; }
+.rosterEmpty { margin: 6px 0 0; font-size: 12px; color: var(--color-text-muted); }
 .checkInDetails { display: flex; flex-wrap: wrap; gap: 3px 6px; }
 .checkedIn, .lateCheckIn, .notCheckedIn {
   display: inline-block;
@@ -44,19 +87,8 @@
   font-size: 11px;
   font-weight: 700;
 }
-.checkedIn, .person .checkedIn { background: var(--color-success-tint); color: var(--color-success-text); }
-.lateCheckIn, .person .lateCheckIn, .notCheckedIn { background: var(--color-warning-tint); color: var(--color-warning-text); }
-.person .checkInDetails { white-space: normal; }
-.draft { border-style: dashed; background: var(--color-surface-2); }
-.flag { color: var(--color-warning); font-weight: 600; }
-.coverage { display: flex; flex-wrap: wrap; gap: 4px; }
-.cov, .covGap, .covInactive, .covUnset { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 999px; }
-.cov { background: var(--color-success-tint); color: var(--color-success); }
-.covGap { background: var(--color-danger-tint); color: var(--color-danger); }
-.covInactive { background: var(--color-warning-tint); color: var(--color-warning); }
-.covUnset { border: 1px solid var(--color-primary); background: var(--color-primary-tint); color: var(--color-primary); }
-.add { align-self: flex-start; font-size: 12px; font-weight: 600; color: var(--color-primary); padding: 2px 0; }
-.add:hover { text-decoration: underline; }
+.checkedIn { background: var(--color-success-tint); color: var(--color-success-text); }
+.lateCheckIn, .notCheckedIn { background: var(--color-warning-tint); color: var(--color-warning-text); }
 
 /* Dialog forms */
 .form { display: flex; flex-direction: column; gap: 16px; }
