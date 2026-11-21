@@ -11,7 +11,6 @@ import s from './OperatorTasks.module.css';
 /** L3: Incidents with mandatory-Task progress, mitigation and closure; Operator may dismiss with an audited reason (BR-19, BR-20). */
 const date = (value: string | null) => value ? new Date(value).toLocaleString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'medium', timeStyle: 'short' }) : '—';
 const problem = (error: unknown) => error instanceof Error ? error.message : 'The request could not be completed.';
-const reasonLabel: Record<string, string> = { ALL_MANDATORY_TASKS_VERIFIED: 'Closed automatically: every mandatory task was verified' };
 const statusTone = (row: IncidentRow) => row.status === 'CLOSED' ? 'success' : row.status === 'DISMISSED' || row.status === 'CANCELLED' ? 'neutral' : 'warning';
 
 export default function OperatorIncidents() {
@@ -36,11 +35,11 @@ export default function OperatorIncidents() {
         {!!incidents?.length && <div className={s.tableWrap}><table className={s.table}>
           <thead><tr><th>Incident</th><th>Zone</th><th>Status</th><th>Mandatory tasks</th><th>Mitigated</th><th>Closed</th><th /></tr></thead>
           <tbody>{incidents.map(row => <tr key={row.incidentId}>
-            <td><strong>{row.title}</strong><p className={s.muted}>{row.incidentTypeName ?? row.incidentTypeCode ?? 'Incident'} · {row.sourceType.replaceAll('_', ' ').toLowerCase()}{row.slaPriorityCode ? ` · ${row.slaPriorityCode}` : ''}</p>
+            <td><strong>{row.title}</strong>
               {row.tasks.length > 0 && <ul className={s.muted}>{row.tasks.map(task => <li key={task.taskId}><Link className={s.taskLink} to={`/operator/tasks/${encodeURIComponent(task.taskId)}`}>{task.title}</Link>
                 {' '}· {task.status.replaceAll('_', ' ').toLowerCase()}{task.isMandatory ? ' · mandatory' : ''}{task.isMitigation ? ' · mitigation' : ''}{task.assigneeName ? ` · ${task.assigneeName}` : ''}</li>)}</ul>}</td>
             <td>{row.zoneName}</td>
-            <td><Chip tone={statusTone(row)}>{row.status}</Chip>{row.statusReason && <p className={s.muted}>{reasonLabel[row.statusReason] ?? row.statusReason}</p>}</td>
+            <td><Chip tone={statusTone(row)}>{row.status}</Chip></td>
             <td>{row.mandatoryTasks === 0 ? '—' : `${row.verifiedMandatoryTasks}/${row.mandatoryTasks} verified`}</td>
             <td>{row.mitigatedAt ? <Chip tone="success">{date(row.mitigatedAt)}</Chip>
               : row.tasks.some(task => task.isMitigation) ? <span className={s.muted}>Not yet · after the mitigation task is verified</span>
