@@ -252,8 +252,7 @@ describe('Users & Roles account integration', () => {
     await screen.findByRole('button', { name: 'Retry loading accounts' });
     await user.click(screen.getByRole('button', { name: 'Retry loading accounts' }));
     await screen.findByRole('button', { name: 'Edit operator@example.test' });
-    await user.click(screen.getByRole('button', { name: 'Account menu' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Logout' }));
+    await user.click(screen.getByRole('button', { name: 'Logout' }));
     expect(loadSession()).toBeNull();
   });
 

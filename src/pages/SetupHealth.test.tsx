@@ -77,12 +77,15 @@ describe('MF-01 setup dashboard', () => {
   });
 
   it('shows retry on initial failure and warns when a refresh leaves an old snapshot', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
     failOverview = true; show(); await screen.findByText('Setup unavailable.');
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
     failOverview = false; fireEvent.click(screen.getByRole('button', { name: 'Retry loading setup' })); await screen.findByText('Checkout queue');
-    failOverview = true; fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    failOverview = true; await act(async () => { vi.advanceTimersByTime(30000); });
     await screen.findByText('Showing the last successful snapshot. Status may have changed.');
     expect(screen.getByText('Checkout queue')).toBeInTheDocument(); expect(calls.every(c => c.method === 'GET')).toBe(true);
+    vi.restoreAllMocks(); vi.useRealTimers();
   });
 
   it('refreshes visible snapshots periodically, pauses when hidden and cancels on unmount', async () => {

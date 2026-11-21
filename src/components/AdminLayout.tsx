@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Icon } from './Icon';
 import { SearchBox } from './ui';
-import { AccountMenu } from './AccountMenu';
+import { SidebarAccount } from './AccountMenu';
 import { ThemeToggle } from './ThemeToggle';
 import s from './AdminLayout.module.css';
 
@@ -44,6 +44,9 @@ export function AdminLayout({ title, subtitle, actions, children }: { title: str
             )}
           </NavLink>
         ))}
+        <div className={s.navFooter}>
+          <SidebarAccount />
+        </div>
       </nav>
       <div className={s.main}>
         <header className={s.header}>
@@ -54,7 +57,6 @@ export function AdminLayout({ title, subtitle, actions, children }: { title: str
           <div style={{ flex: 1 }} />
           {actions ?? <SearchBox value={query} onChange={setQuery} placeholder="Search" width={220} height={34} iconName="header-search" iconSize={14} />}
           <ThemeToggle />
-          <AccountMenu />
         </header>
         <main className={s.content}>{children}</main>
       </div>

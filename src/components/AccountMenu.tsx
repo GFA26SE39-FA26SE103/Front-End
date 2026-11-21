@@ -65,3 +65,26 @@ export function AccountMenu() {
     </div>}
   </div>;
 }
+
+export function SidebarAccount() {
+  const navigate = useNavigate();
+  const user = loadSession()?.user;
+  return <div className={s.sidebar}>
+    <div className={s.profile}>
+      <span className={s.avatar}><Icon name="header-user" size={18} /></span>
+      <div className={s.profileText}>
+        <p className={s.name} title={user?.fullName}>{user?.fullName || 'Account'}</p>
+        {user?.email && <p className={s.email} title={user.email}>{user.email}</p>}
+      </div>
+    </div>
+    <button type="button" className={s.sidebarLogout} onClick={() => {
+      clearSession();
+      navigate('/login', { replace: true });
+    }}>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M6 14H3.33A1.33 1.33 0 0 1 2 12.67V3.33A1.33 1.33 0 0 1 3.33 2H6M10.67 11.33 14 8l-3.33-3.33M14 8H6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      Logout
+    </button>
+  </div>;
+}

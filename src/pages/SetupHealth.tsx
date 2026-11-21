@@ -5,7 +5,6 @@ import { Button, Chip, type Tone } from '../components/ui';
 import { getSetupOverview, type SetupZone, type SetupOverview } from '../api/setup';
 import s from './SetupHealth.module.css';
 
-const time = (value: string | null) => value ? new Date(value).toLocaleString() : 'No frame received yet';
 const layoutLink = (floorId: string, cameraId?: string) => '/admin/store-layout?floorId=' + encodeURIComponent(floorId) + (cameraId ? '&cameraId=' + encodeURIComponent(cameraId) : '');
 const aiLink = (zoneId: string) => '/admin/ai-config?zoneId=' + encodeURIComponent(zoneId);
 const tone = (status: string): Tone => status === 'ACTIVE' || status === 'ONLINE' || status === 'READY' || status === 'AVAILABLE' ? 'success' : status === 'DRAFT' || status === 'DEGRADED' || status === 'UNKNOWN' ? 'warning' : status === 'OFFLINE' || status === 'NOT_READY' || status === 'UNAVAILABLE' ? 'danger' : 'neutral';
@@ -46,7 +45,7 @@ export default function SetupHealth() {
   const floors = data?.floors.filter(f => !floorId || f.floorId === floorId) ?? [];
   const zones = floors.flatMap(f => f.zones.filter(z => (!attentionOnly || !z.setupReady) && (!normalized || match(z.code + ' ' + z.name + ' ' + (z.configuration?.name ?? '') + ' ' + f.name))).map(zone => ({ floor: f, zone })));
   return <AdminLayout title="MF-01 setup overview"
-    actions={<><span className={s.updated}>{data ? 'Fetched ' + time(data.generatedAt) : 'Loading setup status'}</span><Button variant="secondary" disabled={refreshing} onClick={() => setRefreshKey(k => k + 1)}>{refreshing ? 'Refreshing…' : 'Refresh'}</Button></>}>
+    actions={<></>}>
     <div className={s.page}>
       {error && <div className={s.alert} role="alert">{error}{data && <p>Showing the last successful snapshot. Status may have changed.</p>}<Button variant="secondary" disabled={refreshing} onClick={() => setRefreshKey(k => k + 1)}>Retry loading setup</Button></div>}
       {!data && refreshing && <p role="status">Loading floors, zones and configurations…</p>}
