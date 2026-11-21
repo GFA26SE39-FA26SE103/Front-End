@@ -33,8 +33,8 @@ describe('Operator incident board', () => {
     expect(within(row).getByText(/mandatory · mitigation/)).toBeInTheDocument();
     expect(within(row).queryByText(/Not yet/)).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText('Show'), 'ended');
-    expect(await screen.findByText('Closed automatically: every mandatory task was verified')).toBeInTheDocument();
-    expect(screen.getByText('No mitigation task')).toBeInTheDocument();
+    expect(await screen.findByText('No mitigation task')).toBeInTheDocument();
+    expect(screen.queryByText('Closed automatically: every mandatory task was verified')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Dismiss' })).not.toBeInTheDocument();
     expect(listIncidents).toHaveBeenLastCalledWith('ended', expect.any(AbortSignal));
   });

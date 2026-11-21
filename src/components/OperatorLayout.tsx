@@ -1,36 +1,57 @@
 import type { ReactNode } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { Icon } from './Icon';
-import { AccountMenu } from './AccountMenu';
+import { SidebarAccount } from './AccountMenu';
 import { ThemeToggle } from './ThemeToggle';
+import a from './AdminLayout.module.css';
 import s from './OperatorLayout.module.css';
+
+const NAV = [
+  { to: '/operator/floor-map', label: 'Floor map', icon: 'layers' },
+  { to: '/operator/tasks', label: 'Tasks', icon: 'nav-file' },
+  { to: '/operator/events', label: 'Events', icon: 'nav-activity' },
+  { to: '/operator/recommendations', label: 'Recommendations', icon: 'nav-sliders', activeIcon: 'nav-sliders-active' },
+  { to: '/operator/incidents', label: 'Incidents', icon: 'nav-tag', activeIcon: 'nav-tag-active' },
+  { to: '/operator/notifications', label: 'Notifications', icon: 'nav-bell', activeIcon: 'nav-bell-active' },
+];
 
 export function OperatorLayout({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   return (
-    <div className={s.shell}>
-      <header className={s.header}>
-        <Link to="/operator/floor-map" className={s.brand}>
+    <div className={a.shell}>
+      <nav className={a.nav} aria-label="Operator">
+        <div className={a.brand}>
           <Icon name="brand-grid" size={18} />
-          <span>SUPERMARKET</span>
-          <span className={s.accent}>OPS</span>
-        </Link>
-        <span className={s.divider} aria-hidden="true" />
-        <div className={s.heading}>
-          <h1>{title}</h1>
-          {subtitle && <p>{subtitle}</p>}
+          <p>
+            <span>SUPERMARKET</span>
+            <span>OPS</span>
+          </p>
         </div>
-        <nav className={s.nav} aria-label="Operator">
-          <NavLink to="/operator/floor-map" className={({ isActive }) => `${s.navLink} ${isActive ? s.active : ''}`}>Floor map</NavLink>
-          <NavLink to="/operator/tasks" className={({ isActive }) => `${s.navLink} ${isActive ? s.active : ''}`}>Tasks</NavLink>
-          <NavLink to="/operator/events" className={({ isActive }) => `${s.navLink} ${isActive ? s.active : ''}`}>Events</NavLink>
-          <NavLink to="/operator/recommendations" className={({ isActive }) => `${s.navLink} ${isActive ? s.active : ''}`}>Recommendations</NavLink>
-          <NavLink to="/operator/incidents" className={({ isActive }) => `${s.navLink} ${isActive ? s.active : ''}`}>Incidents</NavLink>
-          <NavLink to="/operator/notifications" className={({ isActive }) => `${s.navLink} ${isActive ? s.active : ''}`}>Notifications</NavLink>
-        </nav>
-        <ThemeToggle />
-        <AccountMenu />
-      </header>
-      <main className={s.content}>{children}</main>
+        <p className={a.section}>OPERATOR</p>
+        {NAV.map((item) => (
+          <NavLink key={item.to} to={item.to} className={({ isActive }) => `${a.link} ${isActive ? a.active : ''}`}>
+            {({ isActive }) => (
+              <>
+                <Icon name={isActive && item.activeIcon ? item.activeIcon : item.icon} size={16} />
+                {item.label}
+              </>
+            )}
+          </NavLink>
+        ))}
+        <div className={a.navFooter}>
+          <SidebarAccount />
+        </div>
+      </nav>
+      <div className={a.main}>
+        <header className={a.header}>
+          <div>
+            <h1 className={a.title}>{title}</h1>
+            {subtitle && <p className={a.subtitle}>{subtitle}</p>}
+          </div>
+          <div style={{ flex: 1 }} />
+          <ThemeToggle />
+        </header>
+        <main className={s.content}>{children}</main>
+      </div>
     </div>
   );
 }
