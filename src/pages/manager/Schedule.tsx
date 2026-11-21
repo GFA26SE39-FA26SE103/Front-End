@@ -7,7 +7,7 @@ import {
 import { Dialog } from '../../components/Dialog';
 import { ManagerLayout } from '../../components/ManagerLayout';
 import { Badge, Button, Card, CardHeader, StatCard } from '../../components/ui';
-import { addDays, clock, dayLabel, isoDate, longDayLabel, problem, range, weekStart } from './dates';
+import { addDays, clock, dateTime, dayLabel, isoDate, longDayLabel, problem, range, time, weekStart } from './dates';
 import { listStoreZones, shiftHasStarted, type StoreZone } from './planningData';
 import { useLoad } from './useLoad';
 import s from './manager.module.css';
@@ -16,6 +16,26 @@ type Loaded = { schedule: ScheduleView; workShifts: WorkShift[]; zones: StoreZon
 type Editing = { kind: 'assign'; shift: WorkShift; workDate: string } | { kind: 'edit'; assignment: ScheduledShift } | { kind: 'publish' };
 
 const live = (a: ScheduledShift) => a.status !== 'CANCELLED';
+
+function AssignmentCheckIn({ assignment, id }: { assignment: ScheduledShift; id?: string }) {
+  const { checkInAt, startsAt } = assignment;
+  if (!checkInAt) return null;
+  const checkedAt = Date.parse(checkInAt);
+  if (!Number.isFinite(checkedAt)) return <span id={id} className={s.checkedIn}>Checked in</span>;
+
+  const delay = checkedAt - Date.parse(startsAt);
+  const minutes = Math.floor(delay / 60_000);
+  const hours = Math.floor(minutes / 60);
+  const remaining = minutes % 60;
+  const lateBy = minutes === 0 ? '<1m' : [hours && `${hours}h`, remaining && `${remaining}m`].filter(Boolean).join(' ');
+
+  return (
+    <span id={id} className={s.checkInDetails}>
+      <time dateTime={checkInAt} title={dateTime(checkInAt)} className={s.checkedIn}>Checked in at {time(checkInAt)}</time>
+      {delay > 0 && <>{' '}<span className={s.lateCheckIn}>Late by {lateBy}</span></>}
+    </span>
+  );
+}
 
 export default function Schedule() {
   const [week, setWeek] = useState(() => weekStart(new Date()));
@@ -122,12 +142,13 @@ export default function Schedule() {
                                   {people.map((a) => (
                                     <button key={a.shiftAssignmentId} type="button" className={`${s.person} ${a.status === 'DRAFT' ? s.draft : ''}`}
                                       onClick={() => setEditing({ kind: 'edit', assignment: a })}
+                                      aria-describedby={a.checkInAt ? `assignment-check-in-${a.shiftAssignmentId}` : undefined}
                                       aria-label={`${a.fullName}, ${shift.name} ${dayLabel(day)}, ${a.status === 'DRAFT' ? 'draft' : 'published'}`}>
                                       <strong>{a.fullName}</strong>
                                       <span>{a.zones.map((z) => `${z.zoneName}${activeZoneIds.has(z.zoneId) ? '' : ' (inactive)'}`).join(', ') || 'No zone'}</span>
                                       {a.status === 'DRAFT' && <span>Draft</span>}
                                       {a.pendingSwapRequestId && <span className={s.flag}>Swap pending</span>}
-                                      {a.checkInAt && <span className={s.checkedIn}>Checked in</span>}
+                                      <AssignmentCheckIn assignment={a} id={`assignment-check-in-${a.shiftAssignmentId}`} />
                                     </button>
                                   ))}
                                   {coverage.length > 0 && (
@@ -295,7 +316,17 @@ function AssignmentDialog({ shiftId, workDate, title, zones, assignment, assignm
           <dt>Staff</dt><dd>{assignment.fullName}</dd>
           <dt>Time</dt><dd>{range(assignment.startsAt, assignment.endsAt)}</dd>
           <dt>Zones</dt><dd>{assignment.zones.map((z) => z.zoneName).join(', ')}</dd>
-          <dt>Status</dt><dd>{assignment.checkInAt ? 'Checked in' : assignment.status === 'DRAFT' ? 'Draft' : 'Published'}</dd>
+          <dt>Status</dt><dd>{assignment.status === 'DRAFT' ? 'Draft' : 'Published'}</dd>
+          {assignment.status !== 'DRAFT' && (
+            <>
+              <dt className={s.checkInLabel}>Check-in</dt>
+              <dd className={s.checkInValue}>
+                {assignment.checkInAt
+                  ? <AssignmentCheckIn assignment={assignment} />
+                  : <span className={s.notCheckedIn}>Not checked in</span>}
+              </dd>
+            </>
+          )}
         </dl>
         <p className={s.info}>
           {assignment.pendingSwapRequestId

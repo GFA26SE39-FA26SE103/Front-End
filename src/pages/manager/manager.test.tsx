@@ -97,6 +97,55 @@ describe('Manager console', () => {
     expect(calls.at(-1)).toMatchObject({ method: 'POST', path: '/api/schedule/publish', body: { from: monday, to: addDays(monday, 6) } });
   });
 
+  it('shows the actual check-in time and marks only late arrivals in the grid and details', async () => {
+    storeRoutes();
+    const schedule = scheduleWith();
+    const startsAt = new Date(`${day}T08:00:00`).toISOString();
+    const lateCheckIn = new Date(`${day}T10:00:00`).toISOString();
+    const earlyCheckIn = new Date(`${day}T07:50:00`).toISOString();
+    const assignment = { ...schedule.assignments[0], startsAt, status: 'SCHEDULED', editable: false };
+    routes['GET /api/schedule'] = () => json({ ...schedule, draftCount: 0, assignments: [
+      { ...assignment, checkInAt: lateCheckIn },
+      { ...assignment, shiftAssignmentId: 'a-2', fullName: 'Nguyễn Bình', checkInAt: earlyCheckIn },
+    ] });
+    routes['GET /api/shifts'] = () => json([{ ...morning, startTime: '08:00:00', endTime: '16:00:00' }]);
+    routes['GET /api/swap-requests'] = () => json([]);
+    show('/manager/schedule', <Schedule />);
+
+    const late = await screen.findByRole('button', { name: /Nguyễn An, Morning/ });
+    expect(within(late).getByText('Checked in at 10:00')).toHaveAttribute('datetime', lateCheckIn);
+    expect(within(late).getByText('Late by 2h')).toBeVisible();
+    expect(late).toHaveAccessibleDescription('Checked in at 10:00 Late by 2h');
+
+    const early = screen.getByRole('button', { name: /Nguyễn Bình, Morning/ });
+    expect(within(early).getByText('Checked in at 07:50')).toBeVisible();
+    expect(within(early).queryByText(/Late by/)).not.toBeInTheDocument();
+
+    await userEvent.click(late);
+    const details = within(await screen.findByRole('dialog'));
+    expect(details.getByText('Published')).toBeVisible();
+    expect(details.getByText('Check-in')).toBeVisible();
+    expect(details.getByText('Checked in at 10:00')).toBeVisible();
+    expect(details.getByText('Late by 2h')).toBeVisible();
+  });
+
+  it('distinguishes a published assignment from a recorded check-in', async () => {
+    storeRoutes();
+    const schedule = scheduleWith();
+    const assignment = { ...schedule.assignments[0], status: 'SCHEDULED', checkInAt: null, editable: false };
+    routes['GET /api/schedule'] = () => json({ ...schedule, draftCount: 0, assignments: [assignment] });
+    routes['GET /api/shifts'] = () => json([morning]);
+    routes['GET /api/swap-requests'] = () => json([]);
+    show('/manager/schedule', <Schedule />);
+
+    const slot = await screen.findByRole('button', { name: /Nguyễn An, Morning/ });
+    expect(within(slot).queryByText(/Checked in at|Late by/)).not.toBeInTheDocument();
+    await userEvent.click(slot);
+    const details = within(await screen.findByRole('dialog'));
+    expect(details.getByText('Published')).toBeVisible();
+    expect(details.getByText('Not checked in')).toBeVisible();
+  });
+
   it('keeps an inactive shift visible only when the viewed week already uses it', async () => {
     storeRoutes();
     const inactiveMorning = { ...morning, status: 'INACTIVE' };

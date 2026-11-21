@@ -35,7 +35,18 @@
 .person:hover { border-color: var(--color-primary); }
 .person strong { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .person span { color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.person .checkedIn { align-self: flex-start; padding: 1px 5px; border-radius: 999px; background: var(--color-success-tint); color: var(--color-success); font-weight: 600; }
+.checkInDetails { display: flex; flex-wrap: wrap; gap: 3px 6px; }
+.checkedIn, .lateCheckIn, .notCheckedIn {
+  display: inline-block;
+  padding: 1px 5px;
+  border: 1px solid color-mix(in srgb, currentColor 40%, transparent);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.checkedIn, .person .checkedIn { background: var(--color-success-tint); color: var(--color-success-text); }
+.lateCheckIn, .person .lateCheckIn, .notCheckedIn { background: var(--color-warning-tint); color: var(--color-warning-text); }
+.person .checkInDetails { white-space: normal; }
 .draft { border-style: dashed; background: var(--color-surface-2); }
 .flag { color: var(--color-warning); font-weight: 600; }
 .coverage { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -70,6 +81,8 @@
 .facts { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; font-size: 13px; }
 .facts dt { color: var(--color-text-muted); }
 .facts dd { margin: 0; font-weight: 500; }
+.facts .checkInLabel { align-self: center; color: var(--color-text); font-weight: 600; }
+.checkInValue :is(.checkedIn, .lateCheckIn, .notCheckedIn) { padding: 3px 9px; font-size: 13px; }
 
 /* Tables */
 .tableWrap { overflow: auto; }
