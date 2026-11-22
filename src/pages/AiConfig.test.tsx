@@ -39,7 +39,7 @@ async function saveRule() { chooseRule(); setQueueExits(); fireEvent.click(scree
 describe('API-backed monitoring configuration', () => {
   beforeEach(() => {
     failDelete = false;
-    config = null; writes = []; requests = []; failSave = false; ready = true; failLoad = false; multipleFloors = false; crowdCatalog = false; densityCatalog = false; checkoutCatalog = false; checkoutZone = false; checkoutSupported = false; reviewedAreaM2 = null; criticalTaskType = null;
+    config = null; writes = []; requests = []; failSave = false; ready = true; failLoad = false; multipleFloors = false; crowdCatalog = false; densityCatalog = false; checkoutCatalog = false; checkoutZone = true; checkoutSupported = false; reviewedAreaM2 = null; criticalTaskType = null;
     URL.createObjectURL = vi.fn(() => 'blob:zone-confidence'); URL.revokeObjectURL = vi.fn();
     saveSession({ accessToken: 'admin-token', expiresAt: '2099-01-01T00:00:00Z', user: { userId: 'admin', email: 'admin@example.test', fullName: 'Admin', roleId: 'role', role: 'ADMIN', status: 'ACTIVE' } }, true);
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -135,12 +135,11 @@ describe('API-backed monitoring configuration', () => {
     expect(writes).toHaveLength(0);
   });
 
-  it('excludes unavailable checkout and waiting rules from the add picker', async () => {
-    checkoutCatalog = true;
+  it('offers Long Queue, waiting and capacity rules only in checkout zones', async () => {
+    checkoutCatalog = true; checkoutZone = false;
     await create();
     const picker = screen.getByLabelText('Add a rule');
-    expect(within(picker).getByRole('option', { name: 'Long Queue' })).toBeInTheDocument();
-    expect(within(picker).queryByRole('option', { name: /Checkout Capacity|Excessive Waiting/ })).not.toBeInTheDocument();
+    expect(within(picker).queryByRole('option', { name: /Long Queue|Checkout Capacity|Excessive Waiting/ })).not.toBeInTheDocument();
     chooseRule('checkout');
     expect(screen.queryByLabelText('Checkout Capacity Issue warning')).not.toBeInTheDocument();
   });
@@ -361,7 +360,7 @@ describe('API-backed monitoring configuration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save configuration' })); await screen.findByText('Configuration saved as Draft. Review it before activating.');
     const saved = writes.find(r => r.method === 'PUT')!;
     expect(saved.path).toBe('/api/zones/zone-1/monitoring'); expect(saved.bearer).toBe('Bearer admin-token'); expect(saved.body.confidenceThreshold).toBe(.7);
-    expect(saved.body.rules).toEqual([{ incidentTypeId: 'type-1', warningThreshold: 3, criticalThreshold: 5, thresholdUnit: 'PEOPLE', sustainSec: 30, cooldownSec: 300, enabled: true, parametersJson: null, warningExitThreshold: 2, criticalExitThreshold: 4 }]);
+    expect(saved.body.rules).toEqual([{ incidentTypeId: 'type-1', warningThreshold: 3, criticalThreshold: 5, thresholdUnit: 'PEOPLE', sustainSec: 30, cooldownSec: 300, clearDurationSec: 60, enabled: true, parametersJson: null, warningExitThreshold: 2, criticalExitThreshold: 4 }]);
     fireEvent.click(screen.getByRole('button', { name: 'Review & activate' })); await screen.findByText('CAM-01');
     fireEvent.click(screen.getByRole('button', { name: 'Activate configuration' }));
     await waitFor(() => expect(writes.some(r => r.path.endsWith('/activate'))).toBe(true));

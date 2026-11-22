@@ -95,7 +95,8 @@ const formatTime = (value: string) => { const date = new Date(value); return Num
 
 const units: Record<string, string> = { PEOPLE: 'people', MINUTES: 'minutes', PEOPLE_PER_M2: 'people/m²', PEOPLE_PER_STAFFED_COUNTER: 'people/staffed counter' };
 const unitName = (unit: string) => units[unit] ?? unit;
-const isCheckoutMode = (mode: string | null | undefined) => mode === 'WAITING_TIME' || mode === 'CHECKOUT_CAPACITY';
+// Long Queue, waiting time and capacity are checkout-only and read the counters' Lane/Staff/Service ROIs.
+const isCheckoutMode = (mode: string | null | undefined) => mode === 'QUEUE_LENGTH' || mode === 'WAITING_TIME' || mode === 'CHECKOUT_CAPACITY';
 
 function checkoutParameters(rule: Pick<MonitoringRule, 'parametersJson'>): Record<string, unknown> {
   try {
@@ -527,7 +528,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
           const checkoutMode = isCheckoutMode(mode);
           const supported = checkoutMode
             ? zone.zoneType === 'CHECKOUT' && !!t?.supported
-            : t?.measurementOptions?.some(option => option.mode === mode && option.supported) || (!!t?.supported && mode === 'QUEUE_LENGTH');
+            : !!t?.measurementOptions?.some(option => option.mode === mode && option.supported);
           const parameters = mode === 'CHECKOUT_CAPACITY' ? checkoutParameters(r) : {};
           return <section key={r.incidentTypeId} className={s.rule}>
             <div className={s.head}><h3>{label}</h3><Button variant="secondary" className={s.deleteButton} disabled={locked} onClick={() => setRuleToRemove(r)}>Remove {label}</Button></div>
@@ -538,11 +539,14 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
               {' '}Use one active ROI covering that floor area.
             </p>}
             {!supported && <p className={s.help}>You can save this rule with Enabled off. This editor cannot enable the selected measurement mode.</p>}
+            {!supported && checkoutMode && zone.zoneType !== 'CHECKOUT' && <p className={s.help}>{label} only applies to checkout zones. Use Overcrowding / Congestion for other areas.</p>}
             {!supported && t?.unsupportedReason && <p className={s.help}>{t.unsupportedReason}</p>}
             {checkoutMode && supported && <p className={s.help}>
               {mode === 'WAITING_TIME'
                 ? 'Review requires an enabled checkout queue source with a Service ROI.'
-                : 'Review requires enabled checkout counters with Lane and Staff ROIs and a selected queue source.'}
+                : mode === 'QUEUE_LENGTH'
+                  ? 'Counts people in the enabled counters\' Lane ROIs. No zone ROI is needed.'
+                  : 'Review requires enabled checkout counters with Lane and Staff ROIs and a selected queue source.'}
             </p>}
             <div className={s.thresholdPairs}>
               {thresholdFields.map(({ level, entry, exit }) => {

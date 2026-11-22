@@ -70,7 +70,7 @@ export function CameraMonitoringPanel({ state, canDismiss = false }: { state: Ca
           {rule.mode === 'CROWD_DENSITY' ? <>
             <p>Crowd density · Metric: {runtime.isStale || runtimeError || rule.metricValue === null ? 'Unavailable' : densityDisplay.format(rule.metricValue) + ' people/m²'}</p>
             {zone.areaM2 != null && <p className={s.muted}>Measured zone area: {zone.areaM2} m²</p>}
-          </> : <p>{rule.mode === 'PEOPLE_COUNT' ? 'People count in ROI' : rule.mode === 'QUEUE_LENGTH' ? 'Queue length (5s continuous dwell)' : rule.mode} · Metric: {count(rule.metricValue)} {rule.unit === 'PEOPLE' ? 'people' : rule.unit}</p>}
+          </> : <p>{rule.mode === 'PEOPLE_COUNT' ? 'People count in ROI' : rule.mode === 'QUEUE_LENGTH' ? 'Queue length (5s continuous dwell)' : rule.mode === 'CHECKOUT_QUEUE_LENGTH' ? 'People in checkout lanes' : rule.mode} · Metric: {count(rule.metricValue)} {rule.unit === 'PEOPLE' ? 'people' : rule.unit}</p>}
           <p>
             <strong>Warning</strong> · {rule.warningThreshold} ≤ x &lt; {rule.criticalThreshold}<br />
             <span className={s.muted}>Leave Warning when x &lt; {rule.warningExitThreshold ?? rule.warningThreshold}</span>

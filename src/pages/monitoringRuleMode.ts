@@ -11,7 +11,7 @@ export function measurementMode(rule: ModeRule): 'PEOPLE_COUNT' | 'QUEUE_LENGTH'
 }
 
 export const modeLabel = (mode: ReturnType<typeof measurementMode>) => ({
-  PEOPLE_COUNT: 'Legacy people count', QUEUE_LENGTH: 'Queue length (5s continuous dwell)',
+  PEOPLE_COUNT: 'Legacy people count', QUEUE_LENGTH: 'People in checkout lanes',
   CROWD_DENSITY: 'Crowd density', WAITING_TIME: 'Longest checkout wait',
   CHECKOUT_CAPACITY: 'Queue per staffed counter', UNSUPPORTED: 'Runtime unsupported',
 })[mode];

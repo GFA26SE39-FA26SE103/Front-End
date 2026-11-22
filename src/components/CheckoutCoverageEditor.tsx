@@ -8,7 +8,8 @@ import {
 } from '../api/checkout';
 import { PolygonRoiEditor, type RoiDraft } from './PolygonRoiEditor';
 import { validateRoiPolygon } from './roiPolygonValidation';
-import { Button } from './ui';
+import { Button, Chip } from './ui';
+import z from './CameraCoverageEditor.module.css';
 import s from './CheckoutCoverageEditor.module.css';
 
 export type CheckoutCoverageEditorProps = {
@@ -245,87 +246,103 @@ function CheckoutSession({ camera, zones, onDirtyChange, onBusyChange }: Checkou
   const followMonitoring = (event: MouseEvent<HTMLAnchorElement>) => {
     if (busyLock.current || !confirmDiscard()) event.preventDefault();
   };
-  const activeZone = availableZones.find(z => z.zoneId === zoneId);
-  const label = target === 'lane' ? 'Lane ROI' : target === 'staff' ? 'Staff ROI' : 'Service ROI';
-  const roiColor = (key: 'lane' | 'staff' | 'service') => key === 'lane' ? 'var(--color-info)'
-    : key === 'staff' ? 'var(--color-purple)' : 'var(--color-success)';
+  type RoiKey = 'lane' | 'staff' | 'service';
+  const ROI_KEYS: RoiKey[] = ['lane', 'staff', 'service'];
+  const roiName = (key: RoiKey) => key === 'lane' ? 'Lane ROI' : key === 'staff' ? 'Staff ROI' : 'Service ROI';
+  // Hex colours: SVG fill/stroke attributes cannot resolve CSS var(), which left checkout shapes invisible.
+  const roiColor = (key: RoiKey) => key === 'lane' ? '#2563EB' : key === 'staff' ? '#7C5CC4' : '#16965F';
+  const roiStatus = (key: RoiKey) => {
+    const roi = mapping[key];
+    if (roi.complete) return `Closed · ${roi.points.length} points`;
+    if (roi.points.length) return `Not closed · ${roi.points.length} points`;
+    if (key === 'service') return mapping.isQueueSource ? 'Required for the queue source' : 'Optional unless queue source';
+    return 'Required';
+  };
+  const label = roiName(target);
+  const canDraw = Boolean(counterId) && !blocked;
+  const hint = !zoneId ? 'Select the checkout zone this camera covers.'
+    : !counterId ? 'Select a counter, or create one first, to draw its Lane, Staff and Service ROIs.'
+      : !mapping[target].complete ? `Draw the ${label} on the camera image and select Finish shape.`
+        : dirty ? 'Close Lane and Staff ROIs (and Service ROI for the queue source), then save the mapping.'
+          : 'The saved ROIs are shown on the camera image.';
 
   return <section className={s.editor} aria-label={`Checkout coverage for ${camera.code}`} aria-busy={busy || loading}>
-    <header className={s.header}>
-      <div><h2>Checkout camera coverage</h2><p>{camera.code}</p></div>
-      <Button variant="secondary" disabled={!zoneId || busy || loading} onClick={reload}>Reload saved checkout data</Button>
-    </header>
-    <div className={s.selectors}>
-      <label className={s.field}>Checkout zone
-        <select value={zoneId} disabled={busy} onChange={e => select(e.target.value, '')}>
-          <option value="">Select a checkout zone</option>
-          {availableZones.map(z => <option key={z.zoneId} value={z.zoneId}>{z.name} ({z.code})</option>)}
-        </select>
-      </label>
-      <label className={s.field}>Checkout counter
-        <select value={counterId} disabled={!zoneId || busy || counters.length === 0} onChange={e => select(zoneId, e.target.value)}>
-          <option value="">New counter (disabled first)</option>
-          {counters.map(c => <option key={c.checkoutCounterId} value={c.checkoutCounterId}>{c.code} · {c.name}{c.isEnabled ? ' · enabled' : ' · disabled'}</option>)}
-        </select>
-      </label>
-    </div>
-    {availableZones.length === 0 && <p className={s.help}>Create a CHECKOUT zone on this camera's floor first.</p>}
-    {loading && <p role="status">Loading checkout configuration…</p>}
-    {loadError && <div className={s.error} role="alert">{loadError} <Button variant="secondary" disabled={busy || loading} onClick={reload}>Retry checkout load</Button></div>}
-    {error && <p className={s.error} role="alert">{error}</p>}
-    {message && <p className={s.success} role="status">{message}</p>}
-    {busy && <p role="status">Saving checkout changes…</p>}
-    {zoneId && <div className={s.layout}>
-      <form className={s.panel} noValidate onSubmit={event => { event.preventDefault(); saveCounter(); }}>
-        <h3>{counterId ? 'Edit counter' : 'Create disabled counter'}</h3>
-        {!loading && !loadError && counters.length === 0 && <p className={s.help}>No counters in this checkout zone yet.</p>}
-        <fieldset className={s.fields} disabled={blocked}>
-          <label className={s.field}>Counter code<input value={counter.code} maxLength={50} onChange={e => setCounter(v => ({ ...v, code: e.target.value }))} /></label>
-          <label className={s.field}>Counter name<input value={counter.name} maxLength={100} onChange={e => setCounter(v => ({ ...v, name: e.target.value }))} /></label>
-          <label className={s.check}><input type="checkbox" checked={counter.isEnabled} disabled={!counterId} onChange={e => setCounter(v => ({ ...v, isEnabled: e.target.checked }))} />Counter enabled</label>
-          <div className={s.actions}>
-            <Button type="submit">{counterId ? 'Save counter' : 'Create disabled counter'}</Button>
-            {counterId && <Button variant="dangerGhost" disabled={!canDeleteCounter} onClick={removeCounter}>Delete counter</Button>}
-          </div>
-        </fieldset>
-        {counterId && !canDeleteCounter && <p className={s.help}>Disable the counter and all its camera mappings before deleting it.</p>}
-        {counterId && <div className={s.sources}>
-          <h3>Saved camera sources ({sources.length})</h3>
-          {sources.length === 0 && <p className={s.help}>No camera mappings saved for this counter.</p>}
-          <ul>{sources.map(m => <li key={m.mappingId}>{m.cameraId === camera.cameraId ? `${camera.code} (this camera)` : `Camera ${m.cameraId}`} · {m.isEnabled ? 'enabled' : 'disabled'}{m.isQueueSource ? ' · queue source' : ''}</li>)}</ul>
+    <div className={z.layout}>
+      <PolygonRoiEditor key={`${counterId}:${target}:${editorKey}`} cameraCode={camera.code} previewUrl={previewUrl} previewLoading={previewLoading}
+        label={label} color={roiColor(target)} draft={mapping[target]} canDraw={Boolean(counterId)}
+        disabled={!canDraw} onChange={draft => setMapping(v => ({ ...v, [target]: draft }))}
+        backgroundRois={ROI_KEYS.filter(key => key !== target && mapping[key].points.length)
+          .map(key => ({ id: key, points: mapping[key].points, color: roiColor(key),
+            label: `${roiName(key)}${mapping[key].complete ? '' : ' (incomplete)'}` }))} />
+      <aside className={z.controls}>
+        <label className={z.field}>Checkout zone
+          <select value={zoneId} disabled={busy} onChange={e => select(e.target.value, '')}>
+            <option value="">Select a checkout zone</option>
+            {availableZones.map(zone => <option key={zone.zoneId} value={zone.zoneId}>{zone.name} ({zone.code})</option>)}
+          </select>
+        </label>
+        {availableZones.length === 0 && <p className={z.muted}>Create a CHECKOUT zone on this camera's floor first.</p>}
+        <label className={z.field}>Checkout counter
+          <select value={counterId} disabled={!zoneId || busy || counters.length === 0} onChange={e => select(zoneId, e.target.value)}>
+            <option value="">New counter (disabled first)</option>
+            {counters.map(c => <option key={c.checkoutCounterId} value={c.checkoutCounterId}>{c.code} · {c.name}{c.isEnabled ? ' · enabled' : ' · disabled'}</option>)}
+          </select>
+        </label>
+        {loading && <p className={z.muted} role="status">Loading checkout configuration…</p>}
+
+        {zoneId && <form className={s.group} noValidate onSubmit={event => { event.preventDefault(); saveCounter(); }}>
+          <strong className={s.groupTitle}>{counterId ? 'Counter' : 'Create disabled counter'}</strong>
+          {!loading && !loadError && counters.length === 0 && <p className={z.muted}>No counters in this checkout zone yet.</p>}
+          <fieldset className={s.fields} disabled={blocked}>
+            <label className={s.field}>Counter code<input value={counter.code} maxLength={50} onChange={e => setCounter(v => ({ ...v, code: e.target.value }))} /></label>
+            <label className={s.field}>Counter name<input value={counter.name} maxLength={100} onChange={e => setCounter(v => ({ ...v, name: e.target.value }))} /></label>
+            <label className={s.check}><input type="checkbox" checked={counter.isEnabled} disabled={!counterId} onChange={e => setCounter(v => ({ ...v, isEnabled: e.target.checked }))} />Counter enabled</label>
+            <div className={s.actions}>
+              <Button type="submit">{counterId ? 'Save counter' : 'Create disabled counter'}</Button>
+              {counterId && <Button variant="dangerGhost" disabled={!canDeleteCounter} onClick={removeCounter}>Delete counter</Button>}
+            </div>
+          </fieldset>
+          {counterId && !canDeleteCounter && <p className={z.muted}>Disable the counter and all its camera mappings before deleting it.</p>}
+        </form>}
+
+        {zoneId && <form className={s.group} noValidate onSubmit={event => { event.preventDefault(); saveMapping(); }}>
+          <strong className={s.groupTitle}>Checkout ROIs</strong>
+          <ul className={z.mappingList} aria-label="Checkout ROI legend">
+            {ROI_KEYS.map(key => <li key={key} className={target === key ? s.activeRoi : undefined}>
+              <span className={z.zoneDot} style={{ backgroundColor: roiColor(key) }} aria-hidden="true" />
+              <span><strong>{roiName(key)}</strong><small>{roiStatus(key)}</small></span>
+              <button type="button" aria-pressed={target === key} disabled={blocked || !counterId} onClick={() => setTarget(key)}>Edit {roiName(key)}</button>
+            </li>)}
+          </ul>
+          <fieldset className={s.fields} disabled={blocked || !counterId}>
+            <label className={s.check}><input type="checkbox" checked={mapping.isEnabled} onChange={e => setMapping(v => ({ ...v, isEnabled: e.target.checked }))} />Mapping enabled</label>
+            <label className={s.check}><input type="checkbox" checked={mapping.isQueueSource} onChange={e => setMapping(v => ({ ...v, isQueueSource: e.target.checked }))} />Use as queue source</label>
+            <div className={s.actions}>
+              <Button type="submit">{busy ? 'Saving…' : 'Save checkout mapping'}</Button>
+              <Button variant="dangerGhost" disabled={!canDeleteMapping} onClick={removeMapping}>Delete camera mapping</Button>
+            </div>
+          </fieldset>
+          {baseline?.isEnabled && mappingBaseline?.isQueueSource && !canDeleteMapping && <p className={z.muted}>Disable the counter and save before deleting its queue source.</p>}
+        </form>}
+
+        <p className={z.hint}>{hint}</p>
+
+        {counterId && <>
+          <div className={z.mappingHeader}><strong>Saved camera sources</strong><Chip tone="neutral">{sources.length}</Chip></div>
+          {sources.length === 0 ? <p className={z.muted}>No camera mappings saved for this counter.</p>
+            : <ul className={s.sourceList}>{sources.map(m => <li key={m.mappingId}>{m.cameraId === camera.cameraId ? `${camera.code} (this camera)` : `Camera ${m.cameraId}`} · {m.isEnabled ? 'enabled' : 'disabled'}{m.isQueueSource ? ' · queue source' : ''}</li>)}</ul>}
           {otherQueue.length > 0 && <p className={s.notice}>Queue source: Camera {otherQueue[0].cameraId}. To switch manually, disable and save this counter, edit that other camera to clear its queue-source flag, then select this camera. No automatic failover.</p>}
-        </div>}
-        <a href={`/admin/ai-config?zoneId=${encodeURIComponent(zoneId)}`} onClick={followMonitoring} aria-disabled={busy}>Configure checkout monitoring</a>
-      </form>
-      <form className={s.roiPanel} noValidate onSubmit={event => { event.preventDefault(); saveMapping(); }}>
-        <h3>{activeZone?.name} · {baseline?.code ?? 'Select or create a counter'}</h3>
-        <div className={s.legend} aria-label="Checkout ROI legend">
-          <span><i style={{ backgroundColor: 'var(--color-info)' }} />Lane ROI · {mapping.lane.complete ? 'Closed' : 'Not closed'}</span>
-          <span><i style={{ backgroundColor: 'var(--color-purple)' }} />Staff ROI · {mapping.staff.complete ? 'Closed' : 'Not closed'}</span>
-          <span><i style={{ backgroundColor: 'var(--color-success)' }} />Service ROI · {mapping.service.complete ? 'Closed' : 'Not closed'}</span>
-        </div>
-        <div className={s.actions}>
-          <Button variant="secondary" aria-pressed={target === 'lane'} disabled={blocked || !counterId} onClick={() => setTarget('lane')}>Edit Lane ROI</Button>
-          <Button variant="secondary" aria-pressed={target === 'staff'} disabled={blocked || !counterId} onClick={() => setTarget('staff')}>Edit Staff ROI</Button>
-          <Button variant="secondary" aria-pressed={target === 'service'} disabled={blocked || !counterId} onClick={() => setTarget('service')}>Edit Service ROI</Button>
-        </div>
-        <PolygonRoiEditor key={`${counterId}:${target}:${editorKey}`} cameraCode={camera.code} previewUrl={previewUrl} previewLoading={previewLoading}
-          label={label} color={roiColor(target)} draft={mapping[target]}
-          disabled={blocked || !counterId} onChange={draft => setMapping(v => ({ ...v, [target]: draft }))}
-          backgroundRois={(['lane', 'staff', 'service'] as const).filter(key => key !== target && mapping[key].points.length)
-            .map(key => ({ id: key, points: mapping[key].points, color: roiColor(key),
-              label: `${key === 'lane' ? 'Lane' : key === 'staff' ? 'Staff' : 'Service'} ROI${mapping[key].complete ? '' : ' (incomplete)'}` }))} />
-        {previewError && <div className={s.error} role="alert">Preview unavailable: {previewError} <Button variant="secondary" disabled={busy || previewLoading} onClick={() => { setPreviewLoading(true); setPreviewUrl(undefined); setPreviewError(''); setPreviewKey(k => k + 1); }}>Retry camera preview</Button></div>}
-        <fieldset className={s.fields} disabled={blocked || !counterId}>
-          <label className={s.check}><input type="checkbox" checked={mapping.isEnabled} onChange={e => setMapping(v => ({ ...v, isEnabled: e.target.checked }))} />Mapping enabled</label>
-          <label className={s.check}><input type="checkbox" checked={mapping.isQueueSource} onChange={e => setMapping(v => ({ ...v, isQueueSource: e.target.checked }))} />Use as queue source</label>
-          <div className={s.actions}>
-            <Button type="submit">Save checkout mapping</Button>
-            <Button variant="dangerGhost" disabled={!canDeleteMapping} onClick={removeMapping}>Delete camera mapping</Button>
-          </div>
-        </fieldset>
-        {baseline?.isEnabled && mappingBaseline?.isQueueSource && !canDeleteMapping && <p className={s.help}>Disable the counter and save before deleting its queue source.</p>}
-      </form>
-    </div>}
+        </>}
+
+        {zoneId && <a className={s.link} href={`/admin/ai-config?zoneId=${encodeURIComponent(zoneId)}`} onClick={followMonitoring} aria-disabled={busy}>Configure checkout monitoring</a>}
+        {zoneId && <Button variant="secondary" disabled={busy || loading} onClick={reload}>Reload saved checkout data</Button>}
+
+        {previewError && <div className={z.error} role="alert">Preview unavailable: {previewError} <Button variant="secondary" disabled={busy || previewLoading} onClick={() => { setPreviewLoading(true); setPreviewUrl(undefined); setPreviewError(''); setPreviewKey(k => k + 1); }}>Retry camera preview</Button></div>}
+        {loadError && <div className={z.error} role="alert">{loadError} <Button variant="secondary" disabled={busy || loading} onClick={reload}>Retry checkout load</Button></div>}
+        {error && <p className={z.error} role="alert">{error}</p>}
+        {message && <p className={z.success} role="status">{message}</p>}
+        {busy && <p className={z.muted} role="status">Saving checkout changes…</p>}
+      </aside>
+    </div>
   </section>;
 }
