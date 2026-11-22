@@ -74,6 +74,9 @@ export const createFloor = (storeId: string, body: FloorDetailsRequest, signal?:
 export const updateFloorDetails = (floorId: string, body: FloorDetailsRequest, signal?: AbortSignal) =>
   apiFetch<FloorRecord>(`/api/floors/${encodeURIComponent(floorId)}/details`, { method: 'PATCH', body: JSON.stringify(body), signal });
 
+export const deleteFloor = (floorId: string, signal?: AbortSignal) =>
+  apiFetch<void>(`/api/floors/${encodeURIComponent(floorId)}`, { method: 'DELETE', signal });
+
 export const listSupermarkets = (signal?: AbortSignal) =>
   apiFetch<SupermarketRecord[]>('/api/supermarkets', { signal });
 

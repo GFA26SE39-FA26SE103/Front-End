@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCameraRoi, getCameraPreview, listCameraMappings, listCameras, updateCamera, type CameraZoneMapping } from '../api/cameras';
-import { createFloor, createZone, deleteZone, getFloorMap, getZoneUsage, listFloors, listSupermarkets, listZoneAdjacency, listZones, replaceZoneAdjacency, updateFloorDetails, updateZone, uploadFloorMap } from '../api/floors';
+import { createFloor, createZone, deleteFloor, deleteZone, getFloorMap, getZoneUsage, listFloors, listSupermarkets, listZoneAdjacency, listZones, replaceZoneAdjacency, updateFloorDetails, updateZone, uploadFloorMap } from '../api/floors';
 import StoreLayout from './StoreLayout';
 import { ApiError } from '../api/client';
 import { mockNativeDialogs } from '../test/dialog';
@@ -20,6 +20,7 @@ vi.mock('../api/cameras', () => ({
 vi.mock('../api/floors', () => ({
   createFloor: vi.fn(),
   createZone: vi.fn(),
+  deleteFloor: vi.fn(),
   deleteZone: vi.fn(),
   getFloorMap: vi.fn(),
   getZoneUsage: vi.fn(),
@@ -142,6 +143,49 @@ describe('StoreLayout', () => {
     expect(screen.getByRole('img', { name: /uploaded floor plan/i })).toHaveAttribute('src', 'blob:floor-map');
     expect(screen.getByRole('button', { name: /CAM-01 Entrance camera/i })).toBeInTheDocument();
     expect(getFloorMap).toHaveBeenCalledTimes(1);
+  });
+
+  it('confirms deleting the selected floor and selects a remaining floor after success', async () => {
+    const extraFloor = { ...floor, floorId: 'floor-2', floorNumber: 2, name: 'Test floor', mapAssetUrl: null };
+    vi.mocked(listFloors).mockResolvedValueOnce([floor, extraFloor]);
+    vi.mocked(deleteFloor).mockResolvedValueOnce(undefined);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    try {
+      const user = userEvent.setup();
+      renderPage('/admin/store-layout?floorId=floor-2');
+      await screen.findByRole('heading', { name: 'Test floor' });
+      await user.click(screen.getByRole('button', { name: 'Edit floor' }));
+      const deleteButton = within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete floor' });
+      await user.click(deleteButton);
+      expect(deleteFloor).not.toHaveBeenCalled();
+
+      await user.click(deleteButton);
+      expect(await screen.findByRole('heading', { name: 'Ground floor' })).toBeVisible();
+      expect(screen.getByText('Deleted floor "Test floor".')).toBeVisible();
+      expect(screen.queryByRole('button', { name: /Test floor/ })).not.toBeInTheDocument();
+      expect(deleteFloor).toHaveBeenCalledWith('floor-2', expect.any(AbortSignal));
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+
+  it('displays a floor deletion conflict and leaves the editor open', async () => {
+    const message = 'Cannot delete Ground floor. This floor still has 0 zone(s) and 1 camera(s).';
+    vi.mocked(deleteFloor).mockRejectedValueOnce(new ApiError(409, 'FLOOR_IN_USE', message));
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    try {
+      const user = userEvent.setup();
+      renderPage();
+      await screen.findByRole('heading', { name: 'Ground floor' });
+      await user.click(screen.getByRole('button', { name: 'Edit floor' }));
+      const dialog = screen.getByRole('dialog');
+      await user.click(within(dialog).getByRole('button', { name: 'Delete floor' }));
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent(message);
+      expect(screen.getByRole('heading', { name: 'Ground floor' })).toBeInTheDocument();
+      expect(within(dialog).getByRole('button', { name: 'Save floor' })).toBeEnabled();
+    } finally {
+      confirm.mockRestore();
+    }
   });
 
   it('cancels floor editing and retains input after duplicate-number rejection', async () => {

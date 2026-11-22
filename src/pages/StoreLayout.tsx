@@ -41,7 +41,7 @@ const initialMapState: MapState = { status: 'idle', url: null, contentType: null
 const isPlaced = (camera: Pick<CameraRecord, 'mapX' | 'mapY'>) => camera.mapX !== null && camera.mapY !== null;
 
 export default function StoreLayout() {
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const requestedFloorId = params.get('floorId') ?? '';
   const requestedCameraId = params.get('cameraId') ?? '';
   const [stores, setStores] = useState<SupermarketRecord[]>([]);
@@ -197,7 +197,7 @@ export default function StoreLayout() {
   const canDismissCoverage = () => !coverageEditing || !coverageBusy
     && (!coverageDirty || window.confirm('Discard unsaved ROI or counter changes?'));
 
-  const selectFloor = (floorId: string) => {
+  const selectFloor = (floorId: string | null) => {
     if (otherFloorChangesBlocked || !canDismissCoverage()) return;
     setSelectedFloorId(floorId);
     setMapState(initialMapState);
@@ -463,6 +463,19 @@ export default function StoreLayout() {
           setFloorEditor(null);
           if (creating) selectFloor(saved.floorId);
           setActionMessage(creating ? 'Floor created. Upload its floor plan to continue setup.' : 'Floor details updated.');
+        }}
+        onDeleted={deleted => {
+          const remaining = floors.filter(f => f.floorId !== deleted.floorId);
+          setFloors(remaining);
+          setFloorEditor(null);
+          selectFloor(remaining[0]?.floorId ?? null);
+          if (requestedFloorId === deleted.floorId) {
+            const next = new URLSearchParams(params);
+            next.delete('floorId');
+            next.delete('cameraId');
+            setParams(next, { replace: true });
+          }
+          setActionMessage(`Deleted floor "${deleted.name}".`);
         }}
       />}
       {adjacencyOpen && <ZoneAdjacencyEditor

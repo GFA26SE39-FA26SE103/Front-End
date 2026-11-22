@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { createFloor, updateFloorDetails, type FloorRecord } from '../api/floors';
+import { createFloor, deleteFloor, updateFloorDetails, type FloorRecord } from '../api/floors';
 import { ApiError } from '../api/client';
 import { Dialog } from './Dialog';
 import { Button } from './ui';
 import s from './FloorEditor.module.css';
 
-export function FloorEditor({ storeId, floor, suggestedNumber, onClose, onSaved }: {
-  storeId: string; floor?: FloorRecord; suggestedNumber: number; onClose: () => void; onSaved: (saved: FloorRecord) => void;
+export function FloorEditor({ storeId, floor, suggestedNumber, onClose, onSaved, onDeleted }: {
+  storeId: string; floor?: FloorRecord; suggestedNumber: number; onClose: () => void;
+  onSaved: (saved: FloorRecord) => void; onDeleted: (deleted: FloorRecord) => void;
 }) {
   const [name, setName] = useState(floor?.name ?? '');
   const [number, setNumber] = useState(String(floor?.floorNumber ?? suggestedNumber));
-  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<'save' | 'delete' | null>(null);
+  const busy = pending !== null;
   const [error, setError] = useState('');
   const controller = useRef<AbortController | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
@@ -23,7 +25,7 @@ export function FloorEditor({ storeId, floor, suggestedNumber, onClose, onSaved 
     }
     if (!name.trim()) { setError('Floor name is required.'); return; }
     if (name.trim().length > 100) { setError('Floor name must be at most 100 characters.'); return; }
-    setBusy(true); setError('');
+    setPending('save'); setError('');
     const request = { floorNumber, name: name.trim() };
     const abort = new AbortController(); controller.current = abort;
     try {
@@ -31,7 +33,20 @@ export function FloorEditor({ storeId, floor, suggestedNumber, onClose, onSaved 
       if (!abort.signal.aborted) onSaved(saved);
     } catch (e) {
       if (!abort.signal.aborted) setError(e instanceof ApiError && e.code === 'DUPLICATE' ? 'This floor number already exists. Choose a different number.' : e instanceof Error ? e.message : 'Could not save the floor.');
-    } finally { if (!abort.signal.aborted) setBusy(false); }
+    } finally { if (!abort.signal.aborted) setPending(null); }
+  }
+  async function remove() {
+    if (!floor || busy || !window.confirm(`Delete floor "${floor.name}"? This cannot be undone.`)) return;
+    setPending('delete');
+    setError('');
+    const abort = new AbortController();
+    controller.current = abort;
+    try {
+      await deleteFloor(floor.floorId, abort.signal);
+      if (!abort.signal.aborted) onDeleted(floor);
+    } catch (e) {
+      if (!abort.signal.aborted) setError(e instanceof Error ? e.message : 'Could not delete the floor.');
+    } finally { if (!abort.signal.aborted) setPending(null); }
   }
   return <Dialog title={floor ? 'Edit floor' : 'Create floor'} busy={busy} onClose={onClose}>
     <form className={s.form} noValidate onSubmit={event => void save(event)}>
@@ -40,7 +55,13 @@ export function FloorEditor({ storeId, floor, suggestedNumber, onClose, onSaved 
         <label>Floor number<input aria-label="Floor number" type="number" step="1" value={number} onChange={e => setNumber(e.target.value)} /></label>
       </fieldset>
       {error && <p className={s.error} role="alert">{error}</p>}
-      <div className={s.actions}><Button variant="secondary" disabled={busy} onClick={onClose}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? 'Saving…' : floor ? 'Save floor' : 'Create floor'}</Button></div>
+      <div className={s.actions}>
+        {floor && <Button className={s.delete} variant="dangerGhost" disabled={busy} onClick={() => void remove()}>
+          {pending === 'delete' ? 'Deleting…' : 'Delete floor'}
+        </Button>}
+        <Button variant="secondary" disabled={busy} onClick={onClose}>Cancel</Button>
+        <Button type="submit" disabled={busy}>{pending === 'save' ? 'Saving…' : floor ? 'Save floor' : 'Create floor'}</Button>
+      </div>
     </form>
   </Dialog>;
 }
