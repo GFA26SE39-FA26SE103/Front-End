@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { prepareCameraPlayback } from '../api/cameras';
+import { getCameraPreview, prepareCameraPlayback } from '../api/cameras';
 import { CameraLivePreview } from './CameraLivePreview';
 
 vi.mock('../api/cameras', () => ({
@@ -68,6 +68,27 @@ describe('CameraLivePreview WebRTC', () => {
     expect(await screen.findByText('WEBRTC · LIVE')).toBeInTheDocument();
     expect(prepareCameraPlayback).toHaveBeenCalledWith('camera-1', expect.any(AbortSignal));
     expect(fetchMock).toHaveBeenCalledWith('https://stream.example.test/cam-camera-1/whep', expect.objectContaining({ method: 'POST' }));
+  });
+
+  it('plays uploaded video as an MP4 instead of polling snapshots', async () => {
+    vi.mocked(getCameraPreview).mockClear();
+    vi.mocked(prepareCameraPlayback).mockResolvedValue({
+      cameraId: 'camera-1',
+      transport: 'MP4',
+      url: '/api/cameras/camera-1/recorded-video/content/asset?ticket=recorded',
+    });
+    const onStateChange = vi.fn();
+    const { rerender } = render(<CameraLivePreview cameraId="camera-1" enabled onStateChange={onStateChange} />);
+    const video = await screen.findByLabelText('Recorded video preview');
+    expect(video).toHaveAttribute('src', expect.stringContaining('/recorded-video/content/asset?ticket=recorded'));
+    expect(video).toHaveAttribute('controls');
+    fireEvent.playing(video);
+    expect(onStateChange).toHaveBeenCalledWith('live');
+    expect(getCameraPreview).not.toHaveBeenCalled();
+    expect(peer.createOffer).not.toHaveBeenCalled();
+
+    rerender(<CameraLivePreview cameraId="camera-1" enabled={false} />);
+    expect(screen.queryByLabelText('Recorded video preview')).not.toBeInTheDocument();
   });
 
   it('closes both the peer and WHEP session when preview stops', async () => {

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -58,6 +58,7 @@ describe('Cameras registration', () => {
 
   it('registers a recorded camera without a phone URL, uploads video, then tests and enables it', async () => {
     const calls: string[] = [];
+    const content = `/api/cameras/${cameraId}/recorded-video/content/40b8811cbf274a729253e052accf358b?ticket=example`;
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const path = new URL(String(input)).pathname;
       calls.push(`${init?.method ?? 'GET'} ${path}`);
@@ -71,7 +72,7 @@ describe('Cameras registration', () => {
       if (path === `/api/cameras/${cameraId}/recorded-video`) return json({ cameraId, sourceType: 'RECORDED', protocol: 'FILE' });
       if (path === `/api/cameras/${cameraId}/connection/test`) return json({ cameraId, protocol: 'FILE', lastTestResult: 'SUCCESS', lastTestMessage: 'FRAME_RECEIVED', isEnabled: false });
       if (path === `/api/cameras/${cameraId}/connection/enable`) return json({ cameraId, protocol: 'FILE', isEnabled: true });
-      if (path === `/api/cameras/${cameraId}/preview`) return new Response(new Blob(['frame'], { type: 'image/jpeg' }), { headers: { 'Content-Type': 'image/jpeg' } });
+      if (path === `/api/cameras/${cameraId}/playback`) return json({ cameraId, transport: 'MP4', url: content });
       return json({ code: 'UNEXPECTED_REQUEST' }, 500);
     });
     const user = userEvent.setup();
@@ -88,7 +89,12 @@ describe('Cameras registration', () => {
     await user.click(screen.getByRole('button', { name: 'Save video source' }));
     await screen.findByText('FILE');
     await user.click(screen.getByRole('button', { name: 'Start preview' }));
+    const player = await screen.findByLabelText('Recorded video preview');
+    expect(player).toHaveAttribute('src', expect.stringContaining(content));
+    fireEvent.playing(player);
     await screen.findByRole('button', { name: 'Stop preview' });
+    expect(screen.getByText('RECORDED VIDEO')).toBeInTheDocument();
+    expect(calls).not.toContain(`GET /api/cameras/${cameraId}/preview`);
     expect(calls).not.toContain(`PUT /api/cameras/${cameraId}/connection`);
     expect(calls).toContain(`POST /api/cameras/${cameraId}/recorded-video`);
     expect(calls).toContain(`POST /api/cameras/${cameraId}/connection/enable`);

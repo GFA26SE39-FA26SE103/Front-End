@@ -38,6 +38,7 @@ export function AnnotatedPreview({ cameraId, enabled, pollInterval = 0, zoneId, 
   const stopChainRef = useRef<Promise<void>>(Promise.resolve());
   const [purpose, setPurpose] = useState('PREVIEW');
   const [annotationContext, setAnnotationContext] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
@@ -138,6 +139,7 @@ export function AnnotatedPreview({ cameraId, enabled, pollInterval = 0, zoneId, 
         }
         setViewState(statusView(current.state));
         if (current.state === 'ERROR' || current.state === 'STOPPED') {
+          setErrorCode(current.errorCode);
           if (imageUrlRef.current) URL.revokeObjectURL(imageUrlRef.current);
           pendingRevoke.splice(0).forEach((url) => URL.revokeObjectURL(url));
           imageUrlRef.current = null;
@@ -213,6 +215,7 @@ export function AnnotatedPreview({ cameraId, enabled, pollInterval = 0, zoneId, 
 
     const boot = async () => {
       setViewState('starting');
+      setErrorCode(null);
       setImageUrl(null);
       try {
         await startPromise;
@@ -268,7 +271,7 @@ export function AnnotatedPreview({ cameraId, enabled, pollInterval = 0, zoneId, 
         />
       )}
       {enabled && imageUrl && frameSize && regions.length > 0 && <RegionLayer regions={regions} {...frameSize} />}
-      {visibleState !== 'live' && visibleState !== 'completed' && <div className={s.state}>{stateLabel(visibleState)}</div>}
+      {visibleState !== 'live' && visibleState !== 'completed' && <div className={s.state}>{stateLabel(visibleState, errorCode)}</div>}
       {visibleState === 'live' && <span className={s.badge}>YOLO · BYTETRACK · LIVE{annotationContext ? ' · ' + annotationContext : ''}</span>}
       {visibleState === 'completed' && <span className={s.badge}>Video completed · {purpose === 'MONITORING' ? 'Deactivate → Activate to replay monitoring' : 'Stop then start to replay'}{annotationContext ? ' · ' + annotationContext : ''}</span>}
     </div>
@@ -316,13 +319,17 @@ function statusView(state: AiPreviewState): ViewState {
   return 'starting';
 }
 
-function stateLabel(state: ViewState): string {
+function stateLabel(state: ViewState, errorCode: string | null): string {
   if (state === 'idle') return 'AI preview is stopped';
   if (state === 'starting') return 'Starting YOLO + ByteTrack…';
   if (state === 'waiting') return 'Waiting for first tracked frame…';
   if (state === 'reconnecting') return 'Camera disconnected · reconnecting…';
   if (state === 'unauthorized') return 'Session expired';
-  if (state === 'error') return 'AI preview stopped after a camera error';
+  if (state === 'error') {
+    if (errorCode === 'AI_RECORDED_VIDEO_INVALID') return 'AI could not open the uploaded recording.';
+    if (errorCode === 'AI_RECORDED_VIDEO_DOWNLOAD_FAILED') return 'AI could not download the recording from the backend.';
+    return 'AI preview stopped after a camera error';
+  }
   if (state === 'unavailable') return 'AI preview is unavailable';
   if (state === 'monitoring-owned') return 'This camera is used by active monitoring in this or another Zone. Deactivate every active configuration using the camera, then retry.';
   return '';

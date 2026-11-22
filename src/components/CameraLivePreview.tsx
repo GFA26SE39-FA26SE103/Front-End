@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { ApiError } from '../api/client';
-import { getCameraPreview, prepareCameraPlayback } from '../api/cameras';
+import { ApiError, apiResourceUrl } from '../api/client';
+import { getCameraPreview, prepareCameraPlayback, type CameraPlayback } from '../api/cameras';
 import { loadSession } from '../auth/session';
 import { appTokenEnabledForWebRtc } from '../config/webrtc';
 import s from './AnnotatedPreview.module.css';
@@ -10,36 +10,76 @@ export type CameraLiveViewState = 'idle' | 'starting' | 'live' | 'reconnecting' 
 export type CameraLivePreviewProps = {
   cameraId: string;
   enabled: boolean;
+  recorded?: boolean;
   whepUrl?: string | null;
   pollInterval?: number;
   onStateChange?: (state: CameraLiveViewState, error?: ApiError) => void;
 };
 
-/** Uses WebRTC for configured RTSP cameras and preserves JPEG polling as a fallback. */
+/** Uses native file playback for recordings and WebRTC for configured RTSP cameras. */
 export function CameraLivePreview(props: CameraLivePreviewProps) {
-  const [backendWhepUrl, setBackendWhepUrl] = useState<string | null | undefined>();
+  const [playback, setPlayback] = useState<CameraPlayback | null | undefined>();
+  const onStateChangeRef = useRef(props.onStateChange);
 
   useEffect(() => {
-    if (!props.enabled || props.whepUrl) return;
+    onStateChangeRef.current = props.onStateChange;
+  }, [props.onStateChange]);
+
+  useEffect(() => {
+    if (!props.enabled || props.whepUrl) {
+      setPlayback(undefined);
+      return;
+    }
     const controller = new AbortController();
     void prepareCameraPlayback(props.cameraId, controller.signal)
       .then(playback => {
-        if (!controller.signal.aborted) setBackendWhepUrl(playback.transport === 'WEBRTC' ? playback.url : null);
+        if (!controller.signal.aborted) setPlayback(playback);
       })
-      .catch(() => {
-        // HTTP/FILE sources and older deployments keep the bounded JPEG fallback.
-        if (!controller.signal.aborted) setBackendWhepUrl(null);
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setPlayback(null);
+        if (props.recorded) {
+          const apiError = error instanceof ApiError ? error
+            : new ApiError(503, 'RECORDED_PLAYBACK_UNAVAILABLE', 'The uploaded recording could not be opened.');
+          onStateChangeRef.current?.(apiError.status === 401 ? 'unauthorized' : 'error', apiError);
+        }
       });
     return () => controller.abort();
-  }, [props.cameraId, props.enabled, props.whepUrl]);
+  }, [props.cameraId, props.enabled, props.recorded, props.whepUrl]);
 
-  const resolvedWhepUrl = props.whepUrl ?? backendWhepUrl;
-  if (props.enabled && resolvedWhepUrl === undefined) {
+  if (props.enabled && !props.whepUrl && playback === undefined) {
     return <div className={s.preview} aria-live="polite"><div className={s.state}>Connecting to camera…</div></div>;
   }
+  if (props.enabled && !props.whepUrl && playback?.transport === 'MP4') {
+    return <RecordedVideoPreview url={apiResourceUrl(playback.url)} onStateChange={props.onStateChange} />;
+  }
+  if (props.enabled && props.recorded && playback === null) {
+    return <div className={s.preview}><div className={s.state}>The uploaded recording could not be opened.</div></div>;
+  }
+  const resolvedWhepUrl = props.whepUrl ?? (playback?.transport === 'WEBRTC' ? playback.url : null);
   return resolvedWhepUrl
     ? <WebRtcLivePreview {...props} whepUrl={resolvedWhepUrl} />
     : <PolledLivePreview {...props} />;
+}
+
+function RecordedVideoPreview({ url, onStateChange }: { url: string; onStateChange?: CameraLivePreviewProps['onStateChange'] }) {
+  const [playing, setPlaying] = useState(false);
+  return (
+    <div className={s.preview}>
+      <video
+        src={url}
+        className={s.image}
+        aria-label="Recorded video preview"
+        autoPlay
+        muted
+        playsInline
+        controls
+        onPlaying={() => { setPlaying(true); onStateChange?.('live'); }}
+        onError={() => onStateChange?.('error', new ApiError(422, 'RECORDED_PLAYBACK_FAILED', 'Could not play the uploaded video. Try an H.264 MP4.'))}
+      />
+      {playing && <span className={s.badge}>RECORDING</span>}
+    </div>
+  );
 }
 
 function WebRtcLivePreview({ enabled, whepUrl, onStateChange }: CameraLivePreviewProps & { whepUrl: string }) {

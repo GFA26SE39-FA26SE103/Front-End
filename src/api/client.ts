@@ -5,6 +5,7 @@ const DEFAULT_TIMEOUT_MS = 15000;
 export type ApiFetchInit = RequestInit & { responseType?: ResponseType; timeoutMs?: number };
 
 const apiUrl = () => (import.meta.env.VITE_API_URL || 'http://localhost:5080').replace(/\/$/, '');
+export const apiResourceUrl = (path: string) => `${apiUrl()}${path.startsWith('/') ? path : `/${path}`}`;
 
 export class ApiError extends Error {
   readonly status: number;
@@ -41,7 +42,7 @@ export async function apiFetch<T = void>(path: string, init: ApiFetchInit = {}):
   }
 
   try {
-    const response = await fetch(`${apiUrl()}${path.startsWith('/') ? path : `/${path}`}`, {
+    const response = await fetch(apiResourceUrl(path), {
       ...requestInit,
       headers,
       signal: timeoutController.signal,

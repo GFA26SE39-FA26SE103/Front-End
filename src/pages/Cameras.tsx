@@ -416,6 +416,7 @@ export default function Cameras() {
                 : <CameraLivePreview
                     key={`${camera.id}-live`}
                     cameraId={camera.id}
+                    recorded={connection?.cameraId === camera.id && connection.protocol === 'FILE'}
                     enabled={previewState === 'starting' || previewState === 'running'}
                     onStateChange={(state, error) => liveViewChanged(camera, state, error)}
                   />}
@@ -593,7 +594,10 @@ function formatDateTime(value?: string | null): string {
 
 function connectionBadge(camera: CameraView, connection: ConnectionView | null, preview: PreviewState, mode: ViewMode, previewFailed: boolean) {
   if (camera.lifecycleStatus !== 'ACTIVE') return { label: 'Inactive', tone: 'neutral' as const };
-  if (preview === 'running') return { label: mode === 'live' ? 'LIVE FEED' : 'AI DETECTION', tone: 'success' as const };
+  if (preview === 'running') {
+    const label = mode === 'ai' ? 'AI DETECTION' : connection?.protocol === 'FILE' ? 'RECORDED VIDEO' : 'LIVE FEED';
+    return { label, tone: 'success' as const };
+  }
   if (previewFailed) return { label: 'Source unavailable', tone: 'danger' as const };
   if (preview === 'connecting' || preview === 'starting' || connection?.cameraId !== camera.id || connection.state === 'checking') return { label: 'Connecting…', tone: 'warning' as const };
   if (connection.state === 'failed') return { label: 'Source test failed', tone: 'danger' as const };
