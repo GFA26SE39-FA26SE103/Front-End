@@ -52,14 +52,14 @@ describe('ZoneEditorOverlay', () => {
     fireEvent.pointerMove(layer, { pointerId: 7, clientX: 500, clientY: 250 });
     fireEvent.pointerUp(layer, { pointerId: 7, clientX: 500, clientY: 250 });
     await user.type(screen.getByLabelText('Zone name'), 'Produce');
-    await user.selectOptions(screen.getByLabelText('Zone type'), 'FRESH_FOOD');
+    await user.selectOptions(screen.getByLabelText('Zone type'), 'Store Aisle');
     await user.click(screen.getByRole('button', { name: 'Green' }));
     await user.click(screen.getByRole('button', { name: 'Save zone' }));
 
     expect(onSave).toHaveBeenCalledWith({
       zoneId: undefined,
       name: 'Produce',
-      zoneType: 'FRESH_FOOD',
+      zoneType: 'STORE_AISLE',
       colorHex: '#22C55E',
       mapPolygon: [
         { x: 0.1, y: 0.1 },

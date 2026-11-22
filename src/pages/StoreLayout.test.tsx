@@ -534,12 +534,12 @@ describe('StoreLayout', () => {
     fireEvent.pointerMove(layer, { pointerId: 4, clientX: 500, clientY: 250 });
     fireEvent.pointerUp(layer, { pointerId: 4, clientX: 500, clientY: 250 });
     await user.type(screen.getByLabelText('Zone name'), 'Produce');
-    await user.selectOptions(screen.getByLabelText('Zone type'), 'FRESH_FOOD');
+    await user.selectOptions(screen.getByLabelText('Zone type'), 'Store Aisle');
     await user.click(screen.getByRole('button', { name: 'Green' }));
     await user.click(screen.getByRole('button', { name: 'Save zone' }));
 
     await waitFor(() => expect(createZone).toHaveBeenCalledWith('floor-1', {
-      code: 'PRODUCE', name: 'Produce', zoneType: 'FRESH_FOOD', colorHex: '#22C55E', status: 'ACTIVE',
+      code: 'PRODUCE', name: 'Produce', zoneType: 'STORE_AISLE', colorHex: '#22C55E', status: 'ACTIVE',
       mapPolygon: [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.1 }, { x: 0.5, y: 0.5 }, { x: 0.1, y: 0.5 }],
     }));
     expect(await screen.findByText('Zone saved.')).toBeInTheDocument();

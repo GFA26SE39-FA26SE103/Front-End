@@ -36,13 +36,12 @@ const colors = [
 
 const zoneTypes = [
   { value: 'ENTRANCE', label: 'Entrance' },
-  { value: 'CHECKOUT', label: 'Checkout area' },
-  { value: 'AISLES', label: 'Aisles' },
-  { value: 'FRESH_FOOD', label: 'Fresh food' },
-  { value: 'HOUSEHOLD', label: 'Household' },
-  { value: 'ELECTRONICS', label: 'Electronics' },
+  { value: 'CHECKOUT', label: 'Checkout' },
+  { value: 'STORE_AISLE', label: 'Store Aisle' },
+  { value: 'STAFF_SERVICE', label: 'Staff Service' },
 ] as const;
 const zoneTypeCodes = new Set<string>(zoneTypes.map((zoneType) => zoneType.value));
+const legacyAisleTypes = new Set(['AISLES', 'FRESH_FOOD', 'HOUSEHOLD', 'ELECTRONICS']);
 
 const DEFAULT_COLOR = '#3B82F6';
 const MIN_ZONE_SPAN = 0.005;
@@ -147,7 +146,8 @@ export function ZoneEditorOverlay({ zones, saving, onSave, onDelete, onCancel }:
     setHistory([]);
     setComplete(true);
     setName(zone.name);
-    setZoneType(zone.zoneType ?? '');
+    const savedType = zone.zoneType ?? '';
+    setZoneType(legacyAisleTypes.has(savedType) ? 'STORE_AISLE' : savedType);
     setAreaM2(zone.areaM2 == null ? '' : String(zone.areaM2));
     setAreaEdited(false);
     setColorHex(zone.colorHex ?? DEFAULT_COLOR);
