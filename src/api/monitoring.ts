@@ -9,11 +9,12 @@ export type IncidentType = {
   measurementOptions?: { mode: string; unit: string; supported: boolean; reason: string | null; defaultWarning?: number | null; defaultCritical?: number | null }[];
   requiresBeforePhoto?: boolean;
 };
+export type MonitoringEventType = Omit<IncidentType, 'incidentTypeId' | 'sourceType' | 'requiresBeforePhoto'> & { eventTypeId: string };
 export type MonitoringRule = {
-  incidentTypeId: string; warningThreshold: number; criticalThreshold: number;
+  eventTypeId: string; warningThreshold: number; criticalThreshold: number;
   thresholdUnit: string; sustainSec: number; cooldownSec: number; enabled: boolean;
   clearDurationSec?: number;
-  parametersJson: string | null; ruleId?: string; incidentCode?: string; incidentName?: string;
+  parametersJson: string | null; ruleId?: string; eventCode?: string; eventName?: string;
   /** Dual threshold: the level is held until the value drops below this (null = same as the enter threshold). */
   warningExitThreshold?: number | null; criticalExitThreshold?: number | null;
 };
@@ -35,6 +36,7 @@ export type MonitoringReview = {
   issues: MonitoringIssue[]; warnings: string[]; canActivate: boolean;
 };
 const path = (zoneId: string) => `/api/zones/${encodeURIComponent(zoneId)}/monitoring`;
+export const listMonitoringEventTypes = (signal?: AbortSignal) => apiFetch<MonitoringEventType[]>('/api/operational-event-types/monitoring', { signal });
 export const listIncidentTypes = (signal?: AbortSignal) => apiFetch<IncidentType[]>('/api/incident-types', { signal });
 export type IncidentTypeCreate = { code: string; name: string; description: string | null; requiresBeforePhoto: boolean; status: 'ACTIVE' | 'INACTIVE' };
 export type IncidentTypeUpdate = Omit<IncidentTypeCreate, 'code'>;

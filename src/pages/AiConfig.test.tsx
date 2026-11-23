@@ -8,8 +8,8 @@ mockNativeDialogs();
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const zone = { zoneId: 'zone-1', floorId: 'floor-1', code: 'QUEUE', name: 'Actual queue zone', zoneType: 'QUEUE', mapPolygon: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }], colorHex: '#123456', minStaff: 0, status: 'ACTIVE', updatedAt: '2026-10-03T00:00:00Z' };
-const type = { incidentTypeId: 'type-1', code: 'LONG_QUEUE', name: 'Long Queue', description: null, sourceType: 'AI_DETECTED', measurementType: 'QUEUE_LENGTH', status: 'ACTIVE', supported: true, thresholdUnit: 'PEOPLE', defaultWarningThreshold: 3, defaultCriticalThreshold: 5, unsupportedReason: null };
-const savedConfig = (status = 'DRAFT') => ({ configId: 'config-1', zoneId: 'zone-1', name: 'Queue monitoring', confidenceThreshold: .6, status, updatedAt: '2026-10-03T01:00:00Z', rules: [{ ruleId: 'rule-1', incidentTypeId: 'type-1', warningThreshold: 3, warningExitThreshold: 2, criticalThreshold: 5, criticalExitThreshold: 4, thresholdUnit: 'PEOPLE', sustainSec: 30, cooldownSec: 300, enabled: true, parametersJson: '{}' }] });
+const type = { eventTypeId: 'type-1', code: 'LONG_QUEUE', name: 'Long Queue', description: null, measurementType: 'QUEUE_LENGTH', status: 'ACTIVE', supported: true, thresholdUnit: 'PEOPLE', defaultWarningThreshold: 3, defaultCriticalThreshold: 5, unsupportedReason: null };
+const savedConfig = (status = 'DRAFT') => ({ configId: 'config-1', zoneId: 'zone-1', name: 'Queue monitoring', confidenceThreshold: .6, status, updatedAt: '2026-10-03T01:00:00Z', rules: [{ ruleId: 'rule-1', eventTypeId: 'type-1', warningThreshold: 3, warningExitThreshold: 2, criticalThreshold: 5, criticalExitThreshold: 4, thresholdUnit: 'PEOPLE', sustainSec: 30, cooldownSec: 300, enabled: true, parametersJson: '{}' }] });
 let config: Record<string, unknown> | null;
 let writes: { path: string; method: string; body: Record<string, unknown>; bearer: string | null }[];
 let failSave: boolean;
@@ -25,7 +25,7 @@ let checkoutZone: boolean;
 let checkoutSupported: boolean;
 let reviewedAreaM2: number | null;
 let criticalTaskType: string | null;
-const crowdType = { ...type, incidentTypeId: 'crowd', code: 'OVERCROWDING_CONGESTION', name: 'Overcrowding / Congestion', measurementType: 'PEOPLE_COUNT', supported: true, thresholdUnit: 'PEOPLE', defaultWarningThreshold: 3, defaultCriticalThreshold: 5, unsupportedReason: null, measurementOptions: [{ mode: 'PEOPLE_COUNT', unit: 'PEOPLE', supported: true, reason: null }] };
+const crowdType = { ...type, eventTypeId: 'crowd', code: 'CONGESTION', name: 'Overcrowding / Congestion', measurementType: 'PEOPLE_COUNT', supported: true, thresholdUnit: 'PEOPLE', defaultWarningThreshold: 3, defaultCriticalThreshold: 5, unsupportedReason: null, measurementOptions: [{ mode: 'PEOPLE_COUNT', unit: 'PEOPLE', supported: true, reason: null }] };
 function HistoryBack() { const navigate = useNavigate(); return <button onClick={() => navigate(-1)}>Browser back</button>; }
 const show = (path = '/admin/ai-config?zoneId=zone-1') => render(<MemoryRouter initialEntries={[path]}><HistoryBack /><AiConfig /></MemoryRouter>);
 async function create() { show(); fireEvent.click(await screen.findByRole('button', { name: 'Create configuration' })); await screen.findByLabelText('Add a rule'); }
@@ -52,10 +52,10 @@ describe('API-backed monitoring configuration', () => {
       }
       if (path === '/api/floors/floor-1/zones') return json([checkoutZone ? { ...zone, zoneType: 'CHECKOUT' } : zone]);
       if (path === '/api/floors/floor-2/zones') return json([{ ...zone, zoneId: 'zone-2', floorId: 'floor-2', name: 'Fresh food zone', code: 'FOOD' }]);
-      if (path === '/api/incident-types' && checkoutCatalog) return json([type,
-        { ...type, incidentTypeId: 'checkout', code: 'CHECKOUT_CAPACITY_ISSUE', name: 'Checkout Capacity Issue', measurementType: 'CHECKOUT_CAPACITY',
+      if (path === '/api/operational-event-types/monitoring' && checkoutCatalog) return json([type,
+        { ...type, eventTypeId: 'checkout', code: 'CHECKOUT_CAPACITY', name: 'Checkout Capacity Issue', measurementType: 'CHECKOUT_CAPACITY',
           supported: checkoutSupported, thresholdUnit: 'PEOPLE_PER_STAFFED_COUNTER', unsupportedReason: checkoutSupported ? null : 'Checkout AI is disabled in this environment.' },
-        { ...type, incidentTypeId: 'wait', code: 'EXCESSIVE_WAITING_TIME', name: 'Excessive Waiting Time', measurementType: 'WAITING_TIME',
+        { ...type, eventTypeId: 'wait', code: 'EXCESSIVE_WAIT', name: 'Excessive Waiting Time', measurementType: 'WAITING_TIME',
           supported: checkoutSupported, thresholdUnit: 'MINUTES', defaultWarningThreshold: 4, defaultCriticalThreshold: 8,
           unsupportedReason: checkoutSupported ? null : 'Checkout AI is disabled in this environment.' },
       ]);
@@ -63,7 +63,7 @@ describe('API-backed monitoring configuration', () => {
       if (path.endsWith('/checkout-runtime')) return json({
         state: 'NOT_ACTIVE', queueCount: null, staffedCounterCount: null, queuePerStaffedCounter: null, maxWaitSeconds: null, counters: [],
       });
-      if (path === '/api/incident-types') return json(densityCatalog
+      if (path === '/api/operational-event-types/monitoring') return json(densityCatalog
         ? [{ ...crowdType, measurementOptions: [...crowdType.measurementOptions,
           { mode: 'CROWD_DENSITY', unit: 'PEOPLE_PER_M2', supported: true, reason: null, defaultWarning: 2, defaultCritical: 3 }] }]
         : crowdCatalog ? [crowdType] : [type]);
@@ -167,7 +167,7 @@ describe('API-backed monitoring configuration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
     await screen.findByText('Configuration saved as Draft. Review it before activating.');
     expect(writes[0].body.rules).toEqual([expect.objectContaining({
-      incidentTypeId: 'wait', thresholdUnit: 'MINUTES', enabled: true, warningThreshold: 4, criticalThreshold: 8,
+      eventTypeId: 'wait', thresholdUnit: 'MINUTES', enabled: true, warningThreshold: 4, criticalThreshold: 8,
       warningExitThreshold: 3, criticalExitThreshold: 6,
     })]);
   });
@@ -185,7 +185,7 @@ describe('API-backed monitoring configuration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
     await screen.findByText('Configuration saved as Draft. Review it before activating.');
     expect(writes[0].body.rules).toEqual([expect.objectContaining({
-      incidentTypeId: 'checkout', thresholdUnit: 'PEOPLE_PER_STAFFED_COUNTER', enabled: true,
+      eventTypeId: 'checkout', thresholdUnit: 'PEOPLE_PER_STAFFED_COUNTER', enabled: true,
       parametersJson: '{"minQueue":4,"noStaffedAlertLevel":"CRITICAL"}',
     })]);
   });
@@ -237,7 +237,7 @@ describe('API-backed monitoring configuration', () => {
 
   it('shows a legacy density rule as unsupported instead of converting it implicitly', async () => {
     crowdCatalog = true;
-    config = { ...savedConfig(), rules: [{ ...savedConfig().rules[0], incidentTypeId: 'crowd', incidentCode: crowdType.code, thresholdUnit: 'PEOPLE_PER_M2', warningThreshold: 2, criticalThreshold: 3, parametersJson: '{"custom":7}' }] };
+    config = { ...savedConfig(), rules: [{ ...savedConfig().rules[0], eventTypeId: 'crowd', eventCode: crowdType.code, thresholdUnit: 'PEOPLE_PER_M2', warningThreshold: 2, criticalThreshold: 3, parametersJson: '{"custom":7}' }] };
     show(); fireEvent.click(await screen.findByRole('button', { name: 'Edit configuration' }));
     expect(screen.getByLabelText('Overcrowding / Congestion unit')).toHaveValue('PEOPLE_PER_M2');
     expect(screen.getByLabelText('Overcrowding / Congestion enabled')).toBeEnabled();
@@ -250,9 +250,9 @@ describe('API-backed monitoring configuration', () => {
 
   it('keeps the measurement and thresholds of a previously saved people-count rule', async () => {
     densityCatalog = true;
-    config = { ...savedConfig(), rules: [{ ...savedConfig().rules[0], incidentTypeId: 'crowd', incidentCode: crowdType.code }] };
+    config = { ...savedConfig(), rules: [{ ...savedConfig().rules[0], eventTypeId: 'crowd', eventCode: crowdType.code }] };
     show(); fireEvent.click(await screen.findByRole('button', { name: 'Edit configuration' }));
-    expect(screen.getByText('Legacy people count')).toBeInTheDocument();
+    expect(screen.getByText('People count')).toBeInTheDocument();
     expect(screen.queryByLabelText('Overcrowding / Congestion measurement')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Overcrowding / Congestion unit')).toHaveValue('people');
     expect(screen.getByLabelText('Overcrowding / Congestion warning')).toHaveValue(3);
@@ -360,7 +360,7 @@ describe('API-backed monitoring configuration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save configuration' })); await screen.findByText('Configuration saved as Draft. Review it before activating.');
     const saved = writes.find(r => r.method === 'PUT')!;
     expect(saved.path).toBe('/api/zones/zone-1/monitoring'); expect(saved.bearer).toBe('Bearer admin-token'); expect(saved.body.confidenceThreshold).toBe(.7);
-    expect(saved.body.rules).toEqual([{ incidentTypeId: 'type-1', warningThreshold: 3, criticalThreshold: 5, thresholdUnit: 'PEOPLE', sustainSec: 30, cooldownSec: 300, clearDurationSec: 60, enabled: true, parametersJson: null, warningExitThreshold: 2, criticalExitThreshold: 4 }]);
+    expect(saved.body.rules).toEqual([{ eventTypeId: 'type-1', warningThreshold: 3, criticalThreshold: 5, thresholdUnit: 'PEOPLE', sustainSec: 30, cooldownSec: 300, clearDurationSec: 60, enabled: true, parametersJson: null, warningExitThreshold: 2, criticalExitThreshold: 4 }]);
     fireEvent.click(screen.getByRole('button', { name: 'Review & activate' })); await screen.findByText('CAM-01');
     fireEvent.click(screen.getByRole('button', { name: 'Activate configuration' }));
     await waitFor(() => expect(writes.some(r => r.path.endsWith('/activate'))).toBe(true));

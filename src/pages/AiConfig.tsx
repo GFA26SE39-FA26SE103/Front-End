@@ -7,13 +7,13 @@ import { Dialog } from '../components/Dialog';
 import { Button, Chip, type Tone } from '../components/ui';
 import { ApiError } from '../api/client';
 import { listFloors, listSupermarkets, listZones, type ZoneRecord } from '../api/floors';
-import { deleteMonitoring, getMonitoring, listIncidentTypes, reviewMonitoring, saveMonitoring, setMonitoringActive, type IncidentType, type MonitoringConfiguration, type MonitoringReview, type MonitoringRule } from '../api/monitoring';
+import { deleteMonitoring, getMonitoring, listMonitoringEventTypes, reviewMonitoring, saveMonitoring, setMonitoringActive, type MonitoringEventType, type MonitoringConfiguration, type MonitoringReview, type MonitoringRule } from '../api/monitoring';
 import { listResponsePolicies, type PolicyPriority, type ResponsePolicy } from '../api/responsePolicies';
 import { ResponsePolicyEditor } from './admin/ResponsePolicies';
 import s from './AiConfig.module.css';
 import { measurementMode, modeLabel } from './monitoringRuleMode';
 
-type MeasurementOption = NonNullable<IncidentType['measurementOptions']>[number];
+type MeasurementOption = NonNullable<MonitoringEventType['measurementOptions']>[number];
 type RuleInput = Omit<MonitoringRule, 'warningThreshold' | 'criticalThreshold' | 'sustainSec' | 'cooldownSec' | 'clearDurationSec' | 'warningExitThreshold' | 'criticalExitThreshold'> & {
   warningThreshold: string; criticalThreshold: string; sustainSec: string; cooldownSec: string;
   clearDurationSec: string;
@@ -89,8 +89,8 @@ async function loadConfig(zoneId: string, signal?: AbortSignal) {
   catch (e) { if (e instanceof ApiError && e.status === 404) return null; throw e; }
 }
 const statusTone = (status: string | undefined): Tone => status === 'ACTIVE' ? 'success' : status === 'DRAFT' ? 'warning' : 'neutral';
-const ruleName = (rule: Pick<MonitoringRule, 'incidentName' | 'incidentTypeId'>, types: IncidentType[]) => rule.incidentName ?? types.find(t => t.incidentTypeId === rule.incidentTypeId)?.name ?? 'Unknown operational event type';
-const ruleMode = (rule: Pick<MonitoringRule, 'incidentTypeId' | 'incidentCode' | 'thresholdUnit' | 'parametersJson'>, types: IncidentType[]) => measurementMode({ ...rule, incidentCode: rule.incidentCode ?? types.find(t => t.incidentTypeId === rule.incidentTypeId)?.code });
+const ruleName = (rule: Pick<MonitoringRule, 'eventName' | 'eventTypeId'>, types: MonitoringEventType[]) => rule.eventName ?? types.find(t => t.eventTypeId === rule.eventTypeId)?.name ?? 'Unknown operational event type';
+const ruleMode = (rule: Pick<MonitoringRule, 'eventTypeId' | 'eventCode' | 'thresholdUnit' | 'parametersJson'>, types: MonitoringEventType[]) => measurementMode({ ...rule, eventCode: rule.eventCode ?? types.find(t => t.eventTypeId === rule.eventTypeId)?.code });
 const formatTime = (value: string) => { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString(); };
 
 const units: Record<string, string> = { PEOPLE: 'people', MINUTES: 'minutes', PEOPLE_PER_M2: 'people/m²', PEOPLE_PER_STAFFED_COUNTER: 'people/staffed counter' };
@@ -134,7 +134,7 @@ export default function AiConfig() {
   const [editZoneId, setEditZoneId] = useState<string | null>(null);
   const [floorId, setFloorId] = useState('');
   const [floors, setFloors] = useState<FloorGroup[]>([]);
-  const [types, setTypes] = useState<IncidentType[]>([]);
+  const [types, setTypes] = useState<MonitoringEventType[]>([]);
   const [summaries, setSummaries] = useState<Record<string, ConfigSummary>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -147,8 +147,8 @@ export default function AiConfig() {
     async function load() {
       setLoading(true); setError('');
       try {
-        const [stores, allTypes] = await Promise.all([listSupermarkets(controller.signal), listIncidentTypes(controller.signal)]);
-        const catalog = allTypes.filter(type => type.sourceType === 'AI_DETECTED');
+        const [stores, allTypes] = await Promise.all([listSupermarkets(controller.signal), listMonitoringEventTypes(controller.signal)]);
+        const catalog = allTypes;
         const floorRecords = stores[0] ? (await listFloors(stores[0].supermarketId, controller.signal)).sort((a, b) => a.floorNumber - b.floorNumber) : [];
         const groups = await Promise.all(floorRecords.map(async f => ({ floorId: f.floorId, floorNumber: f.floorNumber, name: f.name || 'Floor ' + f.floorNumber, zones: await listZones(f.floorId, controller.signal) })));
         const entries = await Promise.all(groups.flatMap(g => g.zones).map(async z => {
@@ -185,7 +185,7 @@ export default function AiConfig() {
 }
 
 function Overview({ floors, summaries, types, missingZone, floorId, onFloorChange, onRefresh, onOpen }: {
-  floors: FloorGroup[]; summaries: Record<string, ConfigSummary>; types: IncidentType[]; missingZone: boolean;
+  floors: FloorGroup[]; summaries: Record<string, ConfigSummary>; types: MonitoringEventType[]; missingZone: boolean;
   floorId: string; onFloorChange: (id: string) => void; onRefresh: () => void; onOpen: (zoneId: string) => void;
 }) {
   const zoneCount = floors.reduce((n, f) => n + f.zones.length, 0);
@@ -208,7 +208,7 @@ function Overview({ floors, summaries, types, missingZone, floorId, onFloorChang
         return <button key={z.zoneId} type="button" className={s.zoneCard} aria-label={'View rules for ' + z.name} onClick={() => onOpen(z.zoneId)}>
           <div className={s.head}><span className={s.zoneCode}><i style={{ background: z.colorHex ?? 'var(--color-primary)' }} />{z.code}</span><Chip tone={summary === 'error' ? 'danger' : statusTone(saved?.status)}>{summary === 'error' ? 'Load failed' : saved?.status ?? 'Not configured'}</Chip></div>
           <h3>{z.name}</h3><p className={s.configName}>{saved?.name ?? (summary === 'error' ? 'Configuration unavailable' : 'No monitoring configuration yet')}</p>
-          {summary === 'error' ? <p className={s.error}>Could not load this configuration. Open its detail to retry.</p> : saved ? <><p className={s.help}>Confidence: {saved.confidenceThreshold} · {saved.rules.length} operational event {saved.rules.length === 1 ? 'rule' : 'rules'}</p><div className={s.ruleTags}>{saved.rules.map(r => <span key={r.incidentTypeId}>{ruleName(r, types)}{!r.enabled ? ' · Disabled' : ''}</span>)}</div>{!saved.rules.length && <p className={s.help}>No operational event rules saved. Edit to add one.</p>}</> : <p className={s.help}>Add operational event rules to configure monitoring for this zone.</p>}
+          {summary === 'error' ? <p className={s.error}>Could not load this configuration. Open its detail to retry.</p> : saved ? <><p className={s.help}>Confidence: {saved.confidenceThreshold} · {saved.rules.length} operational event {saved.rules.length === 1 ? 'rule' : 'rules'}</p><div className={s.ruleTags}>{saved.rules.map(r => <span key={r.eventTypeId}>{ruleName(r, types)}{!r.enabled ? ' · Disabled' : ''}</span>)}</div>{!saved.rules.length && <p className={s.help}>No operational event rules saved. Edit to add one.</p>}</> : <p className={s.help}>Add operational event rules to configure monitoring for this zone.</p>}
           <span className={s.cardLink}>View rules →</span>
         </button>;
       })}</div>
@@ -217,7 +217,7 @@ function Overview({ floors, summaries, types, missingZone, floorId, onFloorChang
 }
 
 function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged }: {
-  zone: ZoneRecord; floorName: string; types: IncidentType[]; editing: boolean;
+  zone: ZoneRecord; floorName: string; types: MonitoringEventType[]; editing: boolean;
   onOpen: (edit: boolean) => void; onBack: () => void; onChanged: (config: MonitoringConfiguration | null) => void;
 }) {
   const zoneId = zone.zoneId;
@@ -290,21 +290,21 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
   const needsZoneArea = (rule: MonitoringRule) => rule.enabled && !hasMeasuredArea && ruleMode(rule, types) === 'CROWD_DENSITY';
   const densityBlocked = config?.rules.some(needsZoneArea) ?? false;
   const needsThresholdUpdate = config?.rules.some(rule => rule.enabled && Object.keys(validateThresholds(inputRule(rule)).errors).length > 0) ?? false;
-  const available = types.filter(t => !rules.some(r => r.incidentTypeId === t.incidentTypeId));
-  const ruleChoices = available.flatMap<{ value: string; label: string; type: IncidentType; measurement?: MeasurementOption; unavailableReason?: string }>(type => {
+  const available = types.filter(t => !rules.some(r => r.eventTypeId === t.eventTypeId));
+  const ruleChoices = available.flatMap<{ value: string; label: string; type: MonitoringEventType; measurement?: MeasurementOption; unavailableReason?: string }>(type => {
     if (isCheckoutMode(type.measurementType)) {
       if (zone.zoneType !== 'CHECKOUT') return [];
       const unavailableReason = type.status !== 'ACTIVE' || !type.supported
         ? type.unsupportedReason ?? 'Checkout measurement is unavailable in this environment.' : undefined;
-      return [{ value: type.incidentTypeId, label: type.name, type, unavailableReason }];
+      return [{ value: type.eventTypeId, label: type.name, type, unavailableReason }];
     }
     if (type.status !== 'ACTIVE') return [];
-    if (type.code === 'OVERCROWDING_CONGESTION' || type.code === 'CONGESTION') {
+    if (type.code === 'CONGESTION') {
       const measurement = type.measurementOptions?.find(option => option.mode === 'CROWD_DENSITY' && option.supported);
-      return measurement ? [{ value: `${type.incidentTypeId}:CROWD_DENSITY`, label: `${type.name} · Crowd density (people/m²)`, type, measurement }] : [];
+      return measurement ? [{ value: `${type.eventTypeId}:CROWD_DENSITY`, label: `${type.name} · Crowd density (people/m²)`, type, measurement }] : [];
     }
     const supported = type.supported && type.measurementType === 'QUEUE_LENGTH';
-    return supported ? [{ value: type.incidentTypeId, label: type.name, type }] : [];
+    return supported ? [{ value: type.eventTypeId, label: type.name, type }] : [];
   });
   const policyRule = !showForm && !loading && !loadFailed && config?.rules.find(rule => rule.ruleId === policyRuleId);
   const refreshPolicies = () => { setPolicies({}); setPolicyRevision(value => value + 1); };
@@ -318,10 +318,10 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
     requestAnimationFrame(() => policyTrigger.current?.focus());
   }
   const touch = () => { setDirty(true); setReview(null); setPreviewCameraId(null); setNotice(''); setError(''); };
-  const changeRule = (id: string, patch: Partial<RuleInput>) => { setRules(all => all.map(r => r.incidentTypeId === id ? { ...r, ...patch } : r)); touch(); };
+  const changeRule = (id: string, patch: Partial<RuleInput>) => { setRules(all => all.map(r => r.eventTypeId === id ? { ...r, ...patch } : r)); touch(); };
   const confirmRemoveRule = () => {
     if (!ruleToRemove) return;
-    setRules(all => all.filter(rule => rule.incidentTypeId !== ruleToRemove.incidentTypeId));
+    setRules(all => all.filter(rule => rule.eventTypeId !== ruleToRemove.eventTypeId));
     setRuleToRemove(null);
     touch();
     requestAnimationFrame(() => typeSelect.current?.focus());
@@ -355,7 +355,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       if (conf > 1) throw new Error('Detection confidence must be between 0 and 1.');
       if (!name.trim()) throw new Error('Configuration name is required.');
       const parsed = rules.map(r => {
-        const label = types.find(t => t.incidentTypeId === r.incidentTypeId)?.name ?? 'Rule';
+        const label = types.find(t => t.eventTypeId === r.eventTypeId)?.name ?? 'Rule';
         const { warning, critical, warningExit, criticalExit, errors } = validateThresholds(r);
         if (warning === null || critical === null || warningExit === null || criticalExit === null || Object.keys(errors).length) {
           throw new Error(label + ': check the threshold fields.');
@@ -374,7 +374,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
             throw new Error('Choose an alert level for a queue with no staffed counter.');
           }
         }
-        return { incidentTypeId: r.incidentTypeId, warningThreshold: warning, criticalThreshold: critical, thresholdUnit: r.thresholdUnit, sustainSec: seconds(r.sustainSec, label + ' sustain time'), cooldownSec: seconds(r.cooldownSec, label + ' cooldown'), enabled: r.enabled, parametersJson: r.parametersJson,
+        return { eventTypeId: r.eventTypeId, warningThreshold: warning, criticalThreshold: critical, thresholdUnit: r.thresholdUnit, sustainSec: seconds(r.sustainSec, label + ' sustain time'), cooldownSec: seconds(r.cooldownSec, label + ' cooldown'), enabled: r.enabled, parametersJson: r.parametersJson,
           warningExitThreshold: warningExit, criticalExitThreshold: criticalExit,
           ...(clearDurationSec !== undefined ? { clearDurationSec } : {}) };
       });
@@ -418,7 +418,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
     if (!choice || choice.unavailableReason) return;
     const { type: selectedType, measurement } = choice;
     const rule = inputRule({
-      incidentTypeId: selectedType.incidentTypeId, incidentCode: selectedType.code,
+      eventTypeId: selectedType.eventTypeId, eventCode: selectedType.code,
       warningThreshold: measurement?.defaultWarning ?? selectedType.defaultWarningThreshold ?? 0,
       criticalThreshold: measurement?.defaultCritical ?? selectedType.defaultCriticalThreshold ?? 1,
       thresholdUnit: measurement?.unit ?? selectedType.thresholdUnit ?? '',
@@ -472,7 +472,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
           <h3 className={s.section}>Operational event rules</h3>
           {config.rules.length ? <div className={s.ruleTable} role="table" aria-label="Operational event rules">
             <div role="row" className={s.ruleHeadRow}><span role="columnheader">Operational event type</span><span role="columnheader">Warning</span><span role="columnheader">Critical</span><span role="columnheader">Sustain</span><span role="columnheader">Cooldown</span><span role="columnheader">Rule setting</span><span role="columnheader">Response</span></div>
-            {config.rules.map(r => <div role="row" key={r.incidentTypeId} className={r.ruleId && policyRuleId === r.ruleId ? s.selectedRule : undefined}>
+            {config.rules.map(r => <div role="row" key={r.eventTypeId} className={r.ruleId && policyRuleId === r.ruleId ? s.selectedRule : undefined}>
               <span role="cell"><strong>{ruleName(r, types)}</strong><small>{modeLabel(ruleMode(r, types))}</small></span>
               <span role="cell">{band(r.warningThreshold, r.warningExitThreshold, unitName(r.thresholdUnit))}</span>
               <span role="cell">{band(r.criticalThreshold, r.criticalExitThreshold, unitName(r.thresholdUnit))}</span>
@@ -521,8 +521,8 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
         </div>
         {!rules.length && <p className={rulesMissing ? s.error : s.help}>No operational event rules yet. A configuration needs at least one rule before it can be saved.</p>}
         {rules.map(r => {
-          const t = types.find(t => t.incidentTypeId === r.incidentTypeId);
-          const label = t?.name ?? r.incidentName ?? 'Unknown operational event type';
+          const t = types.find(t => t.eventTypeId === r.eventTypeId);
+          const label = t?.name ?? r.eventName ?? 'Unknown operational event type';
           const mode = ruleMode(r, types);
           const { errors } = validateThresholds(r);
           const checkoutMode = isCheckoutMode(mode);
@@ -530,7 +530,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
             ? zone.zoneType === 'CHECKOUT' && !!t?.supported
             : !!t?.measurementOptions?.some(option => option.mode === mode && option.supported);
           const parameters = mode === 'CHECKOUT_CAPACITY' ? checkoutParameters(r) : {};
-          return <section key={r.incidentTypeId} className={s.rule}>
+          return <section key={r.eventTypeId} className={s.rule}>
             <div className={s.head}><h3>{label}</h3><Button variant="secondary" className={s.deleteButton} disabled={locked} onClick={() => setRuleToRemove(r)}>Remove {label}</Button></div>
             <p className={s.help}>{modeLabel(supported ? mode : 'UNSUPPORTED')}</p>
             {mode === 'PEOPLE_COUNT' && <p className={s.help}>This saved rule uses people count. To switch to density, remove it and add a Crowd density rule.</p>}
@@ -559,13 +559,13 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
                     {([entry, exit] as const).map(key => {
                       const isExit = key === exit;
                       const error = showRequiredThresholds || r[key].trim() ? errors[key] : undefined;
-                      const errorId = `${r.incidentTypeId}-${key}-error`;
+                      const errorId = `${r.eventTypeId}-${key}-error`;
                       return <label key={key} className={s.field}>
                         {isExit ? 'Leave level when x <' : 'Reach level when x ≥'}
                         <input aria-label={`${label} ${level.toLowerCase()}${isExit ? ' exit' : ''}`}
                           aria-invalid={Boolean(error) || undefined} aria-describedby={error ? errorId : undefined}
                           type="number" min="0" step={r.thresholdUnit === 'PEOPLE' ? '1' : '.0001'} required
-                          value={r[key]} onChange={e => changeRule(r.incidentTypeId, { [key]: e.target.value })} />
+                          value={r[key]} onChange={e => changeRule(r.eventTypeId, { [key]: e.target.value })} />
                         {error && <span id={errorId} className={s.fieldError}>{error}</span>}
                       </label>;
                     })}
@@ -577,24 +577,24 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
               })}
             </div>
             <fieldset disabled={locked} className={s.fields}>
-              <label className={s.field}>Threshold unit<input aria-label={label + ' unit'} value={t?.thresholdUnit && supported ? unitName(r.thresholdUnit) : r.thresholdUnit} maxLength={30} readOnly={!!t?.thresholdUnit} onChange={e => changeRule(r.incidentTypeId, { thresholdUnit: e.target.value })} /></label>
-              <label className={s.field}>Sustain time (seconds)<input aria-label={label + ' sustain time'} type="number" min="0" step="1" value={r.sustainSec} onChange={e => changeRule(r.incidentTypeId, { sustainSec: e.target.value })} /></label>
-              <label className={s.field}>Cooldown (seconds)<input aria-label={label + ' cooldown'} type="number" min="0" step="1" value={r.cooldownSec} onChange={e => changeRule(r.incidentTypeId, { cooldownSec: e.target.value })} /></label>
+              <label className={s.field}>Threshold unit<input aria-label={label + ' unit'} value={t?.thresholdUnit && supported ? unitName(r.thresholdUnit) : r.thresholdUnit} maxLength={30} readOnly={!!t?.thresholdUnit} onChange={e => changeRule(r.eventTypeId, { thresholdUnit: e.target.value })} /></label>
+              <label className={s.field}>Sustain time (seconds)<input aria-label={label + ' sustain time'} type="number" min="0" step="1" value={r.sustainSec} onChange={e => changeRule(r.eventTypeId, { sustainSec: e.target.value })} /></label>
+              <label className={s.field}>Cooldown (seconds)<input aria-label={label + ' cooldown'} type="number" min="0" step="1" value={r.cooldownSec} onChange={e => changeRule(r.eventTypeId, { cooldownSec: e.target.value })} /></label>
               {(mode === 'CROWD_DENSITY' || checkoutMode) && supported && <label className={s.field}>Clear duration (seconds)
                 <input aria-label={label + ' clear duration'} type="number" min="1" max="86400" step="1" value={r.clearDurationSec}
-                  onChange={e => changeRule(r.incidentTypeId, { clearDurationSec: e.target.value })} />
+                  onChange={e => changeRule(r.eventTypeId, { clearDurationSec: e.target.value })} />
               </label>}
-              <label className={s.check}><input type="checkbox" aria-label={label + ' enabled'} checked={r.enabled} disabled={!r.enabled && (!supported || t?.status !== 'ACTIVE')} onChange={e => changeRule(r.incidentTypeId, { enabled: e.target.checked })} />Enabled</label>
+              <label className={s.check}><input type="checkbox" aria-label={label + ' enabled'} checked={r.enabled} disabled={!r.enabled && (!supported || t?.status !== 'ACTIVE')} onChange={e => changeRule(r.eventTypeId, { enabled: e.target.checked })} />Enabled</label>
             </fieldset>
             {mode === 'CHECKOUT_CAPACITY' && <fieldset disabled={locked} className={s.fields}>
               <label className={s.field}>Minimum queue (people)
                 <input type="number" min="1" max="2147483647" step="1"
                   value={typeof parameters.minQueue === 'number' ? parameters.minQueue : ''}
-                  onChange={e => changeRule(r.incidentTypeId, { parametersJson: JSON.stringify({ ...parameters, minQueue: e.target.value === '' ? null : Number(e.target.value) }) })} />
+                  onChange={e => changeRule(r.eventTypeId, { parametersJson: JSON.stringify({ ...parameters, minQueue: e.target.value === '' ? null : Number(e.target.value) }) })} />
               </label>
               <label className={s.field}>Alert when no counter is staffed
                 <select value={typeof parameters.noStaffedAlertLevel === 'string' ? parameters.noStaffedAlertLevel : ''}
-                  onChange={e => changeRule(r.incidentTypeId, { parametersJson: JSON.stringify({ ...parameters, noStaffedAlertLevel: e.target.value }) })}>
+                  onChange={e => changeRule(r.eventTypeId, { parametersJson: JSON.stringify({ ...parameters, noStaffedAlertLevel: e.target.value }) })}>
                   <option value="">Choose an alert level</option><option value="WARNING">Warning</option><option value="CRITICAL">Critical</option>
                 </select>
               </label>
@@ -618,7 +618,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       <h2 className={s.title} id="configuration-review-title">Review & activate</h2>
       <p>Zone: {review.zone.name} · Configuration: {review.configuration.name} · {review.configuration.status}</p>
       <p className={s.help}>Saved version: {review.configuration.updatedAt} · Confidence: {review.configuration.confidenceThreshold}</p>
-      <ul>{review.configuration.rules.map(r => <li key={r.incidentTypeId}>{ruleName(r, types)}: {r.enabled ? 'Enabled' : 'Disabled'} · {modeLabel(ruleMode(r, types))} · warning {band(r.warningThreshold, r.warningExitThreshold, '')}, critical {band(r.criticalThreshold, r.criticalExitThreshold, unitName(r.thresholdUnit))} · sustain {r.sustainSec}s · cooldown {r.cooldownSec}s
+      <ul>{review.configuration.rules.map(r => <li key={r.eventTypeId}>{ruleName(r, types)}: {r.enabled ? 'Enabled' : 'Disabled'} · {modeLabel(ruleMode(r, types))} · warning {band(r.warningThreshold, r.warningExitThreshold, '')}, critical {band(r.criticalThreshold, r.criticalExitThreshold, unitName(r.thresholdUnit))} · sustain {r.sustainSec}s · cooldown {r.cooldownSec}s
         {r.enabled && r.ruleId && <RuleResponses summary={policies[r.ruleId]} />}
       </li>)}</ul>
       <h3>Mapped cameras & camera ROI</h3>
@@ -659,7 +659,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
         <Button variant="secondary" onClick={closePolicy}>Close</Button>
       </div>
       <ResponsePolicyEditor key={policyRule.ruleId} ruleId={policyRule.ruleId}
-        eventCode={policyRule.incidentCode ?? types.find(type => type.incidentTypeId === policyRule.incidentTypeId)?.code}
+        eventCode={policyRule.eventCode ?? types.find(type => type.eventTypeId === policyRule.eventTypeId)?.code}
         compact onSaved={refreshPolicies} />
     </aside>}
   </div>;
