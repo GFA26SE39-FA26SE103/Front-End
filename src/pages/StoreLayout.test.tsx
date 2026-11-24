@@ -4,11 +4,13 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCameraRoi, getCameraPreview, listCameraMappings, listCameras, updateCamera, type CameraZoneMapping } from '../api/cameras';
 import { createFloor, createZone, deleteFloor, deleteZone, getFloorMap, getZoneUsage, listFloors, listSupermarkets, listZoneAdjacency, listZones, replaceZoneAdjacency, updateFloorDetails, updateZone, uploadFloorMap } from '../api/floors';
+import { getMonitoring } from '../api/monitoring';
 import StoreLayout from './StoreLayout';
 import { ApiError } from '../api/client';
 import { mockNativeDialogs } from '../test/dialog';
 mockNativeDialogs();
 
+vi.mock('../api/monitoring', () => ({ getMonitoring: vi.fn() }));
 vi.mock('../api/cameras', () => ({
   getCameraPreview: vi.fn(),
   listCameraMappings: vi.fn(),
@@ -67,6 +69,7 @@ const renderPage = (path = '/admin/store-layout') => render(<MemoryRouter initia
 
 describe('StoreLayout', () => {
   beforeEach(() => {
+    vi.mocked(getMonitoring).mockRejectedValue(new ApiError(404, 'NOT_FOUND', 'No monitoring configuration.'));
     vi.mocked(listSupermarkets).mockResolvedValue([{ supermarketId: 'store-1', code: 'STORE', name: 'Central store', address: null, status: 'ACTIVE' }]);
     vi.mocked(listFloors).mockResolvedValue([floor]);
     vi.mocked(createFloor).mockResolvedValue({ ...floor, floorId: 'floor-2', floorNumber: 2, name: 'Upper floor', mapAssetUrl: null, mapWidth: null, mapHeight: null });
@@ -320,6 +323,7 @@ describe('StoreLayout', () => {
       await user.click(screen.getByRole('button', { name: 'Configure coverage' }));
       await screen.findByRole('img', { name: 'Camera preview for CAM-01' });
       await user.selectOptions(screen.getByLabelText('Target zone'), zone.zoneId);
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Add another ROI to this zone' })).toBeEnabled());
       return user;
     };
 

@@ -17,7 +17,8 @@ const reasons: Record<string, string> = {
   MONITORING_SCHEMA_NOT_READY: 'Apply the monitoring-runtime database script, then restart the backend.',
 };
 const reasonLabel = (code: string) => reasons[code] ?? code.replaceAll('_', ' ');
-const count = (value: number | null) => value === null ? '—' : value;
+const count = (value?: number | null) => value ?? '—';
+const checkoutModes = new Set(['CHECKOUT_QUEUE_LENGTH', 'CHECKOUT_CAPACITY', 'WAITING_TIME']);
 const densityDisplay = new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 });
 const seconds = (value: number) => (value / 1000).toFixed(1).replace(/\.0$/, '');
 const date = (value: string) => new Date(value).toLocaleString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'medium', timeStyle: 'short' });
@@ -64,13 +65,16 @@ export function CameraMonitoringPanel({ state, canDismiss = false }: { state: Ca
         <div className={s.zoneRow}><strong>{zone.zoneName}</strong><Chip tone={zone.configurationStatus === 'ACTIVE' ? 'success' : 'neutral'}>{zone.configurationStatus}</Chip></div>
         <p className={s.muted}>Confidence: {zone.confidence} · Version: {zone.configVersion ? new Date(zone.configVersion).toLocaleString() : '—'}</p>
         {zone.issueCode && <p>{reasonLabel(zone.issueCode)}</p>}
-        <p>People in ROI: {count(zone.peopleCount)} · Queue (≥5s): {count(zone.queueCount)}</p>
+        {zone.rules.some(rule => checkoutModes.has(rule.mode)) ? <>
+          {zone.peopleCount !== null && <p>People in zone ROI: {count(zone.peopleCount)}</p>}
+          <p>People in lane ROI: {count(runtime.isStale || runtimeError ? null : zone.lanePeopleCount)} · Queue (≥5s): {count(zone.queueCount)}</p>
+        </> : <p>People in ROI: {count(zone.peopleCount)} · Queue (≥5s): {count(zone.queueCount)}</p>}
         {zone.rules.map(rule => <div key={rule.ruleId} className={s.runtimeRule}>
           <div className={s.zoneRow}><strong>{rule.incidentName}</strong>{rule.operationalEventPriority && <Chip tone={rule.operationalEventPriority === 'CRITICAL' ? 'danger' : 'warning'}>EVENT {rule.operationalEventPriority}</Chip>}</div>
           {rule.mode === 'CROWD_DENSITY' ? <>
             <p>Crowd density · Metric: {runtime.isStale || runtimeError || rule.metricValue === null ? 'Unavailable' : densityDisplay.format(rule.metricValue) + ' people/m²'}</p>
             {zone.areaM2 != null && <p className={s.muted}>Measured zone area: {zone.areaM2} m²</p>}
-          </> : <p>{rule.mode === 'PEOPLE_COUNT' ? 'People count in ROI' : rule.mode === 'QUEUE_LENGTH' ? 'Queue length (5s continuous dwell)' : rule.mode === 'CHECKOUT_QUEUE_LENGTH' ? 'People in checkout lanes' : rule.mode} · Metric: {count(rule.metricValue)} {rule.unit === 'PEOPLE' ? 'people' : rule.unit}</p>}
+          </> : <p>{rule.mode === 'PEOPLE_COUNT' ? 'People count in ROI' : rule.mode === 'QUEUE_LENGTH' || rule.mode === 'CHECKOUT_QUEUE_LENGTH' ? 'Queue length (5s continuous dwell)' : rule.mode} · Metric: {count(rule.metricValue)} {rule.unit === 'PEOPLE' ? 'people' : rule.unit}</p>}
           <p>
             <strong>Warning</strong> · {rule.warningThreshold} ≤ x &lt; {rule.criticalThreshold}<br />
             <span className={s.muted}>Leave Warning when x &lt; {rule.warningExitThreshold ?? rule.warningThreshold}</span>

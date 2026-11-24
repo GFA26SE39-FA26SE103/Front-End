@@ -8,6 +8,7 @@ import {
 } from '../api/checkout';
 import { PolygonRoiEditor, type RoiDraft } from './PolygonRoiEditor';
 import { validateRoiPolygon } from './roiPolygonValidation';
+import { useRoiMonitoringStatus } from './useRoiMonitoringStatus';
 import { Button, Chip } from './ui';
 import z from './CameraCoverageEditor.module.css';
 import s from './CheckoutCoverageEditor.module.css';
@@ -51,6 +52,9 @@ export function CheckoutCoverageEditor(props: CheckoutCoverageEditorProps) {
 function CheckoutSession({ camera, zones, onDirtyChange, onBusyChange }: CheckoutCoverageEditorProps) {
   const availableZones = zones.filter(z => z.floorId === camera.floorId && z.zoneType === 'CHECKOUT');
   const [zoneId, setZoneId] = useState('');
+  const monitoring = useRoiMonitoringStatus([zoneId]);
+  const monitoringStatus = monitoring.status(zoneId);
+  const readOnly = Boolean(zoneId) && monitoringStatus !== 'editable';
   const [counterId, setCounterId] = useState('');
   const [counters, setCounters] = useState<CheckoutCounter[]>([]);
   const [baseline, setBaseline] = useState<CheckoutCounter | null>(null);
@@ -158,8 +162,9 @@ function CheckoutSession({ camera, zones, onDirtyChange, onBusyChange }: Checkou
     if (busyLock.current || !confirmDiscard()) return;
     revision.current++; readAbort.current?.abort();
     setLoading(true); setLoadError(''); setError(''); setMessage(''); setReloadKey(k => k + 1);
+    monitoring.reload();
   };
-  const blocked = busy || loading || Boolean(loadError) || !zoneId;
+  const blocked = busy || loading || Boolean(loadError) || !zoneId || readOnly;
   async function mutate<T>(work: () => Promise<T>, apply: (value: T) => void) {
     if (busyLock.current || blocked) return;
     const token = revision.current;
@@ -168,7 +173,10 @@ function CheckoutSession({ camera, zones, onDirtyChange, onBusyChange }: Checkou
       const result = await work();
       if (alive.current && token === revision.current) apply(result);
     } catch (reason) {
-      if (alive.current && token === revision.current) setError(errorMessage(reason));
+      if (alive.current && token === revision.current) {
+        if (reason instanceof ApiError && reason.code === 'MONITORING_ACTIVE') monitoring.reload();
+        setError(errorMessage(reason));
+      }
     } finally {
       busyLock.current = false;
       if (alive.current && token === revision.current) setBusy(false);
@@ -251,11 +259,12 @@ function CheckoutSession({ camera, zones, onDirtyChange, onBusyChange }: Checkou
   const roiName = (key: RoiKey) => key === 'lane' ? 'Lane ROI' : key === 'staff' ? 'Staff ROI' : 'Service ROI';
   // Hex colours: SVG fill/stroke attributes cannot resolve CSS var(), which left checkout shapes invisible.
   const roiColor = (key: RoiKey) => key === 'lane' ? '#2563EB' : key === 'staff' ? '#7C5CC4' : '#16965F';
+  const shownMapping = readOnly ? mappingForm(mappingBaseline) : mapping;
   const roiStatus = (key: RoiKey) => {
-    const roi = mapping[key];
+    const roi = shownMapping[key];
     if (roi.complete) return `Closed · ${roi.points.length} points`;
     if (roi.points.length) return `Not closed · ${roi.points.length} points`;
-    if (key === 'service') return mapping.isQueueSource ? 'Required for the queue source' : 'Optional unless queue source';
+    if (key === 'service') return shownMapping.isQueueSource ? 'Required for the queue source' : 'Optional unless queue source';
     return 'Required';
   };
   const label = roiName(target);
@@ -269,11 +278,11 @@ function CheckoutSession({ camera, zones, onDirtyChange, onBusyChange }: Checkou
   return <section className={s.editor} aria-label={`Checkout coverage for ${camera.code}`} aria-busy={busy || loading}>
     <div className={z.layout}>
       <PolygonRoiEditor key={`${counterId}:${target}:${editorKey}`} cameraCode={camera.code} previewUrl={previewUrl} previewLoading={previewLoading}
-        label={label} color={roiColor(target)} draft={mapping[target]} canDraw={Boolean(counterId)}
-        disabled={!canDraw} onChange={draft => setMapping(v => ({ ...v, [target]: draft }))}
-        backgroundRois={ROI_KEYS.filter(key => key !== target && mapping[key].points.length)
-          .map(key => ({ id: key, points: mapping[key].points, color: roiColor(key),
-            label: `${roiName(key)}${mapping[key].complete ? '' : ' (incomplete)'}` }))} />
+        label={label} color={roiColor(target)} draft={shownMapping[target]} canDraw={Boolean(counterId)}
+        disabled={!canDraw} readOnly={readOnly} onChange={draft => { if (canDraw) setMapping(v => ({ ...v, [target]: draft })); }}
+        backgroundRois={ROI_KEYS.filter(key => key !== target && shownMapping[key].points.length)
+          .map(key => ({ id: key, points: shownMapping[key].points, color: roiColor(key),
+            label: `${roiName(key)}${shownMapping[key].complete ? '' : ' (incomplete)'}` }))} />
       <aside className={z.controls}>
         <label className={z.field}>Checkout zone
           <select value={zoneId} disabled={busy} onChange={e => select(e.target.value, '')}>
@@ -282,6 +291,10 @@ function CheckoutSession({ camera, zones, onDirtyChange, onBusyChange }: Checkou
           </select>
         </label>
         {availableZones.length === 0 && <p className={z.muted}>Create a CHECKOUT zone on this camera's floor first.</p>}
+        {zoneId && <a className={s.link} href={`/admin/ai-config?zoneId=${encodeURIComponent(zoneId)}`} onClick={followMonitoring} aria-disabled={busy}>Configure checkout monitoring</a>}
+        {readOnly && <p className={z.monitoringLock} role="status">{monitoringStatus === 'active'
+          ? 'Monitoring is active. Deactivate it before editing checkout ROIs or counters.'
+          : monitoringStatus === 'checking' ? 'Checking monitoring status…' : 'Monitoring status could not be checked. Reload saved checkout data to retry.'}</p>}
         <label className={z.field}>Checkout counter
           <select value={counterId} disabled={!zoneId || busy || counters.length === 0} onChange={e => select(zoneId, e.target.value)}>
             <option value="">New counter (disabled first)</option>
@@ -302,7 +315,7 @@ function CheckoutSession({ camera, zones, onDirtyChange, onBusyChange }: Checkou
               {counterId && <Button variant="dangerGhost" disabled={!canDeleteCounter} onClick={removeCounter}>Delete counter</Button>}
             </div>
           </fieldset>
-          {counterId && !canDeleteCounter && <p className={z.muted}>Disable the counter and all its camera mappings before deleting it.</p>}
+          {!readOnly && counterId && !canDeleteCounter && <p className={z.muted}>Disable the counter and all its camera mappings before deleting it.</p>}
         </form>}
 
         {zoneId && <form className={s.group} noValidate onSubmit={event => { event.preventDefault(); saveMapping(); }}>
@@ -311,7 +324,8 @@ function CheckoutSession({ camera, zones, onDirtyChange, onBusyChange }: Checkou
             {ROI_KEYS.map(key => <li key={key} className={target === key ? s.activeRoi : undefined}>
               <span className={z.zoneDot} style={{ backgroundColor: roiColor(key) }} aria-hidden="true" />
               <span><strong>{roiName(key)}</strong><small>{roiStatus(key)}</small></span>
-              <button type="button" aria-pressed={target === key} disabled={blocked || !counterId} onClick={() => setTarget(key)}>Edit {roiName(key)}</button>
+              <button type="button" aria-pressed={target === key} disabled={busy || loading || Boolean(loadError) || !counterId || readOnly && !shownMapping[key].complete}
+                onClick={() => setTarget(key)}>{readOnly ? 'View' : 'Edit'} {roiName(key)}</button>
             </li>)}
           </ul>
           <fieldset className={s.fields} disabled={blocked || !counterId}>
@@ -322,19 +336,18 @@ function CheckoutSession({ camera, zones, onDirtyChange, onBusyChange }: Checkou
               <Button variant="dangerGhost" disabled={!canDeleteMapping} onClick={removeMapping}>Delete camera mapping</Button>
             </div>
           </fieldset>
-          {baseline?.isEnabled && mappingBaseline?.isQueueSource && !canDeleteMapping && <p className={z.muted}>Disable the counter and save before deleting its queue source.</p>}
+          {!readOnly && baseline?.isEnabled && mappingBaseline?.isQueueSource && !canDeleteMapping && <p className={z.muted}>Disable the counter and save before deleting its queue source.</p>}
         </form>}
 
-        <p className={z.hint}>{hint}</p>
+        {!readOnly && <p className={z.hint}>{hint}</p>}
 
         {counterId && <>
           <div className={z.mappingHeader}><strong>Saved camera sources</strong><Chip tone="neutral">{sources.length}</Chip></div>
           {sources.length === 0 ? <p className={z.muted}>No camera mappings saved for this counter.</p>
             : <ul className={s.sourceList}>{sources.map(m => <li key={m.mappingId}>{m.cameraId === camera.cameraId ? `${camera.code} (this camera)` : `Camera ${m.cameraId}`} · {m.isEnabled ? 'enabled' : 'disabled'}{m.isQueueSource ? ' · queue source' : ''}</li>)}</ul>}
-          {otherQueue.length > 0 && <p className={s.notice}>Queue source: Camera {otherQueue[0].cameraId}. To switch manually, disable and save this counter, edit that other camera to clear its queue-source flag, then select this camera. No automatic failover.</p>}
+          {!readOnly && otherQueue.length > 0 && <p className={s.notice}>Queue source: Camera {otherQueue[0].cameraId}. To switch manually, disable and save this counter, edit that other camera to clear its queue-source flag, then select this camera. No automatic failover.</p>}
         </>}
 
-        {zoneId && <a className={s.link} href={`/admin/ai-config?zoneId=${encodeURIComponent(zoneId)}`} onClick={followMonitoring} aria-disabled={busy}>Configure checkout monitoring</a>}
         {zoneId && <Button variant="secondary" disabled={busy || loading} onClick={reload}>Reload saved checkout data</Button>}
 
         {previewError && <div className={z.error} role="alert">Preview unavailable: {previewError} <Button variant="secondary" disabled={busy || previewLoading} onClick={() => { setPreviewLoading(true); setPreviewUrl(undefined); setPreviewError(''); setPreviewKey(k => k + 1); }}>Retry camera preview</Button></div>}

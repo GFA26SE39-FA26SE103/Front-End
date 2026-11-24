@@ -7,8 +7,11 @@ import {
   createCameraRoi,
   deleteCameraRoi,
 } from '../api/cameras';
+import { ApiError } from '../api/client';
+import { getMonitoring } from '../api/monitoring';
 import { CameraCoverageEditor } from './CameraCoverageEditor';
 
+vi.mock('../api/monitoring', () => ({ getMonitoring: vi.fn() }));
 vi.mock('../api/cameras', () => ({
   getCameraPreview: vi.fn(),
   listCameraMappings: vi.fn(),
@@ -43,6 +46,8 @@ const previewRect = {
 
 describe('CameraCoverageEditor', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getMonitoring).mockRejectedValue(new ApiError(404, 'NOT_FOUND', 'No monitoring configuration.'));
     vi.mocked(getCameraPreview).mockResolvedValue(new Blob(['frame'], { type: 'image/jpeg' }));
     vi.mocked(listCameraMappings).mockResolvedValue([]);
     vi.mocked(createCameraRoi).mockImplementation(async (cameraId, zoneId, request) => ({
@@ -59,6 +64,7 @@ describe('CameraCoverageEditor', () => {
 
     expect(await screen.findByRole('img', { name: 'Camera preview for CAM-01' })).toHaveAttribute('src', 'blob:camera-preview');
     await user.selectOptions(screen.getByLabelText('Target zone'), 'zone-frozen');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add another ROI to this zone' })).toBeEnabled());
     const layer = screen.getByTestId('roi-drawing-layer');
     vi.spyOn(layer, 'getBoundingClientRect').mockReturnValue(previewRect);
     fireEvent.click(layer, { clientX: 180, clientY: 90 });
@@ -97,6 +103,26 @@ describe('CameraCoverageEditor', () => {
     expect(await screen.findByText('Checkout area mapping removed.')).toBeInTheDocument();
   });
 
+  it('displays a saved zone ROI and blocks editing when monitoring is active', async () => {
+    vi.mocked(getMonitoring).mockResolvedValue({
+      configId: 'config-1', zoneId: 'zone-frozen', name: 'Monitoring', confidenceThreshold: .5,
+      status: 'ACTIVE', createdByUserId: 'admin', createdAt: '', updatedAt: '', rules: [],
+    });
+    vi.mocked(listCameraMappings).mockResolvedValue([{
+      cameraZoneId: 'mapping-1', cameraId: 'camera-1', zoneId: 'zone-frozen', status: 'ACTIVE',
+      roiPolygon: [{ x: .2, y: .2 }, { x: .8, y: .2 }, { x: .7, y: .8 }],
+    }]);
+    const user = userEvent.setup();
+    render(<CameraCoverageEditor camera={camera} zones={zones} onClose={vi.fn()} />);
+    await user.click(await screen.findByRole('button', { name: 'View ROI for Frozen aisle' }));
+    expect(await screen.findByText(/Monitoring is active/)).toBeInTheDocument();
+    expect(screen.getByTestId('active-roi')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Resize ROI point|Start over|Finish shape/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add another ROI to this zone' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save ROI to zone' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Remove ROI for Frozen aisle' })).toBeDisabled();
+  });
+
   it('keeps another ROI for the same zone when one mapping is removed', async () => {
     const roi=[{x:0,y:0},{x:1,y:0},{x:0,y:1}];
     vi.mocked(listCameraMappings).mockResolvedValue(['mapping-1','mapping-2'].map(cameraZoneId => ({
@@ -106,6 +132,7 @@ describe('CameraCoverageEditor', () => {
     render(<CameraCoverageEditor camera={camera} zones={zones} onClose={vi.fn()} />);
     const buttons=await screen.findAllByRole('button',{name:'Remove ROI for Frozen aisle'});
     expect(buttons).toHaveLength(2);
+    await waitFor(() => expect(buttons[1]).toBeEnabled());
     await user.click(buttons[1]);
     await waitFor(() => expect(deleteCameraRoi).toHaveBeenCalledWith('camera-1','mapping-2'));
     expect(screen.getAllByRole('button',{name:'Remove ROI for Frozen aisle'})).toHaveLength(1);
@@ -117,6 +144,7 @@ describe('CameraCoverageEditor', () => {
     render(<CameraCoverageEditor camera={camera} zones={zones} onClose={close} />);
     await screen.findByRole('img', { name: 'Camera preview for CAM-01' });
     await user.selectOptions(screen.getByLabelText('Target zone'), 'zone-frozen');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add another ROI to this zone' })).toBeEnabled());
     const layer = screen.getByTestId('roi-drawing-layer');
     vi.spyOn(layer, 'getBoundingClientRect').mockReturnValue(previewRect);
     fireEvent.click(layer, { clientX: 180, clientY: 90 });

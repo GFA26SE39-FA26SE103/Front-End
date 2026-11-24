@@ -37,6 +37,17 @@ describe('live monitoring and incidents', () => {
     expect(screen.getByText('CRITICAL')).toBeInTheDocument();
   });
 
+  it('shows checkout lane occupancy separately from the Long Queue metric', () => {
+    const zone = state.runtime!.zones[0];
+    const rule = { ...zone.rules[0], mode: 'CHECKOUT_QUEUE_LENGTH', metricValue: 1 };
+    render(<CameraMonitoringPanel state={{ ...state, runtime: { ...state.runtime!, zones: [
+      { ...zone, peopleCount: null, lanePeopleCount: 5, queueCount: 1, rules: [rule] },
+    ] } }} />);
+    expect(screen.getByText('People in lane ROI: 5 · Queue (≥5s): 1')).toBeInTheDocument();
+    expect(screen.getByText('Queue length (5s continuous dwell) · Metric: 1 people')).toBeInTheDocument();
+    expect(screen.queryByText(/People in ROI:/)).not.toBeInTheDocument();
+  });
+
   it('shows stale errors instead of an empty or healthy feed', () => {
     render(<CameraMonitoringPanel state={{ ...state, runtimeError: 'Runtime unavailable', feedError: 'Feed unavailable', feed: null }} />);
     expect(screen.getByText(/Last runtime data is stale/)).toBeInTheDocument();
