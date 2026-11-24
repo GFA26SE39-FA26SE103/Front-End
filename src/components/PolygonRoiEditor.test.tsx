@@ -15,6 +15,32 @@ function Editor({ initial = { points: [], complete: false, editing: false } }: {
 }
 
 describe('normalized ROI polygon editor', () => {
+  it('shows a movable ROI toolbar with drawing actions', () => {
+    render(<Editor />);
+    const toolbar = screen.getByRole('toolbar', { name: 'ROI drawing tools' });
+    expect(toolbar).toContainElement(screen.getByRole('button', { name: 'Finish shape' }));
+    expect(toolbar).toContainElement(screen.getByRole('button', { name: 'Undo' }));
+    const handle = screen.getByRole('button', { name: 'Move ROI toolbar' });
+    fireEvent.keyDown(handle, { key: 'ArrowRight' });
+    expect(toolbar).toHaveStyle({ left: '26px' });
+  });
+  it('draws a rectangle by dragging and keeps rectangular corners when resized', async () => {
+    const user = userEvent.setup(); render(<Editor />);
+    await user.click(screen.getByRole('button', { name: 'Rectangle' }));
+    const layer = screen.getByTestId('roi-drawing-layer');
+    vi.spyOn(layer, 'getBoundingClientRect').mockReturnValue(rect);
+    fireEvent.pointerDown(layer, { pointerId: 3, button: 0, clientX: 180, clientY: 90 });
+    fireEvent.pointerMove(layer, { pointerId: 3, clientX: 740, clientY: 370 });
+    fireEvent.pointerUp(layer, { pointerId: 3, clientX: 740, clientY: 370 });
+    expect(JSON.parse(screen.getByTestId('draft').textContent!)).toEqual({ points: rectangle, complete: true, editing: true });
+    const handle = screen.getByRole('button', { name: 'Resize ROI point 1' });
+    fireEvent.pointerDown(handle, { pointerId: 4, clientX: 180, clientY: 90 });
+    fireEvent.pointerMove(handle, { pointerId: 4, clientX: 260, clientY: 130 });
+    fireEvent.pointerUp(handle, { pointerId: 4 });
+    expect(JSON.parse(screen.getByTestId('draft').textContent!).points).toEqual([
+      { x: .2, y: .2 }, { x: .8, y: .2 }, { x: .8, y: .8 }, { x: .2, y: .8 },
+    ]);
+  });
   it('draws, closes and undoes normalized geometry', async () => {
     const user = userEvent.setup(); render(<Editor />);
     const layer = screen.getByTestId('roi-drawing-layer');

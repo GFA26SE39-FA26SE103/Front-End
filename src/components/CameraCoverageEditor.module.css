@@ -15,6 +15,37 @@
 }
 
 .polygonTools { margin-top: 12px; }
+.roiToolbar {
+  position: fixed;
+  z-index: 1000;
+  width: min(290px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--color-text) 22%, transparent);
+  color: var(--color-text);
+}
+.roiToolbarHandle {
+  display: flex;
+  width: 100%;
+  gap: 7px;
+  padding: 3px 4px 7px;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: grab;
+  touch-action: none;
+}
+.roiToolbarHandle:active { cursor: grabbing; }
+.roiToolbarHandle:focus-visible { outline: 2px solid var(--color-primary); }
+.roiShapeTools { display: flex; gap: 8px; margin-top: 10px; }
+.roiShapeTools > button { flex: 1; }
 .drawingHint { margin: 0 0 8px; font-size: 12px; color: var(--color-text-muted); }
 .drawing { cursor: crosshair; }
 .openRoi { vector-effect: non-scaling-stroke; stroke-width: 3; pointer-events: none; }
@@ -108,20 +139,36 @@
   height: 13px;
   padding: 0;
   transform: translate(-50%, -50%);
-  border: 2px solid white;
+  border: 0;
   border-radius: 50%;
-  box-shadow: 0 0 0 2px var(--roi-color, #3b82f6);
 }
 
 .resizeHandle {
   width: 20px;
   height: 20px;
-  border: 5px solid transparent;
-  background: var(--roi-color);
-  background-clip: padding-box;
+  background: transparent;
   cursor: grab;
   touch-action: none;
 }
+
+.resizeHandle::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  border: 2px solid var(--roi-color);
+  background: color-mix(in srgb, var(--roi-color) 65%, black);
+  box-shadow: 0 0 0 1px white;
+  pointer-events: none;
+}
+
+.point {
+  border: 2px solid var(--roi-color);
+  background: color-mix(in srgb, var(--roi-color) 65%, black);
+  box-shadow: 0 0 0 1px white;
+}
+
+.resizeHandle:focus-visible { outline: 2px solid var(--roi-color); }
 
 .resizeHandle:active {
   cursor: grabbing;

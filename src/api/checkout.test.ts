@@ -113,6 +113,7 @@ describe('checkout API', () => {
     }>();
     expectTypeOf<CheckoutCounterRequest>().toEqualTypeOf<{
       code: string; name: string; isEnabled: boolean; expectedUpdatedAt?: string;
+      cameraId?: string; laneRoi?: MapPoint[]; staffRoi?: MapPoint[]; serviceRoi?: MapPoint[];
     }>();
     expectTypeOf<CheckoutMappingRequest>().toEqualTypeOf<{
       laneRoi: MapPoint[]; staffRoi: MapPoint[]; serviceRoi?: MapPoint[] | null;

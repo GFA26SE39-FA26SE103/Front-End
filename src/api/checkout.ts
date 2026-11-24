@@ -38,6 +38,10 @@ export type CheckoutCounterRequest = {
   name: string;
   isEnabled: boolean;
   expectedUpdatedAt?: string;
+  cameraId?: string;
+  laneRoi?: MapPoint[];
+  staffRoi?: MapPoint[];
+  serviceRoi?: MapPoint[];
 };
 
 export type CheckoutMappingRequest = {

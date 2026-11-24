@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getCameraPreview, type CameraRecord, type ZoneRecord } from '../api/cameras';
 import { ApiError } from '../api/client';
 import {
@@ -8,7 +8,7 @@ import {
 } from '../api/checkout';
 import { PolygonRoiEditor, type RoiDraft } from './PolygonRoiEditor';
 import { validateRoiPolygon } from './roiPolygonValidation';
-import { Button, Chip } from './ui';
+import { Button } from './ui';
 import z from './CameraCoverageEditor.module.css';
 import s from './CheckoutCoverageEditor.module.css';
 
@@ -18,11 +18,11 @@ export type CheckoutCoverageEditorProps = {
   onDirtyChange?: (dirty: boolean) => void;
   onBusyChange?: (busy: boolean) => void;
 };
-type CounterForm = { code: string; name: string; isEnabled: boolean };
+type CounterForm = { name: string; isEnabled: boolean };
 type MappingForm = { lane: RoiDraft; staff: RoiDraft; service: RoiDraft; isEnabled: boolean; isQueueSource: boolean };
 const emptyRoi = (): RoiDraft => ({ points: [], complete: false, editing: false });
 const counterForm = (counter: CheckoutCounter | null): CounterForm => ({
-  code: counter?.code ?? '', name: counter?.name ?? '', isEnabled: counter?.isEnabled ?? false,
+  name: counter?.name ?? '', isEnabled: counter?.isEnabled ?? false,
 });
 const mappingForm = (mapping: CheckoutMapping | null): MappingForm => ({
   lane: mapping ? { points: mapping.laneRoi.map(p => ({ ...p })), complete: true, editing: true } : emptyRoi(),
@@ -35,11 +35,12 @@ const mappingValue = (form: MappingForm) => JSON.stringify({
   staffComplete: form.staff.complete, service: form.service.points, serviceComplete: form.service.complete,
   isEnabled: form.isEnabled, isQueueSource: form.isQueueSource,
 });
-const queueSources = (mappings: CheckoutMapping[]) => mappings.filter(m => m.isEnabled && m.isQueueSource);
 function errorMessage(reason: unknown) {
   const message = reason instanceof Error ? reason.message : 'Could not update checkout configuration.';
-  if (reason instanceof ApiError && reason.status === 409)
+  if (reason instanceof ApiError && reason.code === 'CHECKOUT_CONFIGURATION_CHANGED')
     return `${message} Your draft and saved version were kept. Use Reload saved checkout data explicitly to resolve the conflict.`;
+  if (reason instanceof ApiError && reason.code === 'MONITORING_ACTIVE')
+    return 'Pause zone monitoring before editing checkout coverage. Your changes have not been saved.';
   if (reason instanceof ApiError && reason.status === 503) return `Checkout configuration unavailable (503). ${message}`;
   return message;
 }
@@ -76,7 +77,7 @@ function CheckoutSession({ camera, zones, onDirtyChange, onBusyChange }: Checkou
   const busyLock = useRef(false);
   const callbacks = useRef({ onDirtyChange, onBusyChange });
   const dirty = JSON.stringify(counter) !== JSON.stringify(counterForm(baseline))
-    || Boolean(counterId) && mappingValue(mapping) !== mappingValue(mappingForm(mappingBaseline));
+    || mappingValue(mapping) !== mappingValue(mappingForm(mappingBaseline));
 
   useEffect(() => {
     callbacks.current.onDirtyChange = onDirtyChange;
@@ -176,75 +177,90 @@ function CheckoutSession({ camera, zones, onDirtyChange, onBusyChange }: Checkou
   }
   const saveCounter = () => {
     if (blocked || busyLock.current) return;
-    const code = counter.code.trim(), name = counter.name.trim();
-    if (!code || code.length > 50 || !name || name.length > 100) {
-      setError('Enter a counter code (up to 50 characters) and name (up to 100 characters).'); return;
+    const name = counter.name.trim();
+    if (!name || name.length > 100) {
+      setError('Enter a counter name (up to 100 characters).'); return;
     }
-    if (counterId && counter.isEnabled && queueSources(sources).length !== 1) {
-      setError('An enabled counter requires exactly one enabled queue source. Save its camera mapping first.'); return;
+    if (counterId && counter.isEnabled && !sources.some(m => m.isEnabled)) {
+      setError('Draw and save all three ROIs before enabling the counter.'); return;
     }
-    const request: CheckoutCounterRequest = { code, name, isEnabled: counterId ? counter.isEnabled : false,
-      ...(baseline ? { expectedUpdatedAt: baseline.updatedAt } : {}) };
-    void mutate(() => counterId ? updateCheckoutCounter(counterId, request) : createCheckoutCounter(zoneId, request), saved => {
-      if (saved.zoneId !== zoneId || counterId && saved.checkoutCounterId !== counterId)
+    if (!counterId || !baseline) return;
+    const request: CheckoutCounterRequest = { code: baseline.code, name, isEnabled: baseline.isEnabled,
+      expectedUpdatedAt: baseline.updatedAt };
+    void mutate(() => updateCheckoutCounter(counterId, request), saved => {
+      if (saved.zoneId !== zoneId || saved.checkoutCounterId !== counterId)
         throw new Error('The server returned a different counter. Reload saved checkout data.');
       setCounters(rows => [...rows.filter(c => c.checkoutCounterId !== saved.checkoutCounterId), saved]);
-      if (!counterId) setLoading(true);
       setBaseline(saved); setCounter(counterForm(saved)); setCounterId(saved.checkoutCounterId);
-      setMessage('Checkout counter saved. New counters remain disabled until coverage is configured.');
+      setMessage('Counter saved.');
     });
   };
   const saveMapping = () => {
-    if (blocked || busyLock.current || !counterId || !baseline) return;
-    const count = queueSources(sources.filter(m => m.cameraId !== camera.cameraId)).length
-      + Number(mapping.isEnabled && mapping.isQueueSource);
-    if (count > 1) { setError('Another camera is already the queue source. Keep only one enabled queue source and switch manually.'); return; }
-    for (const [label, roi] of [['Lane ROI', mapping.lane], ['Staff ROI', mapping.staff],
-      ...(mapping.isQueueSource ? [['Service ROI', mapping.service] as const] : [])] as const) {
+    if (blocked || busyLock.current) return;
+    for (const [label, roi] of [['Lane ROI', mapping.lane], ['Staff ROI', mapping.staff], ['Service ROI', mapping.service]] as const) {
       if (!roi.complete) { setError(`${label}: close the polygon before saving.`); return; }
       const problem = validateRoiPolygon(roi.points);
       if (problem) { setError(`${label}: ${problem}`); return; }
     }
-    if (mapping.isQueueSource && !mapping.isEnabled) { setError('A queue source must be an enabled mapping.'); return; }
-    if (baseline.isEnabled && count !== 1) { setError('Disable the counter and save it before removing or switching its queue source.'); return; }
     const request: CheckoutMappingRequest = {
       laneRoi: mapping.lane.points.map(p => ({ ...p })), staffRoi: mapping.staff.points.map(p => ({ ...p })),
-      ...(mapping.service.complete ? { serviceRoi: mapping.service.points.map(p => ({ ...p })) }
-        : mappingBaseline?.serviceRoi ? { serviceRoi: null } : {}),
-      isEnabled: mapping.isEnabled, isQueueSource: mapping.isQueueSource,
+      serviceRoi: mapping.service.points.map(p => ({ ...p })),
+      isEnabled: true, isQueueSource: true,
       ...(mappingBaseline ? { expectedUpdatedAt: mappingBaseline.updatedAt } : {}),
     };
-    void mutate(() => saveCheckoutMapping(counterId, camera.cameraId, request), saved => {
+    if (!counterId) {
+      const name = counter.name.trim();
+      if (!name || name.length > 100) {
+        setError('Enter a counter name (up to 100 characters).'); return;
+      }
+      void mutate(() => createCheckoutCounter(zoneId, {
+        code: '', name, isEnabled: true, cameraId: camera.cameraId,
+        laneRoi: request.laneRoi, staffRoi: request.staffRoi, serviceRoi: request.serviceRoi ?? undefined,
+      }), saved => {
+        if (saved.zoneId !== zoneId || !saved.isEnabled)
+          throw new Error('The server returned an incomplete counter. Reload saved checkout data.');
+        setCounters(rows => [...rows, saved]);
+        setBaseline(saved); setCounter(counterForm(saved));
+        setLoading(true); setCounterId(saved.checkoutCounterId);
+        setMessage('Checkout coverage saved.');
+      });
+      return;
+    }
+    if (!baseline) return;
+    void mutate(async () => {
+      const saved = await saveCheckoutMapping(counterId, camera.cameraId, request);
+      const refreshed = (await listCheckoutCounters(zoneId)).find(c => c.checkoutCounterId === counterId);
+      if (!refreshed) throw new Error('Saved counter not found. Reload saved checkout data.');
+      return { saved, refreshed };
+    }, ({ saved, refreshed }) => {
       if (saved.checkoutCounterId !== counterId || saved.cameraId !== camera.cameraId)
         throw new Error('The server returned a different camera mapping. Reload saved checkout data.');
       setMappingBaseline(saved); setMapping(mappingForm(saved));
+      setBaseline(refreshed); setCounter(counterForm(refreshed));
+      setCounters(rows => rows.map(c => c.checkoutCounterId === refreshed.checkoutCounterId ? refreshed : c));
       setSources(rows => [...rows.filter(m => m.cameraId !== camera.cameraId), saved]);
       setEditorKey(k => k + 1); setMessage('Checkout ROIs saved together.');
     });
   };
-  const otherSources = sources.filter(m => m.cameraId !== camera.cameraId);
-  const otherQueue = queueSources(otherSources);
-  const canDeleteMapping = Boolean(mappingBaseline) && (!baseline?.isEnabled || otherQueue.length === 1);
+  const canDeleteMapping = Boolean(mappingBaseline);
   const canDeleteCounter = Boolean(baseline) && !baseline?.isEnabled && sources.every(m => !m.isEnabled);
   const removeMapping = () => {
     if (!mappingBaseline || !canDeleteMapping || blocked || busyLock.current
-      || !window.confirm(`Delete this camera mapping for ${baseline?.code}? Other camera mappings will be kept.`)) return;
+      || !window.confirm(`Delete this camera mapping for ${baseline?.name}? Other camera mappings will be kept.`)) return;
     void mutate(() => deleteCheckoutMapping(counterId, camera.cameraId, mappingBaseline.updatedAt), () => {
       setMappingBaseline(null); setMapping(mappingForm(null));
       setSources(rows => rows.filter(m => m.cameraId !== camera.cameraId)); setEditorKey(k => k + 1);
+      setLoading(true); setReloadKey(k => k + 1);
       setMessage('This camera mapping deleted. Other camera coverage was kept.');
     });
   };
   const removeCounter = () => {
     if (!baseline || !canDeleteCounter || blocked || busyLock.current
-      || !window.confirm(`Delete counter ${baseline.code} and all ${sources.length} camera mappings, including other cameras? This cannot be undone.`)) return;
+      || !window.confirm(`Delete counter ${baseline.name} and all ${sources.length} camera mappings, including other cameras? This cannot be undone.`)) return;
     void mutate(() => deleteCheckoutCounter(counterId, baseline.updatedAt), () => {
       setCounters(rows => rows.filter(c => c.checkoutCounterId !== counterId));
       resetDrafts(); setLoading(true); setCounterId(''); setMessage('Checkout counter and all its camera mappings deleted.');
     });
-  };
-  const followMonitoring = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (busyLock.current || !confirmDiscard()) event.preventDefault();
   };
   type RoiKey = 'lane' | 'staff' | 'service';
   const ROI_KEYS: RoiKey[] = ['lane', 'staff', 'service'];
@@ -255,21 +271,19 @@ function CheckoutSession({ camera, zones, onDirtyChange, onBusyChange }: Checkou
     const roi = mapping[key];
     if (roi.complete) return `Closed · ${roi.points.length} points`;
     if (roi.points.length) return `Not closed · ${roi.points.length} points`;
-    if (key === 'service') return mapping.isQueueSource ? 'Required for the queue source' : 'Optional unless queue source';
     return 'Required';
   };
   const label = roiName(target);
-  const canDraw = Boolean(counterId) && !blocked;
+  const canDraw = Boolean(zoneId) && !blocked;
   const hint = !zoneId ? 'Select the checkout zone this camera covers.'
-    : !counterId ? 'Select a counter, or create one first, to draw its Lane, Staff and Service ROIs.'
+    : !counterId ? 'Enter a counter name, then draw Lane, Staff and Service ROIs.'
       : !mapping[target].complete ? `Draw the ${label} on the camera image and select Finish shape.`
-        : dirty ? 'Close Lane and Staff ROIs (and Service ROI for the queue source), then save the mapping.'
-          : 'The saved ROIs are shown on the camera image.';
+        : '';
 
   return <section className={s.editor} aria-label={`Checkout coverage for ${camera.code}`} aria-busy={busy || loading}>
     <div className={z.layout}>
       <PolygonRoiEditor key={`${counterId}:${target}:${editorKey}`} cameraCode={camera.code} previewUrl={previewUrl} previewLoading={previewLoading}
-        label={label} color={roiColor(target)} draft={mapping[target]} canDraw={Boolean(counterId)}
+        label={label} color={roiColor(target)} draft={mapping[target]} canDraw={Boolean(zoneId)}
         disabled={!canDraw} onChange={draft => setMapping(v => ({ ...v, [target]: draft }))}
         backgroundRois={ROI_KEYS.filter(key => key !== target && mapping[key].points.length)
           .map(key => ({ id: key, points: mapping[key].points, color: roiColor(key),
@@ -284,62 +298,47 @@ function CheckoutSession({ camera, zones, onDirtyChange, onBusyChange }: Checkou
         {availableZones.length === 0 && <p className={z.muted}>Create a CHECKOUT zone on this camera's floor first.</p>}
         <label className={z.field}>Checkout counter
           <select value={counterId} disabled={!zoneId || busy || counters.length === 0} onChange={e => select(zoneId, e.target.value)}>
-            <option value="">New counter (disabled first)</option>
-            {counters.map(c => <option key={c.checkoutCounterId} value={c.checkoutCounterId}>{c.code} · {c.name}{c.isEnabled ? ' · enabled' : ' · disabled'}</option>)}
+            <option value="">New counter</option>
+            {counters.map(c => <option key={c.checkoutCounterId} value={c.checkoutCounterId}>{c.name}</option>)}
           </select>
         </label>
         {loading && <p className={z.muted} role="status">Loading checkout configuration…</p>}
 
         {zoneId && <form className={s.group} noValidate onSubmit={event => { event.preventDefault(); saveCounter(); }}>
-          <strong className={s.groupTitle}>{counterId ? 'Counter' : 'Create disabled counter'}</strong>
+          <strong className={s.groupTitle}>{counterId ? 'Counter' : 'New counter'}</strong>
           {!loading && !loadError && counters.length === 0 && <p className={z.muted}>No counters in this checkout zone yet.</p>}
           <fieldset className={s.fields} disabled={blocked}>
-            <label className={s.field}>Counter code<input value={counter.code} maxLength={50} onChange={e => setCounter(v => ({ ...v, code: e.target.value }))} /></label>
             <label className={s.field}>Counter name<input value={counter.name} maxLength={100} onChange={e => setCounter(v => ({ ...v, name: e.target.value }))} /></label>
-            <label className={s.check}><input type="checkbox" checked={counter.isEnabled} disabled={!counterId} onChange={e => setCounter(v => ({ ...v, isEnabled: e.target.checked }))} />Counter enabled</label>
-            <div className={s.actions}>
-              <Button type="submit">{counterId ? 'Save counter' : 'Create disabled counter'}</Button>
-              {counterId && <Button variant="dangerGhost" disabled={!canDeleteCounter} onClick={removeCounter}>Delete counter</Button>}
-            </div>
+            {counterId && <div className={s.actions}>
+              <Button type="submit">Save counter</Button>
+              <Button variant="dangerGhost" disabled={!canDeleteCounter} onClick={removeCounter}>Delete counter</Button>
+            </div>}
           </fieldset>
-          {counterId && !canDeleteCounter && <p className={z.muted}>Disable the counter and all its camera mappings before deleting it.</p>}
         </form>}
 
         {zoneId && <form className={s.group} noValidate onSubmit={event => { event.preventDefault(); saveMapping(); }}>
-          <strong className={s.groupTitle}>Checkout ROIs</strong>
+          <strong className={s.groupTitle}>Draw checkout coverage</strong>
           <ul className={z.mappingList} aria-label="Checkout ROI legend">
             {ROI_KEYS.map(key => <li key={key} className={target === key ? s.activeRoi : undefined}>
               <span className={z.zoneDot} style={{ backgroundColor: roiColor(key) }} aria-hidden="true" />
               <span><strong>{roiName(key)}</strong><small>{roiStatus(key)}</small></span>
-              <button type="button" aria-pressed={target === key} disabled={blocked || !counterId} onClick={() => setTarget(key)}>Edit {roiName(key)}</button>
+              <button type="button" aria-pressed={target === key} disabled={blocked} onClick={() => setTarget(key)}>Edit {roiName(key)}</button>
             </li>)}
           </ul>
-          <fieldset className={s.fields} disabled={blocked || !counterId}>
-            <label className={s.check}><input type="checkbox" checked={mapping.isEnabled} onChange={e => setMapping(v => ({ ...v, isEnabled: e.target.checked }))} />Mapping enabled</label>
-            <label className={s.check}><input type="checkbox" checked={mapping.isQueueSource} onChange={e => setMapping(v => ({ ...v, isQueueSource: e.target.checked }))} />Use as queue source</label>
+          <fieldset className={s.fields} disabled={blocked}>
             <div className={s.actions}>
-              <Button type="submit">{busy ? 'Saving…' : 'Save checkout mapping'}</Button>
+              <Button type="submit">{busy ? 'Saving…' : 'Save coverage'}</Button>
               <Button variant="dangerGhost" disabled={!canDeleteMapping} onClick={removeMapping}>Delete camera mapping</Button>
             </div>
           </fieldset>
-          {baseline?.isEnabled && mappingBaseline?.isQueueSource && !canDeleteMapping && <p className={z.muted}>Disable the counter and save before deleting its queue source.</p>}
         </form>}
 
-        <p className={z.hint}>{hint}</p>
-
-        {counterId && <>
-          <div className={z.mappingHeader}><strong>Saved camera sources</strong><Chip tone="neutral">{sources.length}</Chip></div>
-          {sources.length === 0 ? <p className={z.muted}>No camera mappings saved for this counter.</p>
-            : <ul className={s.sourceList}>{sources.map(m => <li key={m.mappingId}>{m.cameraId === camera.cameraId ? `${camera.code} (this camera)` : `Camera ${m.cameraId}`} · {m.isEnabled ? 'enabled' : 'disabled'}{m.isQueueSource ? ' · queue source' : ''}</li>)}</ul>}
-          {otherQueue.length > 0 && <p className={s.notice}>Queue source: Camera {otherQueue[0].cameraId}. To switch manually, disable and save this counter, edit that other camera to clear its queue-source flag, then select this camera. No automatic failover.</p>}
-        </>}
-
-        {zoneId && <a className={s.link} href={`/admin/ai-config?zoneId=${encodeURIComponent(zoneId)}`} onClick={followMonitoring} aria-disabled={busy}>Configure checkout monitoring</a>}
-        {zoneId && <Button variant="secondary" disabled={busy || loading} onClick={reload}>Reload saved checkout data</Button>}
+        {hint && <p className={z.hint}>{hint}</p>}
 
         {previewError && <div className={z.error} role="alert">Preview unavailable: {previewError} <Button variant="secondary" disabled={busy || previewLoading} onClick={() => { setPreviewLoading(true); setPreviewUrl(undefined); setPreviewError(''); setPreviewKey(k => k + 1); }}>Retry camera preview</Button></div>}
         {loadError && <div className={z.error} role="alert">{loadError} <Button variant="secondary" disabled={busy || loading} onClick={reload}>Retry checkout load</Button></div>}
-        {error && <p className={z.error} role="alert">{error}</p>}
+        {error && <div className={z.error} role="alert">{error}{error.includes('Reload saved checkout data') &&
+          <Button variant="secondary" disabled={busy || loading} onClick={reload}>Reload saved checkout data</Button>}</div>}
         {message && <p className={z.success} role="status">{message}</p>}
         {busy && <p className={z.muted} role="status">Saving checkout changes…</p>}
       </aside>

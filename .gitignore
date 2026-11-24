@@ -26,3 +26,4 @@ dist-ssr
 # Local browser QA artifacts
 .playwright-cli/
 output/playwright/
+.env

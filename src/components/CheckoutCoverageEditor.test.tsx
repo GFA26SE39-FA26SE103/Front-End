@@ -54,7 +54,7 @@ const counter: CheckoutCounter = {
 };
 const ownMapping: CheckoutMapping = {
   mappingId: 'mapping-1', cameraId: camera.cameraId, checkoutCounterId: counter.checkoutCounterId,
-  laneRoi: lane, staffRoi: staff, isEnabled: false, isQueueSource: false, createdAt: version, updatedAt: version,
+  laneRoi: lane, staffRoi: staff, serviceRoi: service, isEnabled: false, isQueueSource: false, createdAt: version, updatedAt: version,
 };
 let counters: CheckoutCounter[];
 let mappings: CheckoutMapping[];
@@ -66,9 +66,9 @@ const deferred = <T,>() => {
 };
 async function chooseCounter(user: ReturnType<typeof userEvent.setup>, id = 'counter-1') {
   await user.selectOptions(screen.getByLabelText('Checkout zone'), zone.zoneId);
-  await screen.findByRole('option', { name: /LANE-1/ });
+  await screen.findByRole('option', { name: /Lane one/ });
   await user.selectOptions(screen.getByLabelText('Checkout counter'), id);
-  await waitFor(() => expect(screen.getByLabelText('Counter code')).toHaveValue(counters.find(c => c.checkoutCounterId === id)!.code));
+  await waitFor(() => expect(screen.getByLabelText('Counter name')).toHaveValue(counters.find(c => c.checkoutCounterId === id)!.name));
 }
 
 describe('CheckoutCoverageEditor', () => {
@@ -84,8 +84,13 @@ describe('CheckoutCoverageEditor', () => {
     vi.mocked(listCounterCheckoutMappings).mockImplementation(async id => mappings.filter(m => m.checkoutCounterId === id));
     vi.mocked(listCameraCheckoutMappings).mockImplementation(async id => mappings.filter(m => m.cameraId === id));
     vi.mocked(createCheckoutCounter).mockImplementation(async (id, request) => {
-      const saved = { ...counter, ...request, checkoutCounterId: 'created-counter', zoneId: id, updatedAt: nextVersion };
+      const saved = { ...counter, code: request.code || 'CTR-GENERATED', name: request.name, isEnabled: Boolean(request.cameraId),
+        checkoutCounterId: 'created-counter', zoneId: id, updatedAt: nextVersion };
       counters.push(saved);
+      if (request.cameraId && request.laneRoi && request.staffRoi && request.serviceRoi)
+        mappings.push({ ...ownMapping, mappingId: 'created-mapping', cameraId: request.cameraId,
+          checkoutCounterId: saved.checkoutCounterId, laneRoi: request.laneRoi,
+          staffRoi: request.staffRoi, serviceRoi: request.serviceRoi, isEnabled: true, isQueueSource: true });
       return saved;
     });
     vi.mocked(updateCheckoutCounter).mockImplementation(async (id, request) => {
@@ -96,57 +101,68 @@ describe('CheckoutCoverageEditor', () => {
     vi.mocked(saveCheckoutMapping).mockImplementation(async (id, cameraId, request) => {
       const saved = { ...ownMapping, ...request, checkoutCounterId: id, cameraId, updatedAt: nextVersion };
       mappings = [...mappings.filter(m => !(m.checkoutCounterId === id && m.cameraId === cameraId)), saved];
+      if (request.isEnabled) counters = counters.map(c => c.checkoutCounterId === id
+        ? { ...c, isEnabled: true, updatedAt: nextVersion } : c);
       return saved;
     });
     vi.mocked(deleteCheckoutCounter).mockImplementation(async id => { counters = counters.filter(c => c.checkoutCounterId !== id); });
     vi.mocked(deleteCheckoutMapping).mockImplementation(async (id, cameraId) => { mappings = mappings.filter(m => !(m.checkoutCounterId === id && m.cameraId === cameraId)); });
   });
 
-  it('lists only same-floor CHECKOUT zones and creates a counter disabled before any mapping', async () => {
+  it('creates an enabled counter only after drawing all three ROIs', async () => {
     const user = userEvent.setup();
     const dirty = vi.fn();
     render(<CheckoutCoverageEditor camera={camera} zones={zones} onDirtyChange={dirty} />);
     expect(screen.queryByRole('option', { name: /Upstairs checkout|Aisle/ })).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText('Checkout zone'), zone.zoneId);
-    await screen.findByRole('option', { name: /LANE-1/ });
-    expect(screen.getByLabelText('Counter enabled')).toBeDisabled();
-    await user.type(screen.getByLabelText('Counter code'), 'LANE-NEW');
+    await screen.findByRole('option', { name: /Lane one/ });
+    expect(screen.queryByLabelText('Counter enabled')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Counter code')).not.toBeInTheDocument();
     await user.type(screen.getByLabelText('Counter name'), 'New lane');
     expect(dirty).toHaveBeenLastCalledWith(true);
-    await user.click(screen.getByRole('button', { name: 'Create disabled counter' }));
-    await waitFor(() => expect(createCheckoutCounter).toHaveBeenCalledWith(zone.zoneId, { code: 'LANE-NEW', name: 'New lane', isEnabled: false }));
-    await waitFor(() => expect(screen.getByLabelText('Counter code')).toHaveValue('LANE-NEW'));
-    expect(screen.getByRole('link', { name: 'Configure checkout monitoring' })).toHaveAttribute('href', '/admin/ai-config?zoneId=zone-1');
+    await user.click(screen.getByRole('button', { name: 'Save coverage' }));
+    expect(createCheckoutCounter).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Complete Lane ROI' }));
+    await user.click(screen.getByRole('button', { name: 'Edit Staff ROI' }));
+    await user.click(screen.getByRole('button', { name: 'Complete Staff ROI' }));
+    await user.click(screen.getByRole('button', { name: 'Edit Service ROI' }));
+    await user.click(screen.getByRole('button', { name: 'Complete Service ROI' }));
+    await user.click(screen.getByRole('button', { name: 'Save coverage' }));
+    await waitFor(() => expect(createCheckoutCounter).toHaveBeenCalledWith(zone.zoneId, {
+      code: '', name: 'New lane', isEnabled: true, cameraId: camera.cameraId,
+      laneRoi: lane, staffRoi: staff, serviceRoi: service,
+    }));
+    await waitFor(() => expect(screen.getByLabelText('Counter name')).toHaveValue('New lane'));
+    expect(screen.queryByRole('link', { name: 'Configure checkout monitoring' })).not.toBeInTheDocument();
     expect(saveCheckoutMapping).not.toHaveBeenCalled();
   });
 
-  it('requires Service ROI for the queue source and permits independent lane/staff geometry', async () => {
+  it('requires all three ROIs and enables the counter without a queue-source choice', async () => {
     const user = userEvent.setup();
     render(<CheckoutCoverageEditor camera={camera} zones={zones} />);
     await chooseCounter(user);
     expect(JSON.parse(screen.getByTestId('active-draft').textContent!)).toEqual({ points: [], complete: false, editing: false });
-    await user.click(screen.getByRole('button', { name: 'Save checkout mapping' }));
+    await user.click(screen.getByRole('button', { name: 'Save coverage' }));
     expect(screen.getByRole('alert')).toHaveTextContent(/Lane ROI.*close/i);
     await user.click(screen.getByRole('button', { name: 'Complete Lane ROI' }));
     await user.click(screen.getByRole('button', { name: 'Edit Staff ROI' }));
     expect(screen.getByTestId('background-rois')).toHaveTextContent('Lane ROI');
-    await user.click(screen.getByRole('button', { name: 'Save checkout mapping' }));
+    await user.click(screen.getByRole('button', { name: 'Save coverage' }));
     expect(screen.getByRole('alert')).toHaveTextContent(/Staff ROI.*close/i);
     await user.click(screen.getByRole('button', { name: 'Invalid Staff ROI' }));
-    await user.click(screen.getByRole('button', { name: 'Save checkout mapping' }));
+    await user.click(screen.getByRole('button', { name: 'Save coverage' }));
     expect(saveCheckoutMapping).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Complete Staff ROI' }));
-    await user.click(screen.getByLabelText('Mapping enabled'));
-    await user.click(screen.getByLabelText('Use as queue source'));
-    await user.click(screen.getByRole('button', { name: 'Save checkout mapping' }));
+    await user.click(screen.getByRole('button', { name: 'Save coverage' }));
     expect(screen.getByRole('alert')).toHaveTextContent(/Service ROI.*close/i);
     await user.click(screen.getByRole('button', { name: 'Edit Service ROI' }));
     await user.click(screen.getByRole('button', { name: 'Complete Service ROI' }));
-    await user.click(screen.getByRole('button', { name: 'Save checkout mapping' }));
+    await user.click(screen.getByRole('button', { name: 'Save coverage' }));
     await waitFor(() => expect(saveCheckoutMapping).toHaveBeenCalledWith('counter-1', 'cam-1', {
       laneRoi: lane, staffRoi: staff, serviceRoi: service, isEnabled: true, isQueueSource: true,
     }));
-    await user.click(screen.getByRole('button', { name: 'Save checkout mapping' }));
+    expect(updateCheckoutCounter).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Save coverage' }));
     await waitFor(() => expect(vi.mocked(saveCheckoutMapping).mock.calls[1][2].expectedUpdatedAt).toBe(nextVersion));
   });
 
@@ -156,18 +172,30 @@ describe('CheckoutCoverageEditor', () => {
     const user = userEvent.setup();
     render(<CheckoutCoverageEditor camera={camera} zones={zones} />);
     await chooseCounter(user);
-    await user.click(screen.getByLabelText('Mapping enabled'));
-    await user.click(screen.getByRole('button', { name: 'Save checkout mapping' }));
+    await user.click(screen.getByRole('button', { name: 'Edit Staff ROI' }));
+    await user.click(screen.getByRole('button', { name: 'Complete Staff ROI' }));
+    await user.click(screen.getByRole('button', { name: 'Save coverage' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/draft.*kept/i);
-    expect(screen.getByLabelText('Mapping enabled')).toBeChecked();
-    await user.click(screen.getByRole('button', { name: 'Save checkout mapping' }));
+    expect(screen.getByTestId('active-draft')).toHaveTextContent('complete');
+    await user.click(screen.getByRole('button', { name: 'Save coverage' }));
     await waitFor(() => expect(saveCheckoutMapping).toHaveBeenCalledTimes(2));
     expect(vi.mocked(saveCheckoutMapping).mock.calls.map(call => call[2].expectedUpdatedAt)).toEqual([version, version]);
     mappings = [{ ...ownMapping, updatedAt: nextVersion }];
     await user.click(screen.getByRole('button', { name: 'Reload saved checkout data' }));
-    await waitFor(() => expect(screen.getByLabelText('Mapping enabled')).not.toBeChecked());
-    await user.click(screen.getByRole('button', { name: 'Save checkout mapping' }));
+    await waitFor(() => expect(screen.getByTestId('active-draft')).toHaveTextContent('complete'));
+    await user.click(screen.getByRole('button', { name: 'Save coverage' }));
     await waitFor(() => expect(vi.mocked(saveCheckoutMapping).mock.calls[2][2].expectedUpdatedAt).toBe(nextVersion));
+  });
+
+  it('does not suggest reloading when active monitoring blocks a save', async () => {
+    mappings = [{ ...ownMapping }];
+    vi.mocked(saveCheckoutMapping).mockRejectedValue(new ApiError(409, 'MONITORING_ACTIVE', 'Deactivate zone monitoring before changing checkout configuration.'));
+    const user = userEvent.setup();
+    render(<CheckoutCoverageEditor camera={camera} zones={zones} />);
+    await chooseCounter(user);
+    await user.click(screen.getByRole('button', { name: 'Save coverage' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Pause zone monitoring/);
+    expect(screen.queryByRole('button', { name: 'Reload saved checkout data' })).not.toBeInTheDocument();
   });
 
   it('uses the counter baseline token on rejected edits without overwriting its draft', async () => {
@@ -184,39 +212,30 @@ describe('CheckoutCoverageEditor', () => {
     expect(listCheckoutCounters).toHaveBeenCalledTimes(2); // Zone load + explicit counter selection, no error auto-reload.
   });
 
-  it('blocks a duplicate queue source on another camera and explains the manual switch', async () => {
+  it('allows another camera to cover the same counter', async () => {
     mappings = [{ ...ownMapping }, { ...ownMapping, mappingId: 'other', cameraId: 'cam-2', isEnabled: true, isQueueSource: true }];
     const user = userEvent.setup();
     render(<CheckoutCoverageEditor camera={camera} zones={zones} />);
     await chooseCounter(user);
-    expect(screen.getByText(/To switch manually/)).toHaveTextContent('cam-2');
-    await user.click(screen.getByLabelText('Mapping enabled'));
-    await user.click(screen.getByLabelText('Use as queue source'));
-    await user.click(screen.getByRole('button', { name: 'Save checkout mapping' }));
-    expect(screen.getByRole('alert')).toHaveTextContent(/another camera|one enabled queue source/i);
-    expect(saveCheckoutMapping).not.toHaveBeenCalled();
-    expect(updateCheckoutCounter).not.toHaveBeenCalled();
+    expect(mappings).toHaveLength(2);
+    expect(screen.queryByText(/Camera cam-2/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Save coverage' }));
+    await waitFor(() => expect(saveCheckoutMapping).toHaveBeenCalled());
     expect(deleteCheckoutMapping).not.toHaveBeenCalled();
   });
 
-  it('requires a saved queue source before counter enable and protects the last source of an enabled counter', async () => {
+  it('does not show an enable toggle and allows deleting the last mapping', async () => {
     const user = userEvent.setup();
     const view = render(<CheckoutCoverageEditor camera={camera} zones={zones} />);
     await chooseCounter(user);
-    await user.click(screen.getByLabelText('Counter enabled'));
-    await user.click(screen.getByRole('button', { name: 'Save counter' }));
-    expect(screen.getByRole('alert')).toHaveTextContent(/exactly one enabled queue source/i);
-    expect(updateCheckoutCounter).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Counter enabled')).not.toBeInTheDocument();
     view.unmount();
     counters[0] = { ...counter, isEnabled: true };
     mappings = [{ ...ownMapping, isEnabled: true, isQueueSource: true }];
     render(<CheckoutCoverageEditor camera={camera} zones={zones} />);
     await chooseCounter(user);
-    await user.click(screen.getByLabelText('Use as queue source'));
-    await user.click(screen.getByRole('button', { name: 'Save checkout mapping' }));
-    expect(screen.getByRole('alert')).toHaveTextContent(/Disable the counter/i);
-    expect(saveCheckoutMapping).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Delete camera mapping' })).toBeDisabled();
+    expect(screen.queryByText(/Pause the counter/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete camera mapping' })).toBeEnabled();
   });
 
   it('confirms dirty counter switches, shows a failed switch, and retries without writing the previous counter', async () => {
@@ -232,7 +251,7 @@ describe('CheckoutCoverageEditor', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/503|unavailable/i);
     expect(screen.getByRole('button', { name: 'Save counter' })).toBeDisabled();
     await user.click(screen.getByRole('button', { name: 'Retry checkout load' }));
-    await waitFor(() => expect(screen.getByLabelText('Counter code')).toHaveValue('LANE-2'));
+    await waitFor(() => expect(screen.getByLabelText('Counter name')).toHaveValue('Lane two'));
     await user.click(screen.getByRole('button', { name: 'Save counter' }));
     await waitFor(() => expect(updateCheckoutCounter).toHaveBeenCalledWith('counter-2', expect.objectContaining({ expectedUpdatedAt: version })));
   });
@@ -243,12 +262,12 @@ describe('CheckoutCoverageEditor', () => {
     const user = userEvent.setup();
     render(<CheckoutCoverageEditor camera={camera} zones={zones} />);
     await user.selectOptions(screen.getByLabelText('Checkout zone'), zone.zoneId);
-    await screen.findByRole('option', { name: /LANE-1/ });
+    await screen.findByRole('option', { name: /Lane one/ });
     await user.selectOptions(screen.getByLabelText('Checkout counter'), 'counter-1');
     await user.selectOptions(screen.getByLabelText('Checkout counter'), 'counter-2');
-    await waitFor(() => expect(screen.getByLabelText('Counter code')).toHaveValue('LANE-2'));
+    await waitFor(() => expect(screen.getByLabelText('Counter name')).toHaveValue('Lane two'));
     await act(async () => pending.resolve([{ ...ownMapping }]));
-    expect(screen.getByLabelText('Counter code')).toHaveValue('LANE-2');
+    expect(screen.getByLabelText('Counter name')).toHaveValue('Lane two');
     expect(screen.getByLabelText('Checkout counter')).toHaveValue('counter-2');
   });
 
@@ -260,8 +279,8 @@ describe('CheckoutCoverageEditor', () => {
     const user = userEvent.setup();
     render(<CheckoutCoverageEditor camera={camera} zones={zones} onBusyChange={busy} />);
     await chooseCounter(user);
-    fireEvent.click(screen.getByRole('button', { name: 'Save checkout mapping' }));
-    fireEvent.click(screen.getByRole('button', { name: /Save checkout mapping|Saving/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save coverage' }));
+    fireEvent.click(screen.getByRole('button', { name: /Save coverage|Saving/ }));
     expect(saveCheckoutMapping).toHaveBeenCalledTimes(1);
     expect(busy).toHaveBeenLastCalledWith(true);
     expect(screen.getByLabelText('Checkout zone')).toBeDisabled();
@@ -280,14 +299,14 @@ describe('CheckoutCoverageEditor', () => {
     expect(counters.map(c => c.checkoutCounterId)).toEqual(['counter-2']);
   });
 
-  it('deletes only this camera mapping and keeps other-camera coverage visible', async () => {
+  it('deletes only this camera mapping and keeps other-camera coverage saved', async () => {
     mappings = [{ ...ownMapping }, { ...ownMapping, mappingId: 'other', cameraId: 'cam-2' }];
     const user = userEvent.setup();
     render(<CheckoutCoverageEditor camera={camera} zones={zones} />);
     await chooseCounter(user);
     await user.click(screen.getByRole('button', { name: 'Delete camera mapping' }));
     await waitFor(() => expect(deleteCheckoutMapping).toHaveBeenCalledWith('counter-1', 'cam-1', version));
-    expect(screen.getByText(/Camera cam-2/)).toBeInTheDocument();
+    expect(mappings).toEqual([expect.objectContaining({ cameraId: 'cam-2' })]);
     expect(deleteCheckoutCounter).not.toHaveBeenCalled();
   });
 });
