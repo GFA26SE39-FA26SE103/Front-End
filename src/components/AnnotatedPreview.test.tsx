@@ -262,4 +262,10 @@ describe('AnnotatedPreview', () => {
     render(<AnnotatedPreview cameraId="camera-a" zoneId="draft-zone" enabled />);
     expect(await screen.findByText(/used by active monitoring in this or another Zone/)).toBeInTheDocument();
   });
+
+  it('shows why the zone preview was rejected before starting', async () => {
+    start.mockRejectedValue(new ApiError(422, 'ZONE_NOT_MAPPED', 'Zone not mapped.'));
+    render(<AnnotatedPreview cameraId="camera-a" zoneId="checkout-zone" enabled />);
+    expect(await screen.findByText('Save an enabled ROI mapping for this camera and zone, then retry.')).toBeInTheDocument();
+  });
 });

@@ -216,6 +216,7 @@ export function AnnotatedPreview({ cameraId, enabled, pollInterval = 0, zoneId, 
         if (active) await poll();
       } catch (error) {
         if (!active || controller.signal.aborted) return;
+        setErrorCode(error instanceof ApiError ? error.code : null);
         setViewState(error instanceof ApiError && error.status === 401 ? 'unauthorized' : error instanceof ApiError && error.code === 'AI_SESSION_MONITORING_OWNED' ? 'monitoring-owned' : 'unavailable');
       }
     };
@@ -294,7 +295,12 @@ function stateLabel(state: ViewState, errorCode: string | null): string {
     if (errorCode === 'AI_RECORDED_VIDEO_DOWNLOAD_FAILED') return 'AI could not download the recording from the backend.';
     return 'AI preview stopped after a camera error';
   }
-  if (state === 'unavailable') return 'AI preview is unavailable';
+  if (state === 'unavailable') {
+    if (errorCode === 'ZONE_NOT_MAPPED') return 'Save an enabled ROI mapping for this camera and zone, then retry.';
+    if (errorCode === 'ROI_INVALID' || errorCode === 'INVALID_POLYGON') return 'Save a valid camera ROI, then retry.';
+    if (errorCode === 'AI_PREVIEW_CONFIGURATION_CONFLICT') return 'Close the other preview for this camera, then retry.';
+    return 'AI preview is unavailable';
+  }
   if (state === 'monitoring-owned') return 'This camera is used by active monitoring in this or another Zone. Deactivate every active configuration using the camera, then retry.';
   return '';
 }
