@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { Icon } from './Icon';
 import { SidebarAccount } from './AccountMenu';
 import { ThemeToggle } from './ThemeToggle';
+import { NotificationBadge, NotificationToasts } from './NotificationToasts';
 import a from './AdminLayout.module.css';
 import s from './OperatorLayout.module.css';
 
@@ -33,6 +34,7 @@ export function OperatorLayout({ title, subtitle, children }: { title: string; s
               <>
                 <Icon name={isActive && item.activeIcon ? item.activeIcon : item.icon} size={16} />
                 {item.label}
+                {item.to === '/operator/notifications' && <NotificationBadge />}
               </>
             )}
           </NavLink>
@@ -52,6 +54,7 @@ export function OperatorLayout({ title, subtitle, children }: { title: string; s
         </header>
         <main className={s.content}>{children}</main>
       </div>
+      <NotificationToasts inboxPath="/operator/notifications" />
     </div>
   );
 }

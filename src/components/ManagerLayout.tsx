@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { Icon } from './Icon';
 import { AccountMenu } from './AccountMenu';
 import { ThemeToggle } from './ThemeToggle';
+import { NotificationBadge, NotificationToasts } from './NotificationToasts';
 import s from './AdminLayout.module.css';
 
 const NAV = [
@@ -37,6 +38,7 @@ export function ManagerLayout({ title, subtitle, actions, children }: { title: s
               <>
                 <Icon name={isActive && item.activeIcon ? item.activeIcon : item.icon} size={16} />
                 {item.label}
+                {item.to === '/manager/notifications' && <NotificationBadge />}
               </>
             )}
           </NavLink>
@@ -55,6 +57,7 @@ export function ManagerLayout({ title, subtitle, actions, children }: { title: s
         </header>
         <main className={s.content}>{children}</main>
       </div>
+      <NotificationToasts inboxPath="/manager/notifications" />
     </div>
   );
 }

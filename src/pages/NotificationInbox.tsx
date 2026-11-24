@@ -4,6 +4,7 @@ import { listNotifications, markAllNotificationsRead, type NotificationItem } fr
 import { ManagerLayout } from '../components/ManagerLayout';
 import { OperatorLayout } from '../components/OperatorLayout';
 import { Button } from '../components/ui';
+import { refreshNotificationFeed } from '../components/notificationFeed';
 import s from './NotificationCenter.module.css';
 
 export function OperatorNotifications() {
@@ -22,7 +23,7 @@ function Inbox({ role }: { role: 'operator' | 'manager' }) {
 
   const load = async () => {
     setLoading(true); setError('');
-    try { setItems(await listNotifications()); }
+    try { setItems(await listNotifications()); void refreshNotificationFeed(); }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Notifications could not be loaded.'); }
     finally { setLoading(false); }
   };
@@ -44,6 +45,7 @@ function Inbox({ role }: { role: 'operator' | 'manager' }) {
       await markAllNotificationsRead();
       const now = new Date().toISOString();
       setItems((current) => current.map((item) => item.readAt ? item : { ...item, readAt: now }));
+      void refreshNotificationFeed();
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Notifications could not be marked read.'); }
     finally { setBusy(false); }
   };
