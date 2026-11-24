@@ -34,6 +34,8 @@ export type IncidentFeed = { items: IncidentFeedItem[]; hasMore: boolean; nextCr
 export type IncidentFeedQuery = { limit?: number; afterCreatedAt?: string; afterIncidentId?: string; includeEnded?: boolean };
 const path = (cameraId: string) => `/api/cameras/${encodeURIComponent(cameraId)}`;
 export const getCameraMonitoringRuntime = (cameraId: string, signal?: AbortSignal) => apiFetch<CameraMonitoringRuntime>(`${path(cameraId)}/monitoring-runtime`, { signal });
+export const replayRecordedMonitoring = (cameraId: string, sessionId: string) =>
+  apiFetch<void>(`${path(cameraId)}/monitoring-runtime/replay`, { method: 'POST', body: JSON.stringify({ sessionId }) });
 export const getCameraIncidents = (cameraId: string, query: IncidentFeedQuery = {}, signal?: AbortSignal) => {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) if (value !== undefined) params.set(key, String(value));

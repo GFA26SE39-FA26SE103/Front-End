@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCameraPreview, listCameraMappings, listCameras } from '../../api/cameras';
+import { listCheckoutCounters, listCounterCheckoutMappings } from '../../api/checkout';
 import { getFloorMap, listFloors, listSupermarkets, listZones } from '../../api/floors';
 import OperatorFloorMap from './OperatorFloorMap';
 
@@ -10,6 +11,11 @@ vi.mock('../../api/cameras', () => ({
   getCameraPreview: vi.fn(),
   listCameraMappings: vi.fn(),
   listCameras: vi.fn(),
+}));
+
+vi.mock('../../api/checkout', () => ({
+  listCheckoutCounters: vi.fn(),
+  listCounterCheckoutMappings: vi.fn(),
 }));
 
 vi.mock('../../api/floors', () => ({
@@ -89,6 +95,8 @@ const renderManagerPage = () => render(
 
 describe('OperatorFloorMap', () => {
   beforeEach(() => {
+    vi.mocked(listCheckoutCounters).mockResolvedValue([]);
+    vi.mocked(listCounterCheckoutMappings).mockResolvedValue([]);
     vi.mocked(listSupermarkets).mockResolvedValue([{ supermarketId: 'store-1', code: 'STORE', name: 'Central store', address: null, status: 'ACTIVE' }]);
     vi.mocked(listFloors).mockResolvedValue([floor]);
     vi.mocked(listZones).mockResolvedValue([zone('zone-a', 'Checkout', 0.1), zone('zone-b', 'Entrance', 0.4), zone('zone-c', 'Aisles', 0.7)]);
@@ -137,6 +145,22 @@ describe('OperatorFloorMap', () => {
     expect(within(liveSection).queryByRole('button', { name: 'Open CAM-02 live' })).not.toBeInTheDocument();
     await user.click(await within(liveSection).findByRole('button', { name: 'Open CAM-01 live' }));
     expect(screen.getByText('Live page')).toBeInTheDocument();
+  });
+
+  it('shows a checkout-only camera under its zone in the live cameras list and zone status', async () => {
+    const timestamp = '2026-11-24T08:00:00Z';
+    vi.mocked(listCameraMappings).mockResolvedValue([]);
+    vi.mocked(listCheckoutCounters).mockImplementation(async (zoneId) => zoneId === 'zone-a' ? [{
+      checkoutCounterId: 'counter-1', zoneId, code: 'C01', name: 'Counter 1', isEnabled: true, createdAt: timestamp, updatedAt: timestamp,
+    }] : []);
+    vi.mocked(listCounterCheckoutMappings).mockResolvedValue([{
+      mappingId: 'checkout-1', cameraId: 'cam-1', checkoutCounterId: 'counter-1', laneRoi: [], staffRoi: [],
+      isEnabled: true, isQueueSource: true, createdAt: timestamp, updatedAt: timestamp,
+    }]);
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: 'Open CAM-01 live' })).toHaveTextContent('Checkout');
+    expect(screen.getByRole('button', { name: /Checkout.*Live coverage/ })).toHaveTextContent('1/1 cameras online');
   });
 
   it('keeps the Admin sidebar and uses Admin live camera routes', async () => {

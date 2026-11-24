@@ -3,6 +3,7 @@ import { ApiError, apiResourceUrl } from '../api/client';
 import { getCameraPreview, prepareCameraPlayback, type CameraPlayback } from '../api/cameras';
 import { loadSession } from '../auth/session';
 import { appTokenEnabledForWebRtc } from '../config/webrtc';
+import { PreviewRegions, type PreviewRegion } from './PreviewRegions';
 import s from './AnnotatedPreview.module.css';
 
 export type CameraLiveViewState = 'idle' | 'starting' | 'live' | 'reconnecting' | 'error' | 'unauthorized';
@@ -13,6 +14,7 @@ export type CameraLivePreviewProps = {
   recorded?: boolean;
   whepUrl?: string | null;
   pollInterval?: number;
+  regions?: PreviewRegion[];
   onStateChange?: (state: CameraLiveViewState, error?: ApiError) => void;
 };
 
@@ -51,9 +53,9 @@ export function CameraLivePreview(props: CameraLivePreviewProps) {
     return <div className={s.preview} aria-live="polite"><div className={s.state}>Connecting to camera…</div></div>;
   }
   if (props.enabled && !props.whepUrl && playback?.transport === 'MP4') {
-    return <RecordedVideoPreview url={apiResourceUrl(playback.url)} onStateChange={props.onStateChange} />;
+    return <RecordedVideoPreview key={playback.url} url={apiResourceUrl(playback.url)} onStateChange={props.onStateChange} regions={props.regions} />;
   }
-  if (props.enabled && props.recorded && playback === null) {
+  if (props.enabled && !props.whepUrl && props.recorded) {
     return <div className={s.preview}><div className={s.state}>The uploaded recording could not be opened.</div></div>;
   }
   const resolvedWhepUrl = props.whepUrl ?? (playback?.transport === 'WEBRTC' ? playback.url : null);
@@ -62,8 +64,12 @@ export function CameraLivePreview(props: CameraLivePreviewProps) {
     : <PolledLivePreview {...props} />;
 }
 
-function RecordedVideoPreview({ url, onStateChange }: { url: string; onStateChange?: CameraLivePreviewProps['onStateChange'] }) {
+function RecordedVideoPreview({ url, onStateChange, regions = [] }: {
+  url: string; onStateChange?: CameraLivePreviewProps['onStateChange']; regions?: PreviewRegion[];
+}) {
   const [playing, setPlaying] = useState(false);
+  const [frameSize, setFrameSize] = useState<{ width: number; height: number } | null>(null);
+  const [failed, setFailed] = useState(false);
   return (
     <div className={s.preview}>
       <video
@@ -74,10 +80,18 @@ function RecordedVideoPreview({ url, onStateChange }: { url: string; onStateChan
         muted
         playsInline
         controls
-        onPlaying={() => { setPlaying(true); onStateChange?.('live'); }}
-        onError={() => onStateChange?.('error', new ApiError(422, 'RECORDED_PLAYBACK_FAILED', 'Could not play the uploaded video. Try an H.264 MP4.'))}
+        onLoadedMetadata={({ currentTarget: video }) => {
+          if (video.videoWidth > 0 && video.videoHeight > 0) setFrameSize({ width: video.videoWidth, height: video.videoHeight });
+        }}
+        onPlaying={() => { setPlaying(true); setFailed(false); onStateChange?.('live'); }}
+        onError={() => {
+          setFailed(true);
+          onStateChange?.('error', new ApiError(422, 'RECORDED_PLAYBACK_FAILED', 'Could not play the uploaded video. Try an H.264 MP4.'));
+        }}
       />
-      {playing && <span className={s.badge}>RECORDING</span>}
+      {!failed && frameSize && regions.length > 0 && <PreviewRegions regions={regions} {...frameSize} />}
+      {failed && <div className={s.state} role="alert">Could not play the uploaded video.</div>}
+      {!failed && playing && <span className={s.badge}>RECORDING</span>}
     </div>
   );
 }

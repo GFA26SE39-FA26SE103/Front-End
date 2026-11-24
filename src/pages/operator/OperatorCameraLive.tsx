@@ -2,10 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getCamera, type CameraRecord } from '../../api/cameras';
 import type { FloorRecord, ZoneRecord } from '../../api/floors';
+import { replayRecordedMonitoring } from '../../api/monitoringRuntime';
 import { AdminLayout } from '../../components/AdminLayout';
-import { AnnotatedPreview, type PreviewRegion } from '../../components/AnnotatedPreview';
+import { AnnotatedPreview } from '../../components/AnnotatedPreview';
+import { CameraLivePreview } from '../../components/CameraLivePreview';
 import { FloorPlanView } from '../../components/FloorPlanView';
 import { OperatorLayout } from '../../components/OperatorLayout';
+import type { PreviewRegion } from '../../components/PreviewRegions';
 import { Button, Chip, Overline } from '../../components/ui';
 import {
   COVERAGE,
@@ -41,8 +44,34 @@ function CameraLiveView({ cameraId, workspace }: { cameraId: string; workspace: 
   const [details, setDetails] = useState<FloorDetails | null>(null);
   const [error, setError] = useState('');
   const [live, setLive] = useState(true);
+  const [replayId, setReplayId] = useState<number | null>(null);
+  const [aiRestartKey, setAiRestartKey] = useState(0);
+  const [restartingAi, setRestartingAi] = useState(false);
+  const [replayedSessionId, setReplayedSessionId] = useState<string | null>(null);
+  const [replayError, setReplayError] = useState('');
   const map = useFloorMap(floor);
   const monitoring = useCameraMonitoring(cameraId, Boolean(camera));
+  const canReplay = workspace === 'operator' && monitoring.runtime?.videoSourceType === 'RECORDED';
+  const showReplay = canReplay && replayId !== null;
+  const completedSessionId = canReplay && !monitoring.runtimeError && monitoring.runtime?.state === 'COMPLETED'
+    ? monitoring.runtime.sessionId : null;
+
+  async function replayWithAi() {
+    if (!completedSessionId || completedSessionId === replayedSessionId || restartingAi) return;
+    setRestartingAi(true);
+    setReplayError('');
+    try {
+      await replayRecordedMonitoring(cameraId, completedSessionId);
+      setReplayedSessionId(completedSessionId);
+      setReplayId(null);
+      setLive(true);
+      setAiRestartKey((key) => key + 1);
+    } catch (reason) {
+      setReplayError(messageOf(reason, 'Could not replay the recorded video with AI.'));
+    } finally {
+      setRestartingAi(false);
+    }
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -65,18 +94,28 @@ function CameraLiveView({ cameraId, workspace }: { cameraId: string; workspace: 
     return () => controller.abort();
   }, [cameraId]);
 
-  const zones = useMemo(() => (details && camera ? zonesForCamera(camera.cameraId, details.zones, details.mappings) : []), [camera, details]);
+  const zones = useMemo(() => (details && camera ? zonesForCamera(camera.cameraId, details) : []), [camera, details]);
   const zoneIds = useMemo(() => new Set(zones.map((zone) => zone.zoneId)), [zones]);
-  // ROIs the Admin drew on this camera's image (Store layout → Configure coverage).
   const regions = useMemo<PreviewRegion[]>(() => {
     if (!details) return [];
-    return details.mappings.flatMap((mapping) => {
+    const zoneRegions = details.mappings.flatMap((mapping) => {
       const zone = details.zones.find((item) => item.zoneId === mapping.zoneId);
       if (mapping.cameraId !== cameraId || mapping.status !== 'ACTIVE' || !zone || mapping.roiPolygon.length < 3) return [];
       return [{ id: mapping.cameraZoneId, label: zone.name, color: zone.colorHex ?? ROI_COLOR, points: mapping.roiPolygon }];
     });
+    const checkoutRegions = details.checkoutMappings.filter((mapping) => mapping.cameraId === cameraId).flatMap((mapping) => {
+      const rois = [
+        ['Lane ROI', '#2563EB', mapping.laneRoi],
+        ['Staff ROI', '#7C5CC4', mapping.staffRoi],
+        ['Service ROI', '#16965F', mapping.serviceRoi],
+      ] as const;
+      return rois.flatMap(([name, color, points]) => points && points.length >= 3
+        ? [{ id: `${mapping.mappingId}:${name}`, label: `${mapping.counterCode} · ${name}`, color, points }] : []);
+    });
+    return [...zoneRegions, ...checkoutRegions];
   }, [cameraId, details]);
-  const zoneTone = (zone: ZoneRecord) => (details ? COVERAGE[zoneCoverage(zone, details.cameras, details.mappings).status].tone : 'neutral');
+  const zoneTone = (zone: ZoneRecord) => (details ? COVERAGE[zoneCoverage(zone, details).status].tone : 'neutral');
+  const emptyCoverage = details?.checkoutCoverageUnavailable ? 'Coverage unavailable' : 'Not mapped';
   const floorBase = workspace === 'admin' ? '/admin/live-floor-map' : '/operator/floor-map';
   const cameraBase = workspace === 'admin' ? '/admin/live-cameras' : '/operator/cameras';
   const floorLink = `${floorBase}${floor ? `?floor=${floor.floorId}` : ''}`;
@@ -104,8 +143,11 @@ function CameraLiveView({ cameraId, workspace }: { cameraId: string; workspace: 
     <>
       <section className={s.stage}>
         <div className={s.video}>
-          <AnnotatedPreview cameraId={cameraId} enabled={live && Boolean(camera)} regions={regions} />
-          {map.status === 'ready' && details && camera && (
+          {showReplay
+            ? <CameraLivePreview key={replayId} cameraId={cameraId} enabled recorded regions={regions} />
+            : <AnnotatedPreview cameraId={cameraId} enabled={live && Boolean(camera)} regions={regions}
+                restartKey={aiRestartKey} monitoringReplayAvailable={canReplay} />}
+          {!showReplay && map.status === 'ready' && details && camera && (
             <div className={s.minimap}>
               <p className={s.minimapTitle}>{floor?.name ?? 'Floor'} <span>· minimap</span></p>
               <FloorPlanView
@@ -129,12 +171,21 @@ function CameraLiveView({ cameraId, workspace }: { cameraId: string; workspace: 
           )}
         </div>
         <div className={s.controls}>
-          <Button variant={live ? 'secondary' : 'primary'} disabled={!camera} onClick={() => setLive((value) => !value)}>
-            {live ? 'Stop live view' : 'Start live view'}
-          </Button>
-          <span className={s.controlNote}>Stop live view only stops viewing, not active monitoring. Frames are tracked by YOLO + ByteTrack.</span>
+          {showReplay ? <Button variant="secondary" onClick={() => setReplayId(null)}>Back to AI view</Button> : (
+            <Button variant={live ? 'secondary' : 'primary'} disabled={!camera} onClick={() => setLive((value) => !value)}>
+              {live ? 'Stop live view' : 'Start live view'}
+            </Button>
+          )}
+          {canReplay && <>
+            <Button disabled={!completedSessionId || completedSessionId === replayedSessionId || restartingAi} onClick={() => void replayWithAi()}>
+              {restartingAi ? 'Restarting AI…' : 'Replay with AI'}
+            </Button>
+            <Button variant="secondary" disabled={restartingAi} onClick={() => setReplayId((id) => (id ?? 0) + 1)}>Watch recording</Button>
+          </>}
+          <span className={s.controlNote}>{showReplay ? 'Recorded video playback' : 'Frames are tracked by YOLO + ByteTrack.'}</span>
           <Link className={s.back} to={floorLink}>Back to floor map</Link>
         </div>
+        {replayError && <p role="alert">{replayError}</p>}
       </section>
 
       <aside className={s.panel}>
@@ -146,7 +197,7 @@ function CameraLiveView({ cameraId, workspace }: { cameraId: string; workspace: 
               <Chip tone={healthTone(camera)} pill>{healthLabel(camera)}</Chip>
             </div>
             <dl className={s.facts}>
-              <dt>Zones</dt><dd>{zones.length ? zones.map((zone) => zone.name).join(', ') : 'Not mapped'}</dd>
+              <dt>Zones</dt><dd>{zones.length ? zones.map((zone) => zone.name).join(', ') : emptyCoverage}</dd>
               <dt>Floor</dt><dd>{floor?.name ?? '—'}</dd>
               <dt>Last seen</dt><dd>{formatSeen(camera.lastSeenAt)}</dd>
             </dl>
@@ -156,7 +207,7 @@ function CameraLiveView({ cameraId, workspace }: { cameraId: string; workspace: 
         <Overline>COVERED ZONES</Overline>
         <div className={s.zoneList}>
           {zones.map((zone) => {
-            const meta = details ? COVERAGE[zoneCoverage(zone, details.cameras, details.mappings).status] : COVERAGE.uncovered;
+            const meta = details ? COVERAGE[zoneCoverage(zone, details).status] : COVERAGE.uncovered;
             return (
               <div key={zone.zoneId} className={s.zoneRow}>
                 <span>{zone.name}</span>
@@ -164,7 +215,8 @@ function CameraLiveView({ cameraId, workspace }: { cameraId: string; workspace: 
               </div>
             );
           })}
-          {camera && zones.length === 0 && <p className={s.muted}>An Admin has not mapped this camera to any zone yet.</p>}
+          {details?.checkoutCoverageUnavailable && <p className={s.muted} role="status">Checkout camera coverage could not be loaded.</p>}
+          {camera && zones.length === 0 && !details?.checkoutCoverageUnavailable && <p className={s.muted}>An Admin has not mapped this camera to any zone yet.</p>}
         </div>
 
         <CameraMonitoringPanel state={monitoring} canDismiss={workspace === 'operator'} />
@@ -173,7 +225,7 @@ function CameraLiveView({ cameraId, workspace }: { cameraId: string; workspace: 
         <nav className={s.switcher} aria-label="Cameras on this floor">
           {(details?.cameras ?? []).map((item) => {
             const current = item.cameraId === cameraId;
-            const itemZones = details ? zonesForCamera(item.cameraId, details.zones, details.mappings) : [];
+            const itemZones = details ? zonesForCamera(item.cameraId, details) : [];
             return (
               <Link
                 key={item.cameraId}
@@ -184,7 +236,7 @@ function CameraLiveView({ cameraId, workspace }: { cameraId: string; workspace: 
                 <span className={`${s.dot} ${s[`dot-${healthTone(item)}`]}`} aria-hidden="true" />
                 <span className={s.switchLabels}>
                   <strong>{item.code}</strong>
-                  <small>{itemZones.length ? itemZones.map((zone) => zone.name).join(', ') : 'Not mapped'}</small>
+                  <small>{itemZones.length ? itemZones.map((zone) => zone.name).join(', ') : emptyCoverage}</small>
                 </span>
                 <span className={`${s.switchStatus} ${current ? '' : s[`status-${healthTone(item)}`]}`}>{current ? 'Viewing' : healthLabel(item)}</span>
               </Link>

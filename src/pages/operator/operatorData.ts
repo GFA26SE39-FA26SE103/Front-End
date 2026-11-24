@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { listCameraMappings, listCameras, type CameraRecord, type CameraZoneMapping } from '../../api/cameras';
+import { listCheckoutCounters, listCounterCheckoutMappings, type CheckoutMapping } from '../../api/checkout';
 import { ApiError } from '../../api/client';
 import { getFloorMap, listFloors, listSupermarkets, listZones, type FloorRecord, type SupermarketRecord, type ZoneRecord } from '../../api/floors';
 import type { Tone } from '../../components/ui';
@@ -13,6 +14,8 @@ export type FloorDetails = {
   zones: ZoneRecord[];
   cameras: CameraRecord[];
   mappings: CameraZoneMapping[];
+  checkoutMappings: (CheckoutMapping & { zoneId: string; counterCode: string })[];
+  checkoutCoverageUnavailable: boolean;
 };
 
 export type CoverageStatus = 'covered' | 'degraded' | 'offline' | 'uncovered' | 'inactive';
@@ -39,24 +42,39 @@ export async function loadStoreFloors(signal: AbortSignal): Promise<{ stores: Su
 
 export async function loadFloorDetails(floorId: string, signal: AbortSignal): Promise<FloorDetails> {
   const [zones, cameras] = await Promise.all([listZones(floorId, signal), listCameras(floorId, signal)]);
-  const mappings = (await Promise.all(cameras.map((camera) => listCameraMappings(camera.cameraId, signal)))).flat();
-  return { zones, cameras, mappings };
+  const checkoutZones = zones.filter((zone) => zone.zoneType === 'CHECKOUT');
+  const [mappings, checkout] = await Promise.all([
+    Promise.all(cameras.map((camera) => listCameraMappings(camera.cameraId, signal))),
+    Promise.all(checkoutZones.map((zone) => listCheckoutCounters(zone.zoneId, signal)))
+      .then((rows) => Promise.all(rows.flat().filter((counter) => counter.isEnabled).map(async (counter) => {
+        const sources = await listCounterCheckoutMappings(counter.checkoutCounterId, signal);
+        return sources.filter((source) => source.isEnabled).map((source) => ({
+          ...source, zoneId: counter.zoneId, counterCode: counter.code,
+        }));
+      })))
+      .catch(() => null),
+  ]);
+  return { zones, cameras, mappings: mappings.flat(), checkoutMappings: checkout?.flat() ?? [], checkoutCoverageUnavailable: checkout === null };
 }
 
 export const isCameraLive = (camera: CameraRecord) => camera.status === 'ACTIVE' && camera.healthStatus === 'ONLINE';
 
-export function camerasForZone(zoneId: string, cameras: CameraRecord[], mappings: CameraZoneMapping[]) {
-  const ids = new Set(mappings.filter((m) => m.zoneId === zoneId && m.status === 'ACTIVE').map((m) => m.cameraId));
-  return cameras.filter((camera) => ids.has(camera.cameraId));
+function activeCoverage(details: FloorDetails) {
+  return [...details.mappings.filter((mapping) => mapping.status === 'ACTIVE'), ...details.checkoutMappings];
 }
 
-export function zonesForCamera(cameraId: string, zones: ZoneRecord[], mappings: CameraZoneMapping[]) {
-  const ids = new Set(mappings.filter((m) => m.cameraId === cameraId && m.status === 'ACTIVE').map((m) => m.zoneId));
-  return zones.filter((zone) => ids.has(zone.zoneId));
+export function camerasForZone(zoneId: string, details: FloorDetails) {
+  const ids = new Set(activeCoverage(details).filter((mapping) => mapping.zoneId === zoneId).map((mapping) => mapping.cameraId));
+  return details.cameras.filter((camera) => ids.has(camera.cameraId));
 }
 
-export function zoneCoverage(zone: ZoneRecord, cameras: CameraRecord[], mappings: CameraZoneMapping[]): ZoneCoverage {
-  const covering = camerasForZone(zone.zoneId, cameras, mappings);
+export function zonesForCamera(cameraId: string, details: FloorDetails) {
+  const ids = new Set(activeCoverage(details).filter((mapping) => mapping.cameraId === cameraId).map((mapping) => mapping.zoneId));
+  return details.zones.filter((zone) => ids.has(zone.zoneId));
+}
+
+export function zoneCoverage(zone: ZoneRecord, details: FloorDetails): ZoneCoverage {
+  const covering = camerasForZone(zone.zoneId, details);
   const onlineCount = covering.filter(isCameraLive).length;
   const cameraCount = covering.length;
   let status: CoverageStatus;

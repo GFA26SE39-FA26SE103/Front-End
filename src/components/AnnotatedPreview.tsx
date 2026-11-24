@@ -7,19 +7,11 @@ import {
   stopAiPreview,
   type AiPreviewState,
   type AiPreviewStatus,
-  type MapPoint,
 } from '../api/cameras';
+import { PreviewRegions, type PreviewRegion } from './PreviewRegions';
 import s from './AnnotatedPreview.module.css';
 
 type ViewState = 'idle' | 'starting' | 'waiting' | 'live' | 'completed' | 'reconnecting' | 'error' | 'unauthorized' | 'unavailable' | 'monitoring-owned';
-
-/** A zone ROI drawn over the frame; points are normalized to the camera image (0..1). */
-export type PreviewRegion = {
-  id: string;
-  label: string;
-  color: string;
-  points: MapPoint[];
-};
 
 export type AnnotatedPreviewProps = {
   cameraId: string;
@@ -27,9 +19,11 @@ export type AnnotatedPreviewProps = {
   pollInterval?: number;
   zoneId?: string;
   regions?: PreviewRegion[];
+  restartKey?: number;
+  monitoringReplayAvailable?: boolean;
 };
 
-export function AnnotatedPreview({ cameraId, enabled, pollInterval = 0, zoneId, regions = [] }: AnnotatedPreviewProps) {
+export function AnnotatedPreview({ cameraId, enabled, pollInterval = 0, zoneId, regions = [], restartKey = 0, monitoringReplayAvailable = false }: AnnotatedPreviewProps) {
   const [viewState, setViewState] = useState<ViewState>('idle');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [frameSize, setFrameSize] = useState<{ width: number; height: number } | null>(null);
@@ -253,9 +247,11 @@ export function AnnotatedPreview({ cameraId, enabled, pollInterval = 0, zoneId, 
         }
       })();
     };
-  }, [cameraId, enabled, pollInterval, zoneId]);
+  }, [cameraId, enabled, pollInterval, zoneId, restartKey]);
 
   const visibleState = enabled ? viewState : 'idle';
+  const replayHint = purpose !== 'MONITORING' ? 'Stop then start to replay'
+    : monitoringReplayAvailable ? 'Select Replay with AI' : 'Deactivate → Activate to replay monitoring';
   return (
     <div className={s.preview} aria-live="polite">
       {enabled && imageUrl && (
@@ -270,43 +266,11 @@ export function AnnotatedPreview({ cameraId, enabled, pollInterval = 0, zoneId, 
           }}
         />
       )}
-      {enabled && imageUrl && frameSize && regions.length > 0 && <RegionLayer regions={regions} {...frameSize} />}
+      {enabled && imageUrl && frameSize && regions.length > 0 && <PreviewRegions regions={regions} {...frameSize} />}
       {visibleState !== 'live' && visibleState !== 'completed' && <div className={s.state}>{stateLabel(visibleState, errorCode)}</div>}
       {visibleState === 'live' && <span className={s.badge}>YOLO · BYTETRACK · LIVE{annotationContext ? ' · ' + annotationContext : ''}</span>}
-      {visibleState === 'completed' && <span className={s.badge}>Video completed · {purpose === 'MONITORING' ? 'Deactivate → Activate to replay monitoring' : 'Stop then start to replay'}{annotationContext ? ' · ' + annotationContext : ''}</span>}
+      {visibleState === 'completed' && <span className={s.badge}>Video completed · {replayHint}{annotationContext ? ' · ' + annotationContext : ''}</span>}
     </div>
-  );
-}
-
-// The viewBox matches the frame's pixel size and uses "meet", so the overlay lines up with the
-// letterboxed image (object-fit: contain) at any panel size.
-function RegionLayer({ regions, width, height }: { regions: PreviewRegion[]; width: number; height: number }) {
-  const fontSize = Math.max(12, Math.round(width * 0.016));
-  return (
-    <svg className={s.regions} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" data-testid="roi-overlay" aria-hidden="true">
-      {regions.map((region) => {
-        const anchor = region.points.reduce((top, point) => (point.y < top.y || (point.y === top.y && point.x < top.x) ? point : top));
-        return (
-          <g key={region.id}>
-            <polygon
-              className={s.region}
-              points={region.points.map(({ x, y }) => `${x * width},${y * height}`).join(' ')}
-              fill={region.color}
-              stroke={region.color}
-            />
-            <text
-              className={s.regionLabel}
-              x={anchor.x * width + fontSize * 0.4}
-              y={anchor.y * height + fontSize * 1.3}
-              fontSize={fontSize}
-              strokeWidth={fontSize * 0.3}
-            >
-              {region.label}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
   );
 }
 

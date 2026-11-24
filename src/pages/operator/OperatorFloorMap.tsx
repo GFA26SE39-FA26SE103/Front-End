@@ -9,6 +9,7 @@ import { OperatorLayout } from '../../components/OperatorLayout';
 import { Button, Chip, Overline } from '../../components/ui';
 import {
   COVERAGE,
+  camerasForZone,
   formatSeen,
   healthLabel,
   healthTone,
@@ -24,7 +25,7 @@ import s from './OperatorFloorMap.module.css';
 
 const HEALTH_REFRESH_MS = 30_000;
 const SNAPSHOT_REFRESH_MS = 10_000;
-const emptyDetails: FloorDetails = { zones: [], cameras: [], mappings: [] };
+const emptyDetails: FloorDetails = { zones: [], cameras: [], mappings: [], checkoutMappings: [], checkoutCoverageUnavailable: false };
 
 type FloorMapWorkspace = 'operator' | 'admin' | 'manager';
 
@@ -94,20 +95,16 @@ export default function OperatorFloorMap({ workspace = 'operator' }: { workspace
   }, [selectedFloorId]);
 
   const coverage = useMemo(
-    () => new Map(details.zones.map((zone) => [zone.zoneId, zoneCoverage(zone, details.cameras, details.mappings)])),
+    () => new Map(details.zones.map((zone) => [zone.zoneId, zoneCoverage(zone, details)])),
     [details],
   );
   const zoneTone = (zone: ZoneRecord) => COVERAGE[coverage.get(zone.zoneId)?.status ?? 'uncovered'].tone;
   const selectedCamera = details.cameras.find((camera) => camera.cameraId === selectedCameraId) ?? null;
   const selectedZone = details.zones.find((zone) => zone.zoneId === selectedZoneId) ?? null;
-  const selectedZoneCameras = selectedZoneId
-    ? details.cameras.filter((camera) => details.mappings.some((mapping) => (
-      mapping.zoneId === selectedZoneId && mapping.cameraId === camera.cameraId && mapping.status === 'ACTIVE'
-    )))
-    : [];
+  const selectedZoneCameras = selectedZoneId ? camerasForZone(selectedZoneId, details) : [];
   const highlighted = useMemo(() => {
     if (selectedZoneId) return new Set([selectedZoneId]);
-    if (selectedCameraId) return new Set(zonesForCamera(selectedCameraId, details.zones, details.mappings).map((zone) => zone.zoneId));
+    if (selectedCameraId) return new Set(zonesForCamera(selectedCameraId, details).map((zone) => zone.zoneId));
     return undefined;
   }, [details, selectedCameraId, selectedZoneId]);
   const unplaced = details.cameras.filter((camera) => camera.mapX === null || camera.mapY === null).length;
@@ -152,6 +149,7 @@ export default function OperatorFloorMap({ workspace = 'operator' }: { workspace
         <div className={s.board}>
           <span className={s.boardHint}>Click a camera to inspect it</span>
           {error && <p className={s.error} role="alert">{error}</p>}
+          {details.checkoutCoverageUnavailable && <p className={s.error} role="status">Checkout camera coverage could not be loaded.</p>}
           {map.status === 'ready' ? (
             <FloorPlanView
               mapUrl={map.url}
@@ -174,13 +172,13 @@ export default function OperatorFloorMap({ workspace = 'operator' }: { workspace
                 workspace === 'manager' ? (
                   <ManagerCameraPopup
                     camera={selectedCamera}
-                    zones={zonesForCamera(selectedCamera.cameraId, details.zones, details.mappings)}
+                    zones={zonesForCamera(selectedCamera.cameraId, details)}
                     onClose={() => setSelectedCameraId(null)}
                   />
                 ) : (
                   <CameraPopup
                     camera={selectedCamera}
-                    zones={zonesForCamera(selectedCamera.cameraId, details.zones, details.mappings)}
+                    zones={zonesForCamera(selectedCamera.cameraId, details)}
                     onOpenLive={() => navigate(cameraPath(selectedCamera.cameraId))}
                     onClose={() => setSelectedCameraId(null)}
                   />
@@ -204,9 +202,10 @@ export default function OperatorFloorMap({ workspace = 'operator' }: { workspace
           <Overline>LIVE CAMERAS</Overline>
           <div className={s.liveList}>
             {liveCameras.map((camera) => {
-              const cameraZones = zonesForCamera(camera.cameraId, details.zones, details.mappings);
+              const cameraZones = zonesForCamera(camera.cameraId, details);
               return <button key={camera.cameraId} className={s.liveCamera} aria-label={`Open ${camera.code} live`} onClick={() => navigate(cameraPath(camera.cameraId))}>
-                <span><strong>{camera.code}</strong><small>{cameraZones.map((zone) => zone.name).join(', ') || 'No mapped Zone'}</small></span>
+                <span><strong>{camera.code}</strong><small>{cameraZones.map((zone) => zone.name).join(', ')
+                  || (details.checkoutCoverageUnavailable ? 'Coverage unavailable' : 'No mapped Zone')}</small></span>
                 <span className={s.liveAction}>View live →</span>
               </button>;
             })}

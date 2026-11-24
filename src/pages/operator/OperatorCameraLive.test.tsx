@@ -1,18 +1,21 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getCamera, listCameraMappings, listCameras } from '../../api/cameras';
+import { getCamera, listCameraMappings, listCameras, prepareCameraPlayback } from '../../api/cameras';
+import { listCheckoutCounters, listCounterCheckoutMappings } from '../../api/checkout';
 import { getFloorMap, listFloors, listSupermarkets, listZones } from '../../api/floors';
+import { getCameraMonitoringRuntime, replayRecordedMonitoring } from '../../api/monitoringRuntime';
 import OperatorCameraLive from './OperatorCameraLive';
 vi.mock('../../api/monitoringRuntime', () => ({
-  getCameraMonitoringRuntime: vi.fn(async (cameraId: string) => ({ cameraId, state: 'STOPPED', reason: 'NO_ACTIVE_CONFIGURATION', zones: [], sourceElapsedMs: null })),
+  getCameraMonitoringRuntime: vi.fn(),
+  replayRecordedMonitoring: vi.fn(),
   getCameraIncidents: vi.fn(async () => ({ items: [], hasMore: false, nextCreatedAt: null, nextIncidentId: null })),
 }));
 
 vi.mock('../../components/AnnotatedPreview', () => ({
-  AnnotatedPreview: ({ cameraId, enabled, regions = [] }: { cameraId: string; enabled: boolean; regions?: { label: string; color: string }[] }) => (
-    <div data-testid="annotated-preview">
+  AnnotatedPreview: ({ cameraId, enabled, regions = [], restartKey = 0 }: { cameraId: string; enabled: boolean; regions?: { label: string; color: string }[]; restartKey?: number }) => (
+    <div data-testid="annotated-preview" data-restart-key={restartKey}>
       {cameraId}:{enabled ? 'on' : 'off'}
       {regions.map((region) => <span key={region.label} data-testid="roi-region">{region.label} {region.color}</span>)}
     </div>
@@ -23,6 +26,12 @@ vi.mock('../../api/cameras', () => ({
   getCamera: vi.fn(),
   listCameraMappings: vi.fn(),
   listCameras: vi.fn(),
+  prepareCameraPlayback: vi.fn(),
+}));
+
+vi.mock('../../api/checkout', () => ({
+  listCheckoutCounters: vi.fn(),
+  listCounterCheckoutMappings: vi.fn(),
 }));
 
 vi.mock('../../api/floors', () => ({
@@ -73,6 +82,12 @@ const renderPage = () => render(
 
 describe('OperatorCameraLive', () => {
   beforeEach(() => {
+    vi.mocked(getCameraMonitoringRuntime).mockImplementation(async (cameraId) => ({
+      cameraId, state: 'STOPPED', reason: 'NO_ACTIVE_CONFIGURATION', errorCode: null, videoSourceType: 'LIVE',
+      sessionId: null, sourceElapsedMs: null, observedAt: null, isStale: false, annotationContext: null, zones: [],
+    }));
+    vi.mocked(listCheckoutCounters).mockResolvedValue([]);
+    vi.mocked(listCounterCheckoutMappings).mockResolvedValue([]);
     vi.mocked(getCamera).mockResolvedValue(camera);
     vi.mocked(listSupermarkets).mockResolvedValue([{ supermarketId: 'store-1', code: 'STORE', name: 'Central store', address: null, status: 'ACTIVE' }]);
     vi.mocked(listFloors).mockResolvedValue([{
@@ -95,6 +110,8 @@ describe('OperatorCameraLive', () => {
 
     expect(await screen.findByRole('heading', { name: 'CAM-03 · Checkout, Aisles' })).toBeInTheDocument();
     expect(screen.getByTestId('annotated-preview')).toHaveTextContent('cam-3:on');
+    expect(screen.queryByRole('button', { name: 'Replay with AI' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Watch recording' })).not.toBeInTheDocument();
     expect(screen.queryByText('Source')).not.toBeInTheDocument();
     expect(await screen.findByTestId('floor-minimap')).toBeInTheDocument();
     const zoneRows = screen.getAllByText(/Checkout|Aisles/);
@@ -113,6 +130,58 @@ describe('OperatorCameraLive', () => {
 
     const regions = await screen.findAllByTestId('roi-region');
     expect(regions.map((region) => region.textContent)).toEqual(['Checkout #F97316', 'Aisles #3B82F6']);
+  });
+
+  it('shows a checkout-only mapping and overlays its three ROIs on the uploaded video replay', async () => {
+    const roi = [{ x: 0.1, y: 0.1 }, { x: 0.6, y: 0.1 }, { x: 0.6, y: 0.7 }];
+    const timestamp = '2026-11-24T08:00:00Z';
+    vi.mocked(listZones).mockResolvedValue([{ ...zone('zone-b', 'Checkout 1'), zoneType: 'CHECKOUT' }]);
+    vi.mocked(listCameraMappings).mockResolvedValue([]);
+    vi.mocked(listCheckoutCounters).mockResolvedValue([{
+      checkoutCounterId: 'counter-1', zoneId: 'zone-b', code: 'C01', name: 'Counter 1', isEnabled: true, createdAt: timestamp, updatedAt: timestamp,
+    }]);
+    vi.mocked(listCounterCheckoutMappings).mockResolvedValue([{
+      mappingId: 'checkout-1', cameraId: 'cam-3', checkoutCounterId: 'counter-1', laneRoi: roi, staffRoi: roi, serviceRoi: roi,
+      isEnabled: true, isQueueSource: true, createdAt: timestamp, updatedAt: timestamp,
+    }]);
+    vi.mocked(getCameraMonitoringRuntime).mockImplementation(async (cameraId) => ({
+      cameraId, state: 'COMPLETED', reason: 'COMPLETED', errorCode: null, videoSourceType: 'RECORDED',
+      sessionId: 'completed-session', sourceElapsedMs: 135000, observedAt: timestamp, isStale: false, annotationContext: null, zones: [],
+    }));
+    vi.mocked(prepareCameraPlayback).mockResolvedValue({ cameraId: 'cam-3', transport: 'MP4', url: '/recording?ticket=one' });
+    vi.mocked(replayRecordedMonitoring).mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(await screen.findByRole('heading', { name: 'CAM-03 · Checkout 1' })).toBeInTheDocument();
+    expect(screen.queryByText('Not mapped')).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('roi-region').map((region) => region.textContent)).toEqual([
+      'C01 · Lane ROI #2563EB', 'C01 · Staff ROI #7C5CC4', 'C01 · Service ROI #16965F',
+    ]);
+
+    await user.click(await screen.findByRole('button', { name: 'Watch recording' }));
+    const video = await screen.findByLabelText('Recorded video preview');
+    expect(video).toHaveAttribute('src', expect.stringContaining('/recording?ticket=one'));
+    expect(video).toHaveAttribute('autoplay');
+    expect(video).toHaveAttribute('controls');
+    Object.defineProperties(video, { videoWidth: { value: 1280 }, videoHeight: { value: 720 } });
+    fireEvent.loadedMetadata(video);
+    const overlay = screen.getByTestId('roi-overlay');
+    expect(overlay).toHaveAttribute('viewBox', '0 0 1280 720');
+    expect(overlay).toHaveTextContent('C01 · Lane ROI');
+    expect(overlay).toHaveTextContent('C01 · Staff ROI');
+    expect(overlay).toHaveTextContent('C01 · Service ROI');
+    expect(screen.queryByTestId('annotated-preview')).not.toBeInTheDocument();
+    expect(replayRecordedMonitoring).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Back to AI view' }));
+    expect(screen.getByTestId('annotated-preview')).toHaveTextContent('cam-3:on');
+    expect(screen.getByTestId('annotated-preview')).toHaveAttribute('data-restart-key', '0');
+
+    await user.click(screen.getByRole('button', { name: 'Replay with AI' }));
+    expect(replayRecordedMonitoring).toHaveBeenCalledExactlyOnceWith('cam-3', 'completed-session');
+    expect(screen.getByTestId('annotated-preview')).toHaveAttribute('data-restart-key', '1');
+    expect(screen.getByRole('button', { name: 'Replay with AI' })).toBeDisabled();
   });
 
   it('lists every camera on the floor and switches to another one', async () => {
