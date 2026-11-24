@@ -11,7 +11,7 @@ export type RoiBackground = { id: string; points: MapPoint[]; color: string; lab
 type Props = {
   previewUrl?: string; previewLoading?: boolean; cameraCode: string;
   draft: RoiDraft; onChange: (draft: RoiDraft) => void; color?: string; label?: string;
-  backgroundRois?: RoiBackground[]; disabled?: boolean; canDraw?: boolean;
+  backgroundRois?: RoiBackground[]; disabled?: boolean; canDraw?: boolean; readOnly?: boolean;
 };
 const HISTORY_LIMIT = 50;
 const MIN_RECTANGLE_SPAN = 0.005;
@@ -28,7 +28,8 @@ const isRectangle = (points: MapPoint[]) => points.length === 4
   });
 
 export function PolygonRoiEditor({ previewUrl, previewLoading = false, cameraCode, draft, onChange,
-  color = '#3B82F6', label = 'ROI', backgroundRois = [], disabled = false, canDraw = true }: Props) {
+  color = '#3B82F6', label = 'ROI', backgroundRois = [], disabled: temporarilyDisabled = false, canDraw = true, readOnly = false }: Props) {
+  const disabled = temporarilyDisabled || readOnly;
   const layerRef = useRef<SVGSVGElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const toolbarDrag = useRef<{ pointerId: number; clientX: number; clientY: number; x: number; y: number } | null>(null);
@@ -100,7 +101,7 @@ export function PolygonRoiEditor({ previewUrl, previewLoading = false, cameraCod
   };
 
   return <div className={s.previewColumn} aria-label={`${label} polygon editor`}>
-    {previewUrl && <p className={s.drawingHint}>{!canDraw ? 'Select a zone or counter to draw its ROI.'
+    {previewUrl && <p className={s.drawingHint}>{readOnly ? 'Saved ROIs are read-only.' : !canDraw ? 'Select a zone or counter to draw its ROI.'
       : complete ? 'Shape complete. Drag the area or its corner points to adjust it.'
         : shape === 'rectangle' ? 'Drag on the image to draw a rectangle.'
         : points.length < 3 ? 'Click around the area on the image to place at least 3 points.'
@@ -153,7 +154,7 @@ export function PolygonRoiEditor({ previewUrl, previewLoading = false, cameraCod
         {complete && points.length >= 3 && <polygon points={attributes(points)} fill={color} stroke={color} data-testid="active-roi" className={`${s.activeRoi} ${editing && !disabled ? s.movable : ''}`}
           onPointerDown={e => startDrag(e)} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={cancelDrag} onLostPointerCapture={cancelDrag}><title>{label}</title></polygon>}
       </svg>}
-      {previewUrl && points.map((point, i) => editing ? <button key={i} type="button" className={s.resizeHandle}
+      {!readOnly && previewUrl && points.map((point, i) => editing ? <button key={i} type="button" className={s.resizeHandle}
         style={{ left: `${point.x * 100}%`, top: `${point.y * 100}%`, '--roi-color': color } as CSSProperties}
         aria-label={`Resize ROI point ${i + 1}`} disabled={disabled}
         onPointerDown={e => startDrag(e, i)} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={cancelDrag} onLostPointerCapture={cancelDrag}
@@ -163,7 +164,7 @@ export function PolygonRoiEditor({ previewUrl, previewLoading = false, cameraCod
           onChange({ ...draft, points: points.map((p, index) => index === i ? clampNormalized({ x: p.x + delta[0] * step, y: p.y + delta[1] * step }) : p) });
         }} /> : <span key={i} className={s.point} style={{ left: `${point.x * 100}%`, top: `${point.y * 100}%`, '--roi-color': color } as CSSProperties} aria-hidden="true" />)}
     </div>
-    {previewUrl && typeof document !== 'undefined' && createPortal(<div ref={toolbarRef} className={s.roiToolbar} role="toolbar" aria-label="ROI drawing tools" style={{ left: toolbarPosition.x, top: toolbarPosition.y }}>
+    {!readOnly && previewUrl && typeof document !== 'undefined' && createPortal(<div ref={toolbarRef} className={s.roiToolbar} role="toolbar" aria-label="ROI drawing tools" style={{ left: toolbarPosition.x, top: toolbarPosition.y }}>
       <button type="button" className={s.roiToolbarHandle} aria-label="Move ROI toolbar" onKeyDown={moveToolbarByKeyboard}
         onPointerDown={event => {
           toolbarDrag.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, ...toolbarPosition };

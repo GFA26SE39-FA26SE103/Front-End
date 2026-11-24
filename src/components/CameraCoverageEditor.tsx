@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { createCameraRoi, deleteCameraRoi, getCameraPreview, listCameraMappings, updateCameraRoi,
   type CameraRecord, type CameraZoneMapping, type ZoneRecord } from '../api/cameras';
+import { ApiError } from '../api/client';
 import { PolygonRoiEditor, type RoiDraft } from './PolygonRoiEditor';
 import { validateRoiPolygon } from './roiPolygonValidation';
+import { useRoiMonitoringStatus } from './useRoiMonitoringStatus';
 import { CheckoutCoverageEditor } from './CheckoutCoverageEditor';
 import { Button, CardHeader, Chip } from './ui';
 import s from './CameraCoverageEditor.module.css';
@@ -61,6 +63,13 @@ function ZoneCoverageEditor({ camera, zones, onDirtyChange, onBusyChange }: Omit
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const monitoring = useRoiMonitoringStatus([target, ...mappings.map(mapping => mapping.zoneId)]);
+  const monitoringStatus = monitoring.status(target);
+  const readOnly = Boolean(target) && monitoringStatus !== 'editable';
+  const savedMapping = mappings.find(mapping => mapping.cameraZoneId === selectedId);
+  const shownDraft = readOnly
+    ? savedMapping ? { points: savedMapping.roiPolygon, complete: true, editing: false } : emptyDraft()
+    : draft;
   useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
   useEffect(() => { onBusyChange(busy); }, [busy, onBusyChange]);
   useEffect(() => {
@@ -85,6 +94,7 @@ function ZoneCoverageEditor({ camera, zones, onDirtyChange, onBusyChange }: Omit
   };
   const save = async () => {
     const zoneId = active || target;
+    if (busy || loading || monitoring.status(zoneId) !== 'editable') return;
     const issue = validateRoiPolygon(draft.points);
     if (!zoneId || !draft.complete || issue) { setError(issue ?? 'Finish the shape before saving.'); return; }
     setBusy(true); setError(''); setMessage('');
@@ -94,24 +104,30 @@ function ZoneCoverageEditor({ camera, zones, onDirtyChange, onBusyChange }: Omit
         : await createCameraRoi(camera.cameraId, zoneId, { roiPolygon: draft.points, status: 'ACTIVE' });
       setMappings(rows => [...rows.filter(m => m.cameraZoneId !== saved.cameraZoneId), saved]);
       setActive(saved.zoneId); setSelectedId(saved.cameraZoneId); setDirty(false); setMessage(`ROI saved for ${zoneById(zoneId)?.name ?? 'this zone'}.`);
-    } catch (e) { setError(messageOf(e, 'Could not save the ROI.')); }
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'MONITORING_ACTIVE') monitoring.reload();
+      setError(messageOf(e, 'Could not save the ROI.'));
+    }
     finally { setBusy(false); }
   };
   const remove = async (mapping: CameraZoneMapping) => {
-    if (!confirmChange()) return;
+    if (busy || monitoring.status(mapping.zoneId) !== 'editable' || !confirmChange()) return;
     setBusy(true); setError(''); setMessage('');
     try {
       await deleteCameraRoi(camera.cameraId, mapping.cameraZoneId);
       setMappings(rows => rows.filter(m => m.cameraZoneId !== mapping.cameraZoneId));
       if (selectedId === mapping.cameraZoneId) { setActive(''); setSelectedId(''); setDraft(emptyDraft()); setDirty(false); }
       setMessage(`${zoneById(mapping.zoneId)?.name ?? 'Zone'} mapping removed.`);
-    } catch (e) { setError(messageOf(e, 'Could not remove the ROI.')); }
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'MONITORING_ACTIVE') monitoring.reload();
+      setError(messageOf(e, 'Could not remove the ROI.'));
+    }
     finally { setBusy(false); }
   };
   return <div className={s.layout}>
     <PolygonRoiEditor key={`${active || target}:${editSession}`} previewUrl={previewUrl} previewLoading={previewLoading} cameraCode={camera.code}
-      draft={draft} disabled={busy || loading} canDraw={Boolean(target)} color={zoneById(active || target)?.colorHex ?? '#3B82F6'}
-      onChange={next => { setActive(target); setDraft(next); setDirty(true); setError(''); setMessage(''); }}
+      draft={shownDraft} disabled={busy || loading} readOnly={readOnly} canDraw={Boolean(target)} color={zoneById(active || target)?.colorHex ?? '#3B82F6'}
+      onChange={next => { if (!readOnly) { setActive(target); setDraft(next); setDirty(true); setError(''); setMessage(''); } }}
       backgroundRois={mappings.filter(m => m.cameraZoneId !== selectedId).map(m => ({ id: m.cameraZoneId, points: m.roiPolygon, color: zoneById(m.zoneId)?.colorHex ?? '#3B82F6' }))} />
     <aside className={s.controls}>
       <label className={s.field}>Target zone<select value={target} disabled={!previewUrl || busy || loading} onChange={e => {
@@ -120,24 +136,31 @@ function ZoneCoverageEditor({ camera, zones, onDirtyChange, onBusyChange }: Omit
         if (!confirmChange()) return;
         setTarget(e.target.value); setActive(''); setSelectedId(''); setDraft(emptyDraft()); setDirty(false); setError(''); setMessage('');
       }}><option value="">Select a zone</option>{zones.map(z => <option key={z.zoneId} value={z.zoneId}>{z.name} ({z.code})</option>)}</select></label>
-      <Button variant="secondary" disabled={!target || busy || loading} onClick={() => {
-        if (!confirmChange()) return;
+      {readOnly && <div className={s.monitoringLock} role="status">
+        {monitoringStatus === 'active' ? <>Monitoring is active. Deactivate it before editing ROIs.{' '}
+          <a href={`/admin/ai-config?zoneId=${encodeURIComponent(target)}`} onClick={e => { if (!confirmChange()) e.preventDefault(); }}>Open Monitoring rules</a></>
+          : monitoringStatus === 'checking' ? 'Checking monitoring status…' : <>Monitoring status could not be checked.{' '}
+            <Button variant="secondary" onClick={monitoring.reload}>Retry</Button></>}
+      </div>}
+      <Button variant="secondary" disabled={!target || busy || loading || readOnly} onClick={() => {
+        if (readOnly || !confirmChange()) return;
         setActive(target); setSelectedId(''); setDraft(emptyDraft()); setEditSession(n => n + 1); setDirty(false); setError(''); setMessage('');
       }}>Add another ROI to this zone</Button>
-      <Button disabled={!target || !draft.complete || !dirty || busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save ROI to zone'}</Button>
-      <p className={s.hint}>{!target ? 'Select the zone you want this camera to monitor.'
+      <Button disabled={!target || !draft.complete || !dirty || busy || readOnly} onClick={() => void save()}>{busy ? 'Saving…' : 'Save ROI to zone'}</Button>
+      {!readOnly && <p className={s.hint}>{!target ? 'Select the zone you want this camera to monitor.'
         : !draft.complete ? 'Place points on the camera image and select Finish shape to unlock Save.'
           : dirty ? 'The shape is ready. Save it to link this area to the selected zone.'
-            : 'The saved ROI is shown on the camera image.'}</p>
+            : 'The saved ROI is shown on the camera image.'}</p>}
       <div className={s.mappingHeader}><strong>Mapped zones</strong><Chip tone="neutral">{mappings.length}</Chip></div>
       {loading ? <p className={s.muted}>Loading mappings…</p> : mappings.length === 0 ? <p className={s.muted}>No zones are mapped to this camera yet.</p>
         : <ul className={s.mappingList}>{mappings.map(mapping => {
           const zone = zoneById(mapping.zoneId), name = zone?.name ?? 'Unknown zone';
+          const editable = monitoring.status(mapping.zoneId) === 'editable';
           return <li key={mapping.cameraZoneId}>
             <span className={s.zoneDot} style={{ backgroundColor: zone?.colorHex ?? '#3B82F6' }} aria-hidden="true" /><span><strong>{name}</strong><small>{mapping.roiPolygon.length} points</small></span>
             {mapping.status === 'ACTIVE' && <a href={`/admin/ai-config?zoneId=${encodeURIComponent(mapping.zoneId)}`} onClick={e => { if (!confirmChange()) e.preventDefault(); }}>Configure monitoring for {name}</a>}
-            <button type="button" disabled={!previewUrl || busy} onClick={() => edit(mapping)}>Edit ROI for {name}</button>
-            <button type="button" className={s.remove} disabled={busy} onClick={() => void remove(mapping)}>Remove ROI for {name}</button>
+            <button type="button" disabled={!previewUrl || busy} onClick={() => edit(mapping)}>{editable ? 'Edit' : 'View'} ROI for {name}</button>
+            <button type="button" className={s.remove} disabled={busy || !editable} onClick={() => void remove(mapping)}>Remove ROI for {name}</button>
           </li>;
         })}</ul>}
       {error && <p className={s.error} role="alert">{error}</p>}{message && <p className={s.success} role="status">{message}</p>}

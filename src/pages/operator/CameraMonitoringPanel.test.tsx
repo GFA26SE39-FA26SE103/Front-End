@@ -23,7 +23,9 @@ describe('live monitoring and incidents', () => {
     expect(screen.getByText('Leave Warning when x < 1')).toBeInTheDocument();
     expect(screen.getByText('Leave Critical when x < 2')).toBeInTheDocument();
     expect(screen.getByText(/confidence:0.5/)).toBeInTheDocument();
-    expect(screen.getByText('EVENT WARNING')).toBeInTheDocument();
+    expect(screen.getByText('Highest level reached in this event: Warning')).toBeInTheDocument();
+    expect(screen.getByText('Current level:').parentElement).toHaveTextContent('Current level:Below thresholds');
+    expect(screen.getByText('Rule details')).toBeInTheDocument();
     expect(screen.getByText('No open incidents for this camera or its mapped zones.')).toBeInTheDocument();
   });
   it('shows activation ranges, separate exit thresholds and the level currently held by the rule', () => {
@@ -34,7 +36,18 @@ describe('live monitoring and incidents', () => {
     expect(screen.getByText('Critical', { selector: 'strong' }).closest('p')).toHaveTextContent('Critical · x ≥ 20');
     expect(screen.getByText('Leave Warning when x < 8')).toBeInTheDocument();
     expect(screen.getByText('Leave Critical when x < 18')).toBeInTheDocument();
-    expect(screen.getByText('CRITICAL')).toBeInTheDocument();
+    expect(screen.getByText('Current level:').parentElement).toHaveTextContent('Current level:Critical');
+  });
+
+  it('shows checkout lane occupancy separately from the Long Queue metric', () => {
+    const zone = state.runtime!.zones[0];
+    const rule = { ...zone.rules[0], mode: 'CHECKOUT_QUEUE_LENGTH', metricValue: 1 };
+    render(<CameraMonitoringPanel state={{ ...state, runtime: { ...state.runtime!, zones: [
+      { ...zone, peopleCount: null, lanePeopleCount: 5, queueCount: 1, rules: [rule] },
+    ] } }} />);
+    expect(screen.getByText('People in lane ROI: 5 · Queue (≥5s): 1')).toBeInTheDocument();
+    expect(screen.getByText('Queue length (5s continuous dwell) · Metric: 1 people')).toBeInTheDocument();
+    expect(screen.queryByText(/People in ROI:/)).not.toBeInTheDocument();
   });
 
   it('shows stale errors instead of an empty or healthy feed', () => {

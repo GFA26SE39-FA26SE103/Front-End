@@ -9,10 +9,12 @@ import {
   listCheckoutCounters, listCounterCheckoutMappings, saveCheckoutMapping, updateCheckoutCounter,
   type CheckoutCounter, type CheckoutMapping,
 } from '../api/checkout';
+import { getMonitoring, type MonitoringConfiguration } from '../api/monitoring';
 import type { PolygonRoiEditor } from './PolygonRoiEditor';
 import { CheckoutCoverageEditor } from './CheckoutCoverageEditor';
 
 vi.mock('../api/cameras', () => ({ getCameraPreview: vi.fn() }));
+vi.mock('../api/monitoring', () => ({ getMonitoring: vi.fn() }));
 vi.mock('../api/checkout', () => ({
   createCheckoutCounter: vi.fn(), updateCheckoutCounter: vi.fn(), deleteCheckoutCounter: vi.fn(),
   listCheckoutCounters: vi.fn(), listCameraCheckoutMappings: vi.fn(), listCounterCheckoutMappings: vi.fn(),
@@ -74,6 +76,7 @@ async function chooseCounter(user: ReturnType<typeof userEvent.setup>, id = 'cou
 describe('CheckoutCoverageEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getMonitoring).mockRejectedValue(new ApiError(404, 'NOT_FOUND', 'No monitoring configuration.'));
     counters = [{ ...counter }, { ...counter, checkoutCounterId: 'counter-2', code: 'LANE-2', name: 'Lane two' }];
     mappings = [];
     vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -164,6 +167,37 @@ describe('CheckoutCoverageEditor', () => {
     expect(updateCheckoutCounter).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Save coverage' }));
     await waitFor(() => expect(vi.mocked(saveCheckoutMapping).mock.calls[1][2].expectedUpdatedAt).toBe(nextVersion));
+  });
+
+  it('shows saved checkout ROIs but locks changes while checking and when monitoring is active', async () => {
+    mappings = [{ ...ownMapping, serviceRoi: service, isEnabled: true, isQueueSource: true }];
+    const pending = deferred<MonitoringConfiguration>();
+    vi.mocked(getMonitoring).mockReturnValue(pending.promise);
+    const user = userEvent.setup();
+    render(<CheckoutCoverageEditor camera={camera} zones={zones} />);
+    await chooseCounter(user);
+
+    expect(screen.getByText('Checking monitoring status…')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Complete Lane ROI' })).toBeDisabled();
+    const config: MonitoringConfiguration = {
+      configId: 'config-1', zoneId: zone.zoneId, name: 'Checkout monitoring', confidenceThreshold: .5,
+      status: 'ACTIVE', createdByUserId: 'admin', createdAt: version, updatedAt: version, rules: [],
+    };
+    await act(async () => pending.resolve(config));
+
+    expect(screen.getByText(/Monitoring is active/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'View Staff ROI' }));
+    expect(JSON.parse(screen.getByTestId('active-draft').textContent!).points).toEqual(staff);
+    expect(screen.getByTestId('background-rois')).toHaveTextContent('Lane ROI');
+    expect(screen.getByTestId('background-rois')).toHaveTextContent('Service ROI');
+    expect(screen.getByRole('button', { name: 'Complete Staff ROI' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save checkout mapping' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save counter' })).toBeDisabled();
+
+    vi.mocked(getMonitoring).mockResolvedValue({ ...config, status: 'INACTIVE' });
+    await user.click(screen.getByRole('button', { name: 'Reload saved checkout data' }));
+    expect(await screen.findByRole('button', { name: 'Edit Staff ROI' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Save checkout mapping' })).toBeEnabled();
   });
 
   it('preserves the original exact mapping version and draft across 409 until an explicit reload', async () => {
