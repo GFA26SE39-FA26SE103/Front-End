@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { MapPoint } from '../api/floors';
 import { clientToNormalized, clampNormalized } from './floorPlanGeometry';
@@ -31,6 +31,7 @@ export function PolygonRoiEditor({ previewUrl, previewLoading = false, cameraCod
   color = '#3B82F6', label = 'ROI', backgroundRois = [], disabled: temporarilyDisabled = false, canDraw = true, readOnly = false }: Props) {
   const disabled = temporarilyDisabled || readOnly;
   const layerRef = useRef<SVGSVGElement>(null);
+  const previewFrameRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const toolbarDrag = useRef<{ pointerId: number; clientX: number; clientY: number; x: number; y: number } | null>(null);
   const [toolbarPosition, setToolbarPosition] = useState({ x: 16, y: 16 });
@@ -43,6 +44,11 @@ export function PolygonRoiEditor({ previewUrl, previewLoading = false, cameraCod
     x: Math.max(0, Math.min(Math.max(0, window.innerWidth - (toolbarRef.current?.offsetWidth ?? 260)), x)),
     y: Math.max(0, Math.min(Math.max(0, window.innerHeight - (toolbarRef.current?.offsetHeight ?? 100)), y)),
   });
+  useLayoutEffect(() => {
+    if (!previewUrl || readOnly || !previewFrameRef.current) return;
+    const frame = previewFrameRef.current.getBoundingClientRect();
+    if (frame.width > 0) setToolbarPosition(clampToolbar(frame.left, frame.bottom + 16));
+  }, [previewUrl, readOnly]);
   useEffect(() => {
     const keepOnScreen = () => setToolbarPosition(current => {
       const next = clampToolbar(current.x, current.y);
@@ -106,7 +112,7 @@ export function PolygonRoiEditor({ previewUrl, previewLoading = false, cameraCod
         : shape === 'rectangle' ? 'Drag on the image to draw a rectangle.'
         : points.length < 3 ? 'Click around the area on the image to place at least 3 points.'
           : 'Add more points or select Finish shape to close the outline.'}</p>}
-    <div className={s.previewFrame}>
+    <div ref={previewFrameRef} className={s.previewFrame}>
       {previewUrl ? <img className={s.preview} src={previewUrl} alt={`Camera preview for ${cameraCode}`} />
         : <div className={s.previewState}>{previewLoading ? 'Loading camera preview…' : 'Camera preview unavailable.'}</div>}
       {previewUrl && <svg ref={layerRef} className={`${s.drawingLayer} ${canDraw && !disabled && !complete ? s.drawing : ''}`} data-testid="roi-drawing-layer" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-label={`${label} drawing area`}
