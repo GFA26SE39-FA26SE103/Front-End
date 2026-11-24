@@ -243,6 +243,10 @@
 .monitoring { display: grid; gap: 10px; font-size: 12px; overflow-wrap: anywhere; }
 .monitoring p { margin: 4px 0; line-height: 1.5; }
 .runtimeRule { border-top: 1px solid var(--color-border); padding-top: 8px; margin-top: 8px; }
+.levelLine { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: 11px; color: var(--color-text-muted); }
+.ruleDetails { margin-top: 6px; }
+.ruleDetails summary { cursor: pointer; color: var(--color-text-muted); font-size: 11px; font-weight: 650; }
+.ruleDetails[open] summary { margin-bottom: 4px; }
 .dismissHelp, .dismissError, .dismissSuccess { margin: 0; font-size: 11px; line-height: 1.5; }
 .dismissHelp { color: var(--color-text-muted); }
 .dismissError { color: var(--color-danger); }

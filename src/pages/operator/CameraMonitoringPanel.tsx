@@ -23,6 +23,8 @@ const densityDisplay = new Intl.NumberFormat(undefined, { maximumFractionDigits:
 const seconds = (value: number) => (value / 1000).toFixed(1).replace(/\.0$/, '');
 const date = (value: string) => new Date(value).toLocaleString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'medium', timeStyle: 'short' });
 const slaTone = (priority: string | null): Tone => priority === 'CRITICAL' ? 'danger' : priority === 'HIGH' ? 'warning' : priority === 'MEDIUM' ? 'primary' : 'neutral';
+const levelLabel = (level?: string | null) => level === 'CRITICAL' ? 'Critical' : level === 'WARNING' ? 'Warning' : level ?? 'Below thresholds';
+const levelTone = (level?: string | null): Tone => level === 'CRITICAL' ? 'danger' : level === 'WARNING' ? 'warning' : 'neutral';
 const ended = (status: string) => ['CLOSED', 'DISMISSED', 'CANCELLED'].includes(status);
 export function CameraMonitoringPanel({ state, canDismiss = false }: { state: CameraMonitoringState; canDismiss?: boolean }) {
   const { runtime, feed, runtimeError, feedError, loading } = state;
@@ -70,11 +72,17 @@ export function CameraMonitoringPanel({ state, canDismiss = false }: { state: Ca
           <p>People in lane ROI: {count(runtime.isStale || runtimeError ? null : zone.lanePeopleCount)} · Queue (≥5s): {count(zone.queueCount)}</p>
         </> : <p>People in ROI: {count(zone.peopleCount)} · Queue (≥5s): {count(zone.queueCount)}</p>}
         {zone.rules.map(rule => <div key={rule.ruleId} className={s.runtimeRule}>
-          <div className={s.zoneRow}><strong>{rule.incidentName}</strong>{rule.operationalEventPriority && <Chip tone={rule.operationalEventPriority === 'CRITICAL' ? 'danger' : 'warning'}>EVENT {rule.operationalEventPriority}</Chip>}</div>
+          <div className={s.zoneRow}><strong>{rule.incidentName}</strong>
+            {rule.metricValue !== null && (rule.mode !== 'CROWD_DENSITY' || !runtime.isStale && !runtimeError) && <span className={s.levelLine}><span>Current level:</span><Chip tone={levelTone(rule.currentLevel)}>{levelLabel(rule.currentLevel)}</Chip></span>}
+          </div>
+          {rule.operationalEventPriority && <p className={s.muted}>Highest level reached in this event: {levelLabel(rule.operationalEventPriority)}</p>}
           {rule.mode === 'CROWD_DENSITY' ? <>
             <p>Crowd density · Metric: {runtime.isStale || runtimeError || rule.metricValue === null ? 'Unavailable' : densityDisplay.format(rule.metricValue) + ' people/m²'}</p>
             {zone.areaM2 != null && <p className={s.muted}>Measured zone area: {zone.areaM2} m²</p>}
           </> : <p>{rule.mode === 'PEOPLE_COUNT' ? 'People count in ROI' : rule.mode === 'QUEUE_LENGTH' || rule.mode === 'CHECKOUT_QUEUE_LENGTH' ? 'Queue length (5s continuous dwell)' : rule.mode} · Metric: {count(rule.metricValue)} {rule.unit === 'PEOPLE' ? 'people' : rule.unit}</p>}
+          <p>{reasonLabel(rule.reason)}{rule.cooldownRemainingSec > 0 ? ` · ${Math.ceil(rule.cooldownRemainingSec)}s cooldown remaining` : ''}</p>
+          {rule.incidentId && <p>Open incident</p>}
+          <details className={s.ruleDetails}><summary>Rule details</summary>
           <p>
             <strong>Warning</strong> · {rule.warningThreshold} ≤ x &lt; {rule.criticalThreshold}<br />
             <span className={s.muted}>Leave Warning when x &lt; {rule.warningExitThreshold ?? rule.warningThreshold}</span>
@@ -83,10 +91,8 @@ export function CameraMonitoringPanel({ state, canDismiss = false }: { state: Ca
             <strong>Critical</strong> · x ≥ {rule.criticalThreshold}<br />
             <span className={s.muted}>Leave Critical when x &lt; {rule.criticalExitThreshold ?? rule.criticalThreshold}</span>
           </p>
-          {rule.metricValue !== null && (rule.mode !== 'CROWD_DENSITY' || !runtime.isStale && !runtimeError) && <p>Current level: <Chip tone={rule.currentLevel === 'CRITICAL' ? 'danger' : rule.currentLevel === 'WARNING' ? 'warning' : 'neutral'}>{rule.currentLevel ?? 'Below thresholds'}</Chip></p>}
           <p>Warning sustain: {seconds(rule.warningProgressMs)}/{rule.sustainSec}s · Critical: {seconds(rule.criticalProgressMs)}/{rule.sustainSec}s</p>
-          <p>{reasonLabel(rule.reason)}{rule.cooldownRemainingSec > 0 ? ` · ${Math.ceil(rule.cooldownRemainingSec)}s cooldown remaining` : ''}</p>
-          {rule.incidentId && <p>Open incident</p>}
+          </details>
         </div>)}
       </article>)}
     </>}
