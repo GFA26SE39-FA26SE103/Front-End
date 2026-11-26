@@ -110,7 +110,7 @@ function CameraLiveView({ cameraId, workspace }: { cameraId: string; workspace: 
         ['Service ROI', '#16965F', mapping.serviceRoi],
       ] as const;
       return rois.flatMap(([name, color, points]) => points && points.length >= 3
-        ? [{ id: `${mapping.mappingId}:${name}`, label: `${mapping.counterCode} · ${name}`, color, points }] : []);
+        ? [{ id: `${mapping.mappingId}:${name}`, label: `${mapping.counterName} · ${name}`, color, points }] : []);
     });
     return [...zoneRegions, ...checkoutRegions];
   }, [cameraId, details]);

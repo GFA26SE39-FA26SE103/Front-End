@@ -156,7 +156,7 @@ describe('OperatorCameraLive', () => {
     expect(await screen.findByRole('heading', { name: 'CAM-03 · Checkout 1' })).toBeInTheDocument();
     expect(screen.queryByText('Not mapped')).not.toBeInTheDocument();
     expect(screen.getAllByTestId('roi-region').map((region) => region.textContent)).toEqual([
-      'C01 · Lane ROI #2563EB', 'C01 · Staff ROI #7C5CC4', 'C01 · Service ROI #16965F',
+      'Counter 1 · Lane ROI #2563EB', 'Counter 1 · Staff ROI #7C5CC4', 'Counter 1 · Service ROI #16965F',
     ]);
 
     await user.click(await screen.findByRole('button', { name: 'Watch recording' }));
@@ -168,9 +168,9 @@ describe('OperatorCameraLive', () => {
     fireEvent.loadedMetadata(video);
     const overlay = screen.getByTestId('roi-overlay');
     expect(overlay).toHaveAttribute('viewBox', '0 0 1280 720');
-    expect(overlay).toHaveTextContent('C01 · Lane ROI');
-    expect(overlay).toHaveTextContent('C01 · Staff ROI');
-    expect(overlay).toHaveTextContent('C01 · Service ROI');
+    expect(overlay).toHaveTextContent('Counter 1 · Lane ROI');
+    expect(overlay).toHaveTextContent('Counter 1 · Staff ROI');
+    expect(overlay).toHaveTextContent('Counter 1 · Service ROI');
     expect(screen.queryByTestId('annotated-preview')).not.toBeInTheDocument();
     expect(replayRecordedMonitoring).not.toHaveBeenCalled();
 

@@ -112,7 +112,7 @@ function TaskDetail({ taskId }: { taskId: string }) {
           <Card><CardHeader title="SLA snapshot" /><dl className={s.kv}>
             <dt>Priority</dt><dd>{task.slaPriorityCode ?? 'Unavailable'}</dd><dt>Policy version</dt><dd>{task.slaPolicyVersion ?? '—'}</dd>
             <dt>Respond by</dt><dd>{date(task.responseDeadlineAt ?? null)}</dd><dt>Resolve by</dt><dd>{date(task.resolutionDeadlineAt ?? null)}</dd>
-          </dl>{!task.slaPolicyId && <p className={s.info}>No SLA policy snapshot is available. The UI does not invent a deadline.</p>}</Card>
+          </dl>{!task.slaPolicyId && <p className={s.info}>No SLA policy available.</p>}</Card>
           <TaskVerification task={task} canReview={canAssign} onDecided={message => { setNotice(message); refresh(); }} />
         </div><div className={s.stack}><Card><CardHeader title="Assignment" />
           <dl className={s.kv}><dt>Staff</dt><dd>{task.assigneeName ?? 'Unassigned'}</dd><dt>Method</dt><dd>{assignmentMethod(task)}</dd><dt>Verification</dt><dd>{task.verificationMode ? `${task.verificationMode}${task.verificationMethod ? ` · ${task.verificationMethod.replaceAll('_', ' ').toLowerCase()}` : ''}` : '—'}</dd><dt>Updated</dt><dd>{date(task.updatedAt)}</dd></dl>

@@ -73,7 +73,6 @@ export function CameraConnectionConfiguration({ cameraId, onCancel, onSaved }: P
   return (
     <Dialog title="Configure camera connection" busy={saving || loading} onClose={onCancel}>
       <form className={s.dialogForm} aria-label="Configure camera connection" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-        <p className={s.dialogIntro}>Review the current HTTP/HTTPS or RTSP source. The saved password is never displayed.</p>
         <div className={s.grid}>
           <Field label="Stream URL"><TextInput value={streamUrl} onChange={setStreamUrl} disabled={loading} placeholder="rtsp://192.168.1.198:554/stream2" /></Field>
           <Field label="Username (optional)"><TextInput value={username} onChange={setUsername} disabled={loading} autoComplete="section-camera username" /></Field>

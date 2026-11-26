@@ -208,7 +208,6 @@ export function ResetLinkExpired() {
           <Icon name="auth-expired-sm" size={16} />RESET LINK UNAVAILABLE
         </p>
         <p style={{ fontSize: 14, fontWeight: 600 }}>Request a new reset link</p>
-        <p style={{ fontSize: 11, lineHeight: '17px', color: 'var(--color-text-muted)' }}>For your security, reset links expire after a limited time and can only be used once.</p>
       </div>
       <button type="button" className={s.primary} onClick={() => navigate('/forgot-password')}>Send a new reset link</button>
       <p className={s.center} style={{ lineHeight: '20px', marginTop: 8 }}>We’ll send the new link to your account email.</p>

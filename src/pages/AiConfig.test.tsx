@@ -160,7 +160,7 @@ describe('API-backed monitoring configuration', () => {
     await create();
     expect(within(screen.getByLabelText('Add a rule')).getByRole('option', { name: 'Excessive Waiting Time' })).toBeEnabled();
     chooseRule('wait');
-    expect(screen.getByLabelText('Excessive Waiting Time unit')).toHaveValue('minutes');
+    expect(screen.queryByLabelText('Excessive Waiting Time unit')).not.toBeInTheDocument();
     expect(screen.getByText(/Review requires.*Service ROI/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Excessive Waiting Time warning exit'), { target: { value: '3' } });
     fireEvent.change(screen.getByLabelText('Excessive Waiting Time critical exit'), { target: { value: '6' } });
@@ -212,7 +212,7 @@ describe('API-backed monitoring configuration', () => {
     expect(within(screen.getByLabelText('Add a rule')).getAllByRole('option', { name: /Congestion/ })).toHaveLength(1);
     chooseRule('crowd:CROWD_DENSITY');
     const label = 'Overcrowding / Congestion';
-    expect(screen.getByLabelText(label + ' unit')).toHaveValue('people/m²');
+    expect(screen.queryByLabelText(label + ' unit')).not.toBeInTheDocument();
     expect(screen.getByLabelText(label + ' warning')).toHaveValue(2);
     expect(screen.getByText(/Enter the measured zone area in Store layout/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(label + ' warning'), { target: { value: '0.60' } });
@@ -239,7 +239,7 @@ describe('API-backed monitoring configuration', () => {
     crowdCatalog = true;
     config = { ...savedConfig(), rules: [{ ...savedConfig().rules[0], eventTypeId: 'crowd', eventCode: crowdType.code, thresholdUnit: 'PEOPLE_PER_M2', warningThreshold: 2, criticalThreshold: 3, parametersJson: '{"custom":7}' }] };
     show(); fireEvent.click(await screen.findByRole('button', { name: 'Edit configuration' }));
-    expect(screen.getByLabelText('Overcrowding / Congestion unit')).toHaveValue('PEOPLE_PER_M2');
+    expect(screen.queryByLabelText('Overcrowding / Congestion unit')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Overcrowding / Congestion enabled')).toBeEnabled();
     fireEvent.click(screen.getByLabelText('Overcrowding / Congestion enabled'));
     expect(screen.getByLabelText('Overcrowding / Congestion enabled')).toBeDisabled();
@@ -254,7 +254,7 @@ describe('API-backed monitoring configuration', () => {
     show(); fireEvent.click(await screen.findByRole('button', { name: 'Edit configuration' }));
     expect(screen.getByText('People count')).toBeInTheDocument();
     expect(screen.queryByLabelText('Overcrowding / Congestion measurement')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Overcrowding / Congestion unit')).toHaveValue('people');
+    expect(screen.queryByLabelText('Overcrowding / Congestion unit')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Overcrowding / Congestion warning')).toHaveValue(3);
     expect(writes).toHaveLength(0);
   });
@@ -356,6 +356,8 @@ describe('API-backed monitoring configuration', () => {
 
   it('saves numeric rules with bearer and versioned review/activation', async () => {
     await create(); chooseRule(); setQueueExits();
+    expect(screen.queryByLabelText('Long Queue unit')).not.toBeInTheDocument();
+    expect(screen.queryByText(/All rules in this zone use this minimum AI score/)).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Detection confidence'), { target: { value: '0.7' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save configuration' })); await screen.findByText('Configuration saved as Draft. Review it before activating.');
     const saved = writes.find(r => r.method === 'PUT')!;

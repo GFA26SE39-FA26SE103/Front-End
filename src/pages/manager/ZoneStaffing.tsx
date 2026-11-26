@@ -93,7 +93,6 @@ export default function ZoneStaffing() {
       <div className={s.page}>
         <section className={s.ownership} aria-label="Minimum staffing ownership">
           <div><strong>Manager staffing baseline</strong><span>Set the minimum Staff required for each Zone. The same baseline applies to every active Work Shift.</span></div>
-          <span>Admin only creates and maps Zones.</span>
         </section>
         <section className={s.filters} aria-label="Staffing filters">
           <label>

@@ -121,7 +121,7 @@ describe('Manager Zone staffing overview', () => {
     expect(screen.getByRole('heading', { name: 'Floor 2 · Upper floor' })).toBeInTheDocument();
     expect(within(screen.getByTestId('zone-z-checkout')).getByText('2 / 3')).toBeInTheDocument();
     expect(within(screen.getByTestId('zone-z-produce')).getByText('No Staff assigned')).toBeInTheDocument();
-    expect(screen.getByText('Admin only creates and maps Zones.')).toBeInTheDocument();
+    expect(screen.queryByText('Admin only creates and maps Zones.')).not.toBeInTheDocument();
 
     const checkout = within(screen.getByTestId('zone-z-checkout'));
     await userEvent.click(checkout.getByRole('button', { name: 'Set minimum' }));

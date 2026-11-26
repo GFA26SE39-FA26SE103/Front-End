@@ -208,7 +208,7 @@ function Overview({ floors, summaries, types, missingZone, floorId, onFloorChang
         return <button key={z.zoneId} type="button" className={s.zoneCard} aria-label={'View rules for ' + z.name} onClick={() => onOpen(z.zoneId)}>
           <div className={s.head}><span className={s.zoneCode}><i style={{ background: z.colorHex ?? 'var(--color-primary)' }} />{z.code}</span><Chip tone={summary === 'error' ? 'danger' : statusTone(saved?.status)}>{summary === 'error' ? 'Load failed' : saved?.status ?? 'Not configured'}</Chip></div>
           <h3>{z.name}</h3><p className={s.configName}>{saved?.name ?? (summary === 'error' ? 'Configuration unavailable' : 'No monitoring configuration yet')}</p>
-          {summary === 'error' ? <p className={s.error}>Could not load this configuration. Open its detail to retry.</p> : saved ? <><p className={s.help}>Confidence: {saved.confidenceThreshold} · {saved.rules.length} operational event {saved.rules.length === 1 ? 'rule' : 'rules'}</p><div className={s.ruleTags}>{saved.rules.map(r => <span key={r.eventTypeId}>{ruleName(r, types)}{!r.enabled ? ' · Disabled' : ''}</span>)}</div>{!saved.rules.length && <p className={s.help}>No operational event rules saved. Edit to add one.</p>}</> : <p className={s.help}>Add operational event rules to configure monitoring for this zone.</p>}
+          {summary === 'error' ? <p className={s.error}>Could not load this configuration. Open its detail to retry.</p> : saved ? <><p className={s.help}>Confidence: {saved.confidenceThreshold} · {saved.rules.length} operational event {saved.rules.length === 1 ? 'rule' : 'rules'}</p><div className={s.ruleTags}>{saved.rules.map(r => <span key={r.eventTypeId}>{ruleName(r, types)}{!r.enabled ? ' · Disabled' : ''}</span>)}</div>{!saved.rules.length && <p className={s.help}>No operational event rules saved. Edit to add one.</p>}</> : null}
           <span className={s.cardLink}>View rules →</span>
         </button>;
       })}</div>
@@ -463,7 +463,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
             <div><dt>Last saved</dt><dd>{formatTime(config.updatedAt)}</dd></div>
           </dl>
           <div className={s.activation}>
-            <div><h3>{active ? 'Configuration activated' : 'Configuration activation'}</h3><p>{active ? 'Deactivate before editing or deleting this configuration.' : 'Saving creates a Draft. Review the saved camera, ROI and rules, then activate this configuration.'}</p></div>
+            <div><h3>{active ? 'Configuration activated' : 'Configuration activation'}</h3><p>{active ? 'Deactivate before editing or deleting this configuration.' : 'Review and activate the saved configuration.'}</p></div>
             {!active && <Button disabled={busy} onClick={() => void reviewConfiguration()}>{densityBlocked ? 'Review configuration' : 'Review & activate'}</Button>}
             {active && <Button variant="secondary" disabled={busy} onClick={() => void changeActive(false)}>Deactivate configuration</Button>}
           </div>
@@ -502,9 +502,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       {!loading && showForm && <form noValidate onSubmit={e => { e.preventDefault(); void save(e.currentTarget); }}>
         <fieldset disabled={locked} className={s.fields}>
           <label className={s.field}>Configuration name<input ref={nameInput} aria-label="Configuration name" maxLength={100} value={name} onChange={e => { setName(e.target.value); touch(); }} /></label>
-          <label className={s.field}>Minimum detection confidence<input aria-label="Detection confidence" aria-describedby="zone-confidence-help" type="number" min="0" max="1" step=".0001" value={confidence} onChange={e => { setConfidence(e.target.value); touch(); }} />
-            <span id="zone-confidence-help" className={s.fieldHelp}>All rules in this zone use this minimum AI score to count a detected person. At 0.5, a detection scored 0.65 counts if it is inside the ROI, while a score of 0.40 is filtered out.</span>
-          </label>
+          <label className={s.field}>Minimum detection confidence<input aria-label="Detection confidence" type="number" min="0" max="1" step=".0001" value={confidence} onChange={e => { setConfidence(e.target.value); touch(); }} /></label>
         </fieldset>
 
         <h3 className={s.section}>Operational event rules <span className={s.required}>Required</span></h3>
@@ -538,7 +536,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
               {hasMeasuredArea ? `Measured zone area: ${areaM2} m².` : 'You can save this rule as a Draft. Enter the measured zone area in Store layout before activation.'}
               {' '}Use one active ROI covering that floor area.
             </p>}
-            {!supported && <p className={s.help}>You can save this rule with Enabled off. This editor cannot enable the selected measurement mode.</p>}
+            {!supported && <p className={s.help}>This measurement mode is unavailable.</p>}
             {!supported && checkoutMode && zone.zoneType !== 'CHECKOUT' && <p className={s.help}>{label} only applies to checkout zones. Use Overcrowding / Congestion for other areas.</p>}
             {!supported && t?.unsupportedReason && <p className={s.help}>{t.unsupportedReason}</p>}
             {checkoutMode && supported && <p className={s.help}>
@@ -577,7 +575,6 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
               })}
             </div>
             <fieldset disabled={locked} className={s.fields}>
-              <label className={s.field}>Threshold unit<input aria-label={label + ' unit'} value={t?.thresholdUnit && supported ? unitName(r.thresholdUnit) : r.thresholdUnit} maxLength={30} readOnly={!!t?.thresholdUnit} onChange={e => changeRule(r.eventTypeId, { thresholdUnit: e.target.value })} /></label>
               <label className={s.field}>Sustain time (seconds)<input aria-label={label + ' sustain time'} type="number" min="0" step="1" value={r.sustainSec} onChange={e => changeRule(r.eventTypeId, { sustainSec: e.target.value })} /></label>
               <label className={s.field}>Cooldown (seconds)<input aria-label={label + ' cooldown'} type="number" min="0" step="1" value={r.cooldownSec} onChange={e => changeRule(r.eventTypeId, { cooldownSec: e.target.value })} /></label>
               {(mode === 'CROWD_DENSITY' || checkoutMode) && supported && <label className={s.field}>Clear duration (seconds)
@@ -617,7 +614,6 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
     {review && !showForm && <section className={`${s.panel} ${s.review}`} id="configuration-review" aria-labelledby="configuration-review-title">
       <h2 className={s.title} id="configuration-review-title">Review & activate</h2>
       <p>Zone: {review.zone.name} · Configuration: {review.configuration.name} · {review.configuration.status}</p>
-      <p className={s.help}>Saved version: {review.configuration.updatedAt} · Confidence: {review.configuration.confidenceThreshold}</p>
       <ul>{review.configuration.rules.map(r => <li key={r.eventTypeId}>{ruleName(r, types)}: {r.enabled ? 'Enabled' : 'Disabled'} · {modeLabel(ruleMode(r, types))} · warning {band(r.warningThreshold, r.warningExitThreshold, '')}, critical {band(r.criticalThreshold, r.criticalExitThreshold, unitName(r.thresholdUnit))} · sustain {r.sustainSec}s · cooldown {r.cooldownSec}s
         {r.enabled && r.ruleId && <RuleResponses summary={policies[r.ruleId]} />}
       </li>)}</ul>

@@ -14,7 +14,7 @@ export type FloorDetails = {
   zones: ZoneRecord[];
   cameras: CameraRecord[];
   mappings: CameraZoneMapping[];
-  checkoutMappings: (CheckoutMapping & { zoneId: string; counterCode: string })[];
+  checkoutMappings: (CheckoutMapping & { zoneId: string; counterName: string })[];
   checkoutCoverageUnavailable: boolean;
 };
 
@@ -49,7 +49,7 @@ export async function loadFloorDetails(floorId: string, signal: AbortSignal): Pr
       .then((rows) => Promise.all(rows.flat().filter((counter) => counter.isEnabled).map(async (counter) => {
         const sources = await listCounterCheckoutMappings(counter.checkoutCounterId, signal);
         return sources.filter((source) => source.isEnabled).map((source) => ({
-          ...source, zoneId: counter.zoneId, counterCode: counter.code,
+          ...source, zoneId: counter.zoneId, counterName: counter.name,
         }));
       })))
       .catch(() => null),

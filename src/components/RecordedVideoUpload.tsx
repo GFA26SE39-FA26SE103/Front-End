@@ -36,7 +36,7 @@ export function RecordedVideoUpload({ cameraId, onCancel, onSaved, onBusy }: Pro
   return (
     <Dialog title="Upload video as camera source" busy={saving} onClose={onCancel}>
       <form className={s.dialogForm} aria-label="Upload recorded video" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-        <p className={s.dialogIntro}>MP4 · maximum 200 MB. Processing starts only when you start AI preview.</p>
+        <p className={s.dialogIntro}>MP4 · maximum 200 MB.</p>
         <p className={s.replacementNote}>This replaces the current source and resets its connection test. Existing zone mappings remain: review their ROI if the scene changes. Deactivate monitoring before replacing its source.</p>
         <label className={s.fileField}>
           <span>Video file</span>

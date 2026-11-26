@@ -424,14 +424,14 @@ describe('Cameras registration', () => {
     await user.click(screen.getByRole('button', { name: 'Start preview' }));
 
     await waitFor(() => expect(screen.getByText('STREAM_UNAVAILABLE')).toBeInTheDocument(), { timeout: 4_000 });
-    expect(screen.getByText('Source unavailable')).toBeInTheDocument();
+    expect(screen.getByText('Preview unavailable')).toBeInTheDocument();
     expect(screen.queryByText('LIVE FEED')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('row', { name: /CAM-OTHER/i }));
     await screen.findByText('Other camera', { exact: false });
     await user.click(screen.getByRole('row', { name: /CAM-RUNTIME-FAIL/i }));
 
-    expect(screen.getByText('Source unavailable')).toBeInTheDocument();
+    expect(screen.getByText('Preview unavailable')).toBeInTheDocument();
     expect(screen.getByText('STREAM_UNAVAILABLE')).toBeInTheDocument();
     expect(screen.queryByText('Configured')).not.toBeInTheDocument();
   });

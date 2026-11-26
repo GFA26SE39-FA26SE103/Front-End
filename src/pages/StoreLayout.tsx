@@ -40,6 +40,14 @@ const initialMapState: MapState = { status: 'idle', url: null, contentType: null
 // New cameras are registered on the Cameras page without a map position; Store layout only places them.
 const isPlaced = (camera: Pick<CameraRecord, 'mapX' | 'mapY'>) => camera.mapX !== null && camera.mapY !== null;
 
+function getSuggestedFloorNumber(floors: FloorRecord[]) {
+  return floors
+    .map((floor) => floor.floorNumber)
+    .filter((number) => Number.isSafeInteger(number) && number > 0)
+    .sort((a, b) => a - b)
+    .reduce((next, number) => number === next ? next + 1 : next, 1);
+}
+
 export default function StoreLayout() {
   const [params, setParams] = useSearchParams();
   const requestedFloorId = params.get('floorId') ?? '';
@@ -455,7 +463,7 @@ export default function StoreLayout() {
       {floorEditor && stores[0] && <FloorEditor
         storeId={stores[0].supermarketId}
         floor={floorEditor === 'new' ? undefined : floorEditor}
-        suggestedNumber={Math.max(0, ...floors.map(f => f.floorNumber)) + 1}
+        suggestedNumber={getSuggestedFloorNumber(floors)}
         onClose={() => setFloorEditor(null)}
         onSaved={saved => {
           const creating = floorEditor === 'new';

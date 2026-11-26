@@ -113,7 +113,7 @@ export function TaskVerification({ task, canReview, onDecided }: { task: Operati
         ? 'Automatic verification is pending.'
         : 'Waiting for the source event to clear before automatic verification.'}</p> : <>
         {missing.length > 0 && <p className={s.error}>Missing {missing.join(' and ')}. Reject the submission so the Staff member can add it.</p>}
-        {metricException && <p className={s.info}>The backend switched this task to manual verification because it could not validate the recovery evidence.</p>}
+        {metricException && <p className={s.info}>Automatic verification failed. Operator review required.</p>}
         {isReplacement
           ? <p className={s.info}>This is the replacement Staff member's work. Rejecting it stops automatic dispatch and returns the task to you for manual assignment.</p>
           : priorRejections > 0 && <p className={s.info}>This Staff member's work was rejected {priorRejections === 1 ? 'once' : `${priorRejections} times`} before. Another rejection sends the task to a different Staff member automatically.</p>}

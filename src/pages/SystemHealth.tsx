@@ -69,9 +69,9 @@ export default function SystemHealth() {
       {data && <>
         <div className={s.stats}>
           <Stat label="Overall status" value={overall} note={data.totals.unresolvedHealthEventCount + ' unresolved camera alerts'} />
-          <Stat label="Camera connectivity" value={data.totals.onlineCameraCount + ' / ' + enabled.length + ' online'} note={data.totals.cameraCount + ' registered · valid enabled live or recorded sources'} />
-          <Stat label="Monitoring readiness" value={ready + ' / ' + enabled.length + ' ready'} note="Connectivity, visual health and processing must all be available" />
-          <Stat label="Active health alerts" value={String(data.totals.unresolvedHealthEventCount)} note="Open or investigating camera-health events" />
+          <Stat label="Camera connectivity" value={data.totals.onlineCameraCount + ' / ' + enabled.length + ' online'} note={data.totals.cameraCount + ' registered'} />
+          <Stat label="Monitoring readiness" value={ready + ' / ' + enabled.length + ' ready'} />
+          <Stat label="Active health alerts" value={String(data.totals.unresolvedHealthEventCount)} />
         </div>
 
         <section className={s.panel}>
@@ -91,13 +91,12 @@ export default function SystemHealth() {
               </tr>)}
             </tbody></table></div>}
           {!!data.healthEvents.length && <div className={s.events}><h3>Unresolved camera health alerts</h3>{data.healthEvents.map(event => <div key={event.healthEventId}><strong>{event.cameraCode}</strong><Chip tone={event.status === 'OPEN' ? 'danger' : 'warning'}>{event.status}</Chip><span>{healthIssueLabel(event.eventType)} · {time(event.detectedAt)}</span><Link to={cameraLink(event.cameraId)}>Investigate camera →</Link></div>)}</div>}
-          <p className={s.scope}>Missing frames are unavailable measurements, never a numeric zero. Camera failures do not deactivate monitoring configurations or transfer measurements to another camera.</p>
         </section>
       </>}
     </div>
   </AdminLayout>;
 }
 
-function Stat({ label, value, note }: { label: string; value: string; note: string }) {
-  return <section className={s.stat} aria-label={label}><p>{label}</p><strong>{value}</strong><span>{note}</span></section>;
+function Stat({ label, value, note }: { label: string; value: string; note?: string }) {
+  return <section className={s.stat} aria-label={label}><p>{label}</p><strong>{value}</strong>{note && <span>{note}</span>}</section>;
 }

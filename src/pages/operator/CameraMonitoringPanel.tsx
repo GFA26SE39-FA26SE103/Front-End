@@ -62,7 +62,6 @@ export function CameraMonitoringPanel({ state, canDismiss = false }: { state: Ca
       {runtime.isStale && <p role="status">Last observed measurements are stale, not current.</p>}
       {runtime.state === 'COMPLETED' && <p>Video completed. Deactivate → Activate configuration to replay monitoring.</p>}
       {runtime.annotationContext && <p className={s.muted}>Boxes: {runtime.annotationContext}</p>}
-      {runtime.sourceElapsedMs !== null && <p className={s.muted}>Source time: {seconds(runtime.sourceElapsedMs)}s · Last observation: {runtime.observedAt ? new Date(runtime.observedAt).toLocaleString() : '—'}</p>}
       {runtime.zones.map(zone => <article key={zone.zoneId} className={s.incident}>
         <div className={s.zoneRow}><strong>{zone.zoneName}</strong><Chip tone={zone.configurationStatus === 'ACTIVE' ? 'success' : 'neutral'}>{zone.configurationStatus}</Chip></div>
         <p className={s.muted}>Confidence: {zone.confidence} · Version: {zone.configVersion ? new Date(zone.configVersion).toLocaleString() : '—'}</p>

@@ -131,6 +131,26 @@ describe('StoreLayout', () => {
     expect(screen.getByRole('heading', { name: 'Upper floor' })).toBeInTheDocument();
   });
 
+  it('suggests the lowest unused positive floor number', async () => {
+    const thirdFloor = { ...floor, floorId: 'floor-3', floorNumber: 3, name: 'Third floor', mapAssetUrl: null };
+    vi.mocked(listFloors).mockResolvedValueOnce([floor, thirdFloor]);
+    const user = userEvent.setup();
+    const firstView = renderPage();
+    await screen.findByRole('heading', { name: 'Ground floor' });
+    await user.click(screen.getByRole('button', { name: 'Create floor' }));
+    let dialog = screen.getByRole('dialog', { name: 'Create floor' });
+    expect(within(dialog).getByLabelText('Floor number')).toHaveValue(2);
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    firstView.unmount();
+
+    vi.mocked(listFloors).mockResolvedValueOnce([floor, { ...floor, floorId: 'floor-2', floorNumber: 2 }, thirdFloor]);
+    renderPage();
+    await screen.findByRole('heading', { name: 'Ground floor' });
+    await user.click(screen.getByRole('button', { name: 'Create floor' }));
+    dialog = screen.getByRole('dialog', { name: 'Create floor' });
+    expect(within(dialog).getByLabelText('Floor number')).toHaveValue(4);
+  });
+
   it('edits floor details and keeps the map and loaded cameras', async () => {
     const user = userEvent.setup(); renderPage();
     await screen.findByRole('img', { name: /uploaded floor plan/i });

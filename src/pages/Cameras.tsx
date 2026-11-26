@@ -407,7 +407,7 @@ export default function Cameras() {
           </div>
 
           {lifecycleError && <p className={s.errorBanner} role="alert">{lifecycleError}</p>}
-          {camera.lifecycleStatus !== 'ACTIVE' && <p className={s.inactiveNote}>This camera is inactive. Its configuration and history are retained; reactivate it before testing, previewing or changing its source.</p>}
+          {camera.lifecycleStatus !== 'ACTIVE' && <p className={s.inactiveNote}>Reactivate this camera to edit or preview it.</p>}
 
           <div className={s.media}>
             <div className={s.trackedPreview}>
@@ -503,7 +503,7 @@ export default function Cameras() {
               </div>}
             </div>
           </div>
-          {camera.zones.length ? <div className={s.actions}>{camera.zones.map(zone => <a key={zone.zoneId} href={`/admin/ai-config?zoneId=${encodeURIComponent(zone.zoneId)}`}>Configure monitoring: {zone.name}</a>)}</div> : <p className={s.previewNote}>Map this camera and draw its zone ROI in <a href="/admin/store-layout">Store layout</a> before configuring monitoring.</p>}
+          {camera.zones.length ? <div className={s.actions}>{camera.zones.map(zone => <a key={zone.zoneId} href={`/admin/ai-config?zoneId=${encodeURIComponent(zone.zoneId)}`}>Configure monitoring: {zone.name}</a>)}</div> : <p className={s.previewNote}>Configure camera coverage in <a href="/admin/store-layout">Store layout</a>.</p>}
         </Card>
       )}
       {camera && editorOpen && <CameraEditor camera={camera.record} floorLabel={camera.floorLabel} onClose={() => setEditorOpen(false)} onSaved={saved} />}
@@ -598,7 +598,7 @@ function connectionBadge(camera: CameraView, connection: ConnectionView | null, 
     const label = mode === 'ai' ? 'AI DETECTION' : connection?.protocol === 'FILE' ? 'RECORDED VIDEO' : 'LIVE FEED';
     return { label, tone: 'success' as const };
   }
-  if (previewFailed) return { label: 'Source unavailable', tone: 'danger' as const };
+  if (previewFailed) return { label: 'Preview unavailable', tone: 'danger' as const };
   if (preview === 'connecting' || preview === 'starting' || connection?.cameraId !== camera.id || connection.state === 'checking') return { label: 'Connecting…', tone: 'warning' as const };
   if (connection.state === 'failed') return { label: 'Source test failed', tone: 'danger' as const };
   if (connection.state === 'ready') {
