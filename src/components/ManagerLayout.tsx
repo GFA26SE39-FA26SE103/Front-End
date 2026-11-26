@@ -13,7 +13,7 @@ const NAV = [
   { to: '/manager/schedule', label: 'Schedule', icon: 'nav-grid', activeIcon: 'nav-grid-active' },
   { to: '/manager/floor-map', label: 'Floor map', icon: 'layers' },
   { to: '/manager/staffing', label: 'Zone staffing', icon: 'nav-users', activeIcon: 'nav-users-active' },
-  { to: '/manager/swaps', label: 'Swap requests', icon: 'nav-users', activeIcon: 'nav-users-active' },
+  { to: '/manager/swaps', label: 'Shift changes', icon: 'nav-users', activeIcon: 'nav-users-active' },
   { to: '/manager/leave', label: 'Leave', icon: 'nav-file' },
   { to: '/manager/shifts', label: 'Work Shifts', icon: 'rule-clock' },
   { to: '/manager/notifications', label: 'Notifications', icon: 'nav-bell', activeIcon: 'nav-bell-active' },

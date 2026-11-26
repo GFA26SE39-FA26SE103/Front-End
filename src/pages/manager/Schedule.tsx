@@ -8,6 +8,7 @@ import { Dialog } from '../../components/Dialog';
 import { ManagerLayout } from '../../components/ManagerLayout';
 import { Badge, Button, Card, CardHeader, StatCard } from '../../components/ui';
 import { addDays, clock, dateTime, dayLabel, isoDate, longDayLabel, problem, range, time, weekStart } from './dates';
+import { DirectSwapDialog } from './DirectSwapDialog';
 import { listStoreZones, shiftHasStarted, type StoreZone } from './planningData';
 import { useLoad } from './useLoad';
 import s from './manager.module.css';
@@ -16,7 +17,7 @@ type Loaded = { schedule: ScheduleView; workShifts: WorkShift[]; zones: StoreZon
 type ShiftSlot = { shift: WorkShift; workDate: string };
 type Editing =
   | (ShiftSlot & { kind: 'assign' | 'roster' })
-  | (ShiftSlot & { kind: 'edit'; assignment: ScheduledShift })
+  | (ShiftSlot & { kind: 'edit' | 'swap'; assignment: ScheduledShift })
   | { kind: 'publish' };
 
 const live = (a: ScheduledShift) => a.status !== 'CANCELLED';
@@ -106,10 +107,10 @@ export default function Schedule() {
               <StatCard label="Assigned shifts" value={String(assignments.length)} note={`${assignments.length - data.schedule.draftCount} published`} tone="primary" />
               <StatCard label="Drafts" value={String(data.schedule.draftCount)} note="Staff cannot see drafts yet" tone={data.schedule.draftCount ? 'warning' : 'success'} />
               <StatCard label="Coverage gaps" value={String(data.schedule.gapCount)} note="Zones below minimum staff" tone={data.schedule.gapCount ? 'danger' : 'success'} />
-              <StatCard label="Swap actions" value={String(data.pendingSwaps)} note="Need Manager action" tone={data.pendingSwaps ? 'warning' : 'success'} />
+              <StatCard label="Pending shift changes" value={String(data.pendingSwaps)} note="Need Manager action" tone={data.pendingSwaps ? 'warning' : 'success'} />
             </div>
             {data.pendingSwaps > 0 && (
-              <p className={s.info}>{data.pendingSwaps === 1 ? '1 swap request waits' : `${data.pendingSwaps} swap requests wait`} for your decision. <Link className={s.back} to="/manager/swaps">Review swaps</Link></p>
+              <p className={s.info}>{data.pendingSwaps === 1 ? '1 shift change request needs your attention.' : `${data.pendingSwaps} shift change requests need your attention.`} <Link className={s.back} to="/manager/swaps">Review requests</Link></p>
             )}
             {inactiveZones.length > 0 && (
               <p className={s.warning} role="status">
@@ -206,9 +207,14 @@ export default function Schedule() {
       {editing?.kind === 'edit' && data && (
         <AssignmentDialog shiftId={editing.assignment.shiftId} assignment={editing.assignment}
           title={`${editing.assignment.shiftName} · ${longDayLabel(editing.assignment.workDate)}`}
-          workDate={editing.assignment.workDate} zones={data.zones} assignments={assignments}
+          workDate={editing.assignment.workDate} zones={data.zones}
+          onSwap={() => setEditing({ ...editing, kind: 'swap' })}
           onClose={() => setEditing({ kind: 'roster', shift: editing.shift, workDate: editing.workDate })}
           onDone={(name) => refresh(`${name}'s shift was updated.`)} />
+      )}
+      {editing?.kind === 'swap' && (
+        <DirectSwapDialog initialWeek={week} initialAssignmentId={editing.assignment.shiftAssignmentId}
+          onClose={() => setEditing({ ...editing, kind: 'edit' })} onDone={refresh} />
       )}
     </ManagerLayout>
   );
@@ -263,7 +269,7 @@ function ShiftRosterDialog({ slot, people, coverage, activeZoneIds, onClose, onS
                         <strong>{person.fullName}</strong>{' '}
                         <span className={s.rosterPersonStatus}>
                           {person.status === 'DRAFT' && <><span className={s.draftCount}>Draft</span>{' '}</>}
-                          {person.pendingSwapRequestId && <><span className={s.draftCount}>Swap pending</span>{' '}</>}
+                          {person.pendingSwapRequestId && <><span className={s.draftCount}>Change pending</span>{' '}</>}
                           {person.checkInAt
                             ? <AssignmentCheckIn assignment={person} />
                             : person.status !== 'DRAFT' && <span className={s.rosterCount}>Not checked in</span>}
@@ -316,51 +322,45 @@ function PublishDialog({ from, to, drafts, gaps, onClose, onDone }: {
 }
 
 /** Adds a Staff member to a shift, or changes the person or Zone of an existing one. */
-function AssignmentDialog({ shiftId, workDate, title, zones, assignment, assignments = [], onClose, onDone }: {
+function AssignmentDialog({ shiftId, workDate, title, zones, assignment, onSwap, onClose, onDone }: {
   shiftId: string; workDate: string; title: string; zones: StoreZone[];
-  assignment?: ScheduledShift; assignments?: ScheduledShift[]; onClose: () => void; onDone: (name: string) => void;
+  assignment?: ScheduledShift; onSwap?: () => void; onClose: () => void; onDone: (name: string) => void;
 }) {
   const [options, setOptions] = useState<StaffOption[] | null>(null);
   const [userId, setUserId] = useState(assignment?.userId ?? '');
   const [zoneId, setZoneId] = useState(assignment?.zones[0]?.zoneId ?? (zones.length === 1 ? zones[0].zoneId : ''));
   const [reason, setReason] = useState('');
-  const [directType, setDirectType] = useState<'COVER' | 'SWAP'>('COVER');
-  const [targetAssignmentId, setTargetAssignmentId] = useState('');
+  const [showReplacement, setShowReplacement] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const locked = assignment && !assignment.editable;
+  const published = assignment?.status === 'SCHEDULED';
+  const showStaff = !published || showReplacement;
 
   useEffect(() => {
-    if (locked) return;
+    if (locked || !showStaff) return;
     const controller = new AbortController();
     void getStaffOptions(shiftId, workDate, assignment?.shiftAssignmentId, controller.signal)
       .then((list) => { if (!controller.signal.aborted) setOptions(list); })
       .catch((reason: unknown) => { if (!controller.signal.aborted) setError(problem(reason)); });
     return () => controller.abort();
-  }, [shiftId, workDate, assignment?.shiftAssignmentId, locked]);
+  }, [shiftId, workDate, assignment?.shiftAssignmentId, locked, showStaff]);
 
-  const sorted = [...(options ?? [])].sort((a, b) => Number(b.eligible) - Number(a.eligible) || a.fullName.localeCompare(b.fullName));
-  const chosen = options?.find((o) => o.userId === userId);
-  const swapTargets = assignments.filter((candidate) => candidate.shiftAssignmentId !== assignment?.shiftAssignmentId
-    && candidate.userId !== assignment?.userId && candidate.editable && !candidate.checkInAt);
-  const targetAssignment = swapTargets.find((candidate) => candidate.shiftAssignmentId === targetAssignmentId);
+  const replacing = published && showReplacement;
+  const sorted = (options ?? []).filter((option) => !replacing || option.userId !== assignment.userId)
+    .sort((a, b) => Number(b.eligible) - Number(a.eligible) || a.fullName.localeCompare(b.fullName));
+  const chosen = sorted.find((o) => o.userId === userId);
+  const canSave = replacing ? chosen?.eligible && userId !== assignment.userId && reason.trim().length > 0
+    : !showStaff || chosen?.eligible;
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (!userId) return setError('Choose a Staff member.');
-    if (!zoneId) return setError('Choose a Zone.');
-    const directPublishedChange = assignment?.status === 'SCHEDULED'
-      && (directType === 'SWAP' || userId !== assignment.userId);
-    if (directPublishedChange && !reason.trim()) return setError('Write the reason for this Manager-directed change.');
-    if (assignment?.status === 'SCHEDULED' && directType === 'SWAP' && !targetAssignment) return setError('Choose the second shift to swap.');
+    if (busy || !canSave) return;
+    if (!replacing && !zoneId) return setError('Choose a Zone.');
     setBusy(true);
     setError('');
     try {
-      if (assignment?.status === 'SCHEDULED' && directType === 'SWAP' && targetAssignment) {
-        await directShiftChange({ type: 'SWAP', requesterShiftAssignmentId: assignment.shiftAssignmentId,
-          targetUserId: targetAssignment.userId, targetShiftAssignmentId: targetAssignment.shiftAssignmentId, note: reason.trim() });
-        onDone(`${assignment.fullName} and ${targetAssignment.fullName}`);
-      } else if (assignment?.status === 'SCHEDULED' && userId !== assignment.userId) {
+      if (replacing) {
         await directShiftChange({ type: 'COVER', requesterShiftAssignmentId: assignment.shiftAssignmentId,
           targetUserId: userId, targetShiftAssignmentId: null, note: reason.trim() });
         onDone(chosen?.fullName ?? 'Staff');
@@ -410,10 +410,10 @@ function AssignmentDialog({ shiftId, workDate, title, zones, assignment, assignm
         </dl>
         <p className={s.info}>
           {assignment.pendingSwapRequestId
-            ? 'A swap request for this shift is waiting. Decide it first, then edit the shift.'
+            ? 'A shift change request is pending for this assignment. Resolve it before editing.'
             : 'This shift has started or the Staff member checked in, so it can no longer be changed (BR-35).'}
         </p>
-        {assignment.pendingSwapRequestId && <Link className={s.back} to={`/manager/swaps/${assignment.pendingSwapRequestId}`}>Open the swap request</Link>}
+        {assignment.pendingSwapRequestId && <Link className={s.back} to={`/manager/swaps/${assignment.pendingSwapRequestId}`}>Open request</Link>}
         <div className={s.formActions}><Button variant="secondary" onClick={onClose}>Back to roster</Button></div>
       </Dialog>
     );
@@ -422,33 +422,29 @@ function AssignmentDialog({ shiftId, workDate, title, zones, assignment, assignm
   return (
     <Dialog title={title} busy={busy} onClose={onClose}>
       <form className={s.form} onSubmit={(e) => void save(e)}>
-        {assignment?.status === 'SCHEDULED' && (
-          <label>
-            Manager action
-            <select value={directType} onChange={(event) => setDirectType(event.target.value as 'COVER' | 'SWAP')} disabled={busy}>
-              <option value="COVER">Assign replacement / cover</option>
-              <option value="SWAP">Swap with another Staff shift</option>
-            </select>
-          </label>
+        {published && (
+          <>
+            <dl className={s.facts}>
+              <dt>Staff</dt><dd>{assignment.fullName}</dd>
+              {replacing && <><dt>Zone</dt><dd>{assignment.zones.map((zone) => zone.zoneName).join(', ') || 'No zone'}</dd></>}
+            </dl>
+            <div className={s.tabs}>
+              <Button variant="secondary" aria-expanded={showReplacement} disabled={busy} onClick={() => {
+                setShowReplacement(!showReplacement);
+                setUserId(assignment.userId);
+                setReason('');
+                setError('');
+              }}>Assign replacement</Button>
+              <Button variant="secondary" aria-haspopup="dialog" disabled={busy} onClick={onSwap}>Swap two shifts</Button>
+            </div>
+          </>
         )}
-        {assignment?.status === 'SCHEDULED' && directType === 'SWAP' ? (
-          <fieldset className={s.fieldset}>
-            <legend>Shift to exchange</legend>
-            <select value={targetAssignmentId} onChange={(event) => setTargetAssignmentId(event.target.value)} disabled={busy}>
-              <option value="" disabled>Choose another future shift</option>
-              {swapTargets.map((candidate) => (
-                <option key={candidate.shiftAssignmentId} value={candidate.shiftAssignmentId}>
-                  {candidate.fullName} · {candidate.shiftName} · {longDayLabel(candidate.workDate)} · {range(candidate.startsAt, candidate.endsAt)}
-                </option>
-              ))}
-            </select>
-            {swapTargets.length === 0 && <p className={s.note}>No other editable Staff shift is available in this week.</p>}
-          </fieldset>
-        ) : (
+        {showStaff && (
         <fieldset className={s.fieldset}>
-          <legend>Staff member</legend>
+          <legend>{replacing ? 'Replacement staff member' : 'Staff member'}</legend>
+          {replacing && <p className={s.note}>The replacement must have the same specialty as {assignment.fullName}.</p>}
           {!options && !error && <p className={s.note} role="status">Checking who can work this shift…</p>}
-          {options && options.length === 0 && <p className={s.note}>There are no active Staff accounts.</p>}
+          {options && sorted.length === 0 && <p className={s.note}>{replacing ? 'There are no other active Staff accounts.' : 'There are no active Staff accounts.'}</p>}
           <div className={s.options}>
             {sorted.map((o) => (
               <label key={o.userId} className={`${s.option} ${o.userId === userId ? s.selected : ''} ${o.eligible ? '' : s.blocked}`}>
@@ -458,7 +454,7 @@ function AssignmentDialog({ shiftId, workDate, title, zones, assignment, assignm
                   <span className={s.optionName}>{o.fullName}</span>
                   {o.specialtyName === null && <span className={s.optionNote}> · No specialty assigned</span>}
                   {o.specialtyName && <span className={s.optionNote}> · {o.specialtyName}{o.specialtyCode && ` (${o.specialtyCode})`}</span>}
-                  <span className={s.optionNote}> · {o.weeklyHoursAfter} / 48 h · {o.weeklyHoursAfter <= 40 ? 'recommended' : 'high workload'}</span>
+                  <span className={s.optionNote}> · {o.weeklyHoursAfter} / 48 h{(!replacing || o.eligible) && ` · ${o.weeklyHoursAfter <= 40 ? 'recommended' : 'high workload'}`}</span>
                   {o.problems.map((p) => <span key={p} className={s.optionProblem} style={{ display: 'block' }}>{p}</span>)}
                 </span>
               </label>
@@ -466,20 +462,18 @@ function AssignmentDialog({ shiftId, workDate, title, zones, assignment, assignm
           </div>
         </fieldset>
         )}
-        <label>
+        {!replacing && <label>
           Zone
           <select value={zoneId} onChange={(e) => setZoneId(e.target.value)} disabled={busy || zones.length === 0}>
             <option value="" disabled>Choose a zone</option>
             {zones.map((z) => <option key={z.zoneId} value={z.zoneId}>{z.name}</option>)}
           </select>
           {zones.length === 0 && <span className={s.note}>No active zones. The Administrator sets them up in Store layout.</span>}
-        </label>
+        </label>}
         {assignment && (
           <label>
-            {assignment.status === 'SCHEDULED' && (directType === 'SWAP' || userId !== assignment.userId)
-              ? 'Manager assignment reason (required)'
-              : 'Reason if you remove this shift (optional)'}
-            <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Emergency coverage adjustment" disabled={busy} />
+            {replacing ? 'Manager assignment reason (required)' : 'Reason if you remove this shift (optional)'}
+            <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Emergency coverage adjustment" required={replacing} disabled={busy} />
           </label>
         )}
         {error && <p className={s.error} role="alert">{error}</p>}
@@ -487,9 +481,8 @@ function AssignmentDialog({ shiftId, workDate, title, zones, assignment, assignm
           {assignment && <Button variant="dangerGhost" disabled={busy} onClick={() => void cancel()}>Remove from shift</Button>}
           <div className={s.actions}>
             <Button variant="secondary" disabled={busy} onClick={onClose}>{assignment ? 'Back to roster' : 'Close'}</Button>
-            <Button type="submit" disabled={busy || (directType === 'COVER' && !chosen?.eligible) || (directType === 'SWAP' && !targetAssignment)}>
-              {busy ? 'Saving…' : assignment?.status === 'SCHEDULED' && directType === 'SWAP' ? 'Apply direct swap'
-                : assignment?.status === 'SCHEDULED' && userId !== assignment.userId ? 'Assign cover' : assignment ? 'Save changes' : 'Add as draft'}
+            <Button type="submit" disabled={busy || !canSave}>
+              {busy ? 'Saving…' : replacing ? 'Assign cover' : assignment ? 'Save changes' : 'Add as draft'}
             </Button>
           </div>
         </div>
