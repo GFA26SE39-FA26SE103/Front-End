@@ -9,7 +9,7 @@ import { addDays, isoDate, weekStart } from './dates';
 import { shiftHasStarted, shiftHours } from './planningData';
 import Schedule from './Schedule';
 import WorkShifts from './WorkShifts';
-import { SwapRequestDetail } from './SwapRequests';
+import { SwapRequestDetail, SwapRequests } from './SwapRequests';
 
 const manager = { userId: 'mgr', email: 'mgr@store.test', fullName: 'Trần Minh', roleId: 'role-MANAGER', role: 'MANAGER', status: 'ACTIVE' };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -257,6 +257,68 @@ describe('Manager console', () => {
     await waitFor(() => expect(calls.find((c) => c.method === 'PATCH')).toMatchObject({
       path: `/api/schedule/assignments/${existing.shiftAssignmentId}`, body: { zoneIds: ['z-b'] },
     }));
+  });
+
+  it('opens replacement and direct swap as separate actions from a published assignment', async () => {
+    storeRoutes();
+    const schedule = scheduleWith();
+    const first = { ...schedule.assignments[0], status: 'SCHEDULED' };
+    const second = { ...first, shiftAssignmentId: 'a-2', userId: 'u-lan', fullName: 'Hoàng Lan', shiftId: evening.shiftId, shiftName: 'Evening' };
+    routes['GET /api/schedule'] = () => json({ ...schedule, assignments: [first, second] });
+    routes['GET /api/shifts'] = () => json([morning, evening]);
+    routes['GET /api/swap-requests'] = () => json([]);
+    routes['GET /api/schedule/staff-options'] = () => json([
+      { userId: second.userId, fullName: second.fullName, eligible: true, weeklyHoursAfter: 16, problems: [], specialtyName: 'Cashier', specialtyCode: 'SPC-01' },
+      { userId: 'u-cleaner', fullName: 'Cleaner A', eligible: false, weeklyHoursAfter: 8, problems: ['Both Staff members must have the same assigned specialty to swap or cover a shift.'], specialtyName: 'Cleaner', specialtyCode: 'SPC-03' },
+    ]);
+    routes['POST /api/swap-requests/manager-direct'] = () => json({});
+    show('/manager/schedule', <Schedule />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /View roster for Morning/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Nguyễn An/ }));
+    const assignment = within(screen.getByRole('dialog'));
+    await userEvent.click(assignment.getByRole('button', { name: 'Swap two shifts' }));
+    const swap = within(screen.getByRole('dialog', { name: 'Swap two shifts' }));
+    expect(await swap.findByText(/Nguyễn An · Morning/)).toBeVisible();
+    await userEvent.click(swap.getByRole('button', { name: 'Cancel' }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Assign replacement' }));
+    expect(await screen.findByRole('radio', { name: /Cleaner A.*same assigned specialty/ })).toBeDisabled();
+    await userEvent.click(await screen.findByRole('radio', { name: /Hoàng Lan/ }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Manager assignment reason (required)' }), 'Coverage needed');
+    await userEvent.click(screen.getByRole('button', { name: 'Assign cover' }));
+    await waitFor(() => expect(calls.find((c) => c.method === 'POST')).toMatchObject({
+      path: '/api/swap-requests/manager-direct',
+      body: { type: 'COVER', requesterShiftAssignmentId: 'a-1', targetUserId: 'u-lan', targetShiftAssignmentId: null, note: 'Coverage needed' },
+    }));
+  });
+
+  it('exchanges two published shifts directly from Shift changes', async () => {
+    const schedule = scheduleWith();
+    const first = { ...schedule.assignments[0], status: 'SCHEDULED' };
+    const second = { ...first, shiftAssignmentId: 'a-2', userId: 'u-lan', fullName: 'Hoàng Lan', shiftId: evening.shiftId, shiftName: 'Evening' };
+    const draft = { ...second, shiftAssignmentId: 'a-draft', status: 'DRAFT' };
+    routes['GET /api/swap-requests'] = () => json([]);
+    routes['GET /api/schedule'] = () => json({ ...schedule, assignments: [first, second, draft] });
+    routes['POST /api/swap-requests/manager-direct'] = () => json({});
+    show('/manager/swaps', <SwapRequests />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Swap two shifts' }));
+    const swap = within(screen.getByRole('dialog', { name: 'Swap two shifts' }));
+    const firstShift = await swap.findByRole('combobox', { name: 'First shift' });
+    expect(within(firstShift).getAllByRole('option')).toHaveLength(3);
+    expect(swap.getByRole('combobox', { name: 'Second shift' })).toBeDisabled();
+    await userEvent.selectOptions(firstShift, 'a-1');
+    await userEvent.selectOptions(swap.getByRole('combobox', { name: 'Second shift' }), 'a-2');
+    expect(swap.getByText(/Nguyễn An takes Evening.*Hoàng Lan takes Morning/)).toBeVisible();
+    expect(swap.getByRole('button', { name: 'Apply direct swap' })).toBeDisabled();
+    await userEvent.type(swap.getByRole('textbox', { name: 'Reason for swap (required)' }), 'Agreed coverage swap');
+    await userEvent.click(swap.getByRole('button', { name: 'Apply direct swap' }));
+    expect(await screen.findByText('Shifts swapped for Nguyễn An and Hoàng Lan.')).toBeVisible();
+    expect(calls.find((c) => c.method === 'POST')).toMatchObject({
+      path: '/api/swap-requests/manager-direct',
+      body: { type: 'SWAP', requesterShiftAssignmentId: 'a-1', targetUserId: 'u-lan', targetShiftAssignmentId: 'a-2', note: 'Agreed coverage swap' },
+    });
   });
 
   it('needs a reason to reject a swap, and shows the rule checks', async () => {

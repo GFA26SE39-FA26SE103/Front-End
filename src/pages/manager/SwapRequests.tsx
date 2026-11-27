@@ -8,11 +8,12 @@ import { Icon } from '../../components/Icon';
 import { ManagerLayout } from '../../components/ManagerLayout';
 import { Badge, Button, Card, CardHeader } from '../../components/ui';
 import { dateTime, longDayLabel, problem, range } from './dates';
+import { DirectSwapDialog } from './DirectSwapDialog';
 import { useLoad } from './useLoad';
 import s from './manager.module.css';
 
 const TABS = [
-  { key: 'PENDING_MANAGER', label: 'Manager actions' },
+  { key: 'PENDING_MANAGER', label: 'Pending requests' },
   { key: 'APPROVED', label: 'Approved' },
   { key: 'REJECTED', label: 'Rejected' },
   { key: 'PENDING_PEER,DECLINED_BY_PEER,CANCELLED,EXPIRED', label: 'Other' },
@@ -70,15 +71,21 @@ function EmptyShiftValue({ title, detail }: { title: string; detail: string }) {
 export function SwapRequests() {
   const [tab, setTab] = useState<string>(TABS[0].key);
   const [reload, setReload] = useState(0);
+  const [showDirectSwap, setShowDirectSwap] = useState(false);
+  const [notice, setNotice] = useState('');
   const { data: requests, error } = useLoad(`${tab}|${reload}`, (signal) => listSwapRequests(tab, signal));
   const all = useLoad(String(reload), (signal) => listSwapRequests('ALL', signal)).data ?? [];
 
   const count = (key: string) => all.filter((r) => key.split(',').includes(r.status)).length;
 
   return (
-    <ManagerLayout title="Shift swap requests"
-      actions={<Button variant="secondary" onClick={() => setReload((n) => n + 1)}>Refresh</Button>}>
+    <ManagerLayout title="Shift changes"
+      actions={<div className={s.tabs}>
+        <Button variant="secondary" onClick={() => setReload((n) => n + 1)}>Refresh</Button>
+        <Button aria-haspopup="dialog" onClick={() => setShowDirectSwap(true)}>Swap two shifts</Button>
+      </div>}>
       <div className={s.page}>
+          {notice && <p className={s.success} role="status">{notice}</p>}
           <div className={s.tabsBar}>
             <div className={s.tabs} role="tablist" aria-label="Request status">
               {TABS.map((t) => (
@@ -89,7 +96,7 @@ export function SwapRequests() {
             </div>
           </div>
           <Card>
-            <CardHeader title={tab === 'PENDING_MANAGER' ? 'Manager actions' : TABS.find((t) => t.key === tab)?.label ?? ''} />
+            <CardHeader title={TABS.find((t) => t.key === tab)?.label ?? ''} />
             {error ? <p className={s.error} role="alert">{error}</p>
               : !requests ? <p className={s.note} role="status">Loading requests…</p>
               : requests.length === 0 ? <p className={s.note}>{tab === 'PENDING_MANAGER' ? 'No Manager action is needed right now.' : 'No requests here.'}</p>
@@ -127,6 +134,13 @@ export function SwapRequests() {
               )}
           </Card>
       </div>
+      {showDirectSwap && (
+        <DirectSwapDialog onClose={() => setShowDirectSwap(false)} onDone={(message) => {
+          setShowDirectSwap(false);
+          setNotice(message);
+          setReload((n) => n + 1);
+        }} />
+      )}
     </ManagerLayout>
   );
 }
@@ -196,7 +210,7 @@ export function SwapRequestDetail() {
   const rules = [...new Set(r?.checks.map((c) => c.code) ?? [])]
     .map((code) => ({ code, passed: (r?.checks ?? []).filter((c) => c.code === code).every((c) => c.passed) }));
   return (
-    <ManagerLayout title="Review shift swap" actions={<Button variant="secondary" onClick={() => navigate('/manager/swaps')}>Back</Button>}>
+    <ManagerLayout title="Shift change details" actions={<Button variant="secondary" onClick={() => navigate('/manager/swaps')}>Back</Button>}>
       <div className={s.page}>
         {loadError ? <p className={s.error} role="alert">{loadError}</p>
           : !r ? <p className={s.note} role="status">Loading the request…</p>
