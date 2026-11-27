@@ -125,6 +125,10 @@ export default function UsersRoles() {
       setError('Enter a full name and select a role.');
       return;
     }
+    if (selectedRole?.name === 'STAFF' && !editor.specialtyId) {
+      setError('Please select a specialty');
+      return;
+    }
     setBusy(true);
     setError('');
     setNotice('');
@@ -215,10 +219,10 @@ export default function UsersRoles() {
                 }}>
                   {roles.map((role) => <option key={role.roleId} value={role.roleId} disabled={lastAdmin && role.name !== 'ADMIN'}>{roleLabel(role.name)}</option>)}
                 </select></label>
-                {selectedRole?.name === 'STAFF' && <label>Staff specialty<select aria-label="Staff specialty" value={editor.specialtyId} onChange={(event) => setEditor({ ...editor, specialtyId: event.target.value })}>
+                {selectedRole?.name === 'STAFF' && <label>Staff specialty<select aria-label="Staff specialty" value={editor.specialtyId} onChange={(event) => { setEditor({ ...editor, specialtyId: event.target.value }); if (event.target.value && error === 'Please select a specialty') setError(''); }}>
                   <option value="">No specialty assigned</option>
                   {specialties.map((specialty) => <option key={specialty.specialtyId} value={specialty.specialtyId}>{specialty.name} ({specialty.code})</option>)}
-                </select><span className={s.specialtyHint}>Without a specialty, this Staff account will not receive task offers that require a matching specialty.</span></label>}
+                </select></label>}
                 {lastAdmin && <p className={s.note}>This is the last active Administrator. Its role and active status must be preserved.</p>}
                 {self && !lastAdmin && <p className={s.note}>Changing your own role or disabling your account signs you out immediately.</p>}
                 <div className={s.formActions}>

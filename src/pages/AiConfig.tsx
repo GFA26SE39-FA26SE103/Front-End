@@ -30,7 +30,7 @@ const inputRule = (r: MonitoringRule): RuleInput => ({ ...r, warningThreshold: S
   criticalExitThreshold: r.criticalExitThreshold == null ? '' : String(r.criticalExitThreshold) });
 /** Shows "≥ enter" and, when a dead band is configured, "held until < exit". */
 const band = (enter: number, exit: number | null | undefined, unit: string) => `≥ ${enter}${exit != null && exit !== enter ? ` · held until < ${exit}` : ''} ${unit}`;
-const message = (e: unknown) => e instanceof Error ? e.message : 'The request could not be completed.';
+const message = (e: unknown) => e instanceof ApiError && e.code === 'CONFIGURATION_CHANGED' ? 'Configuration changed. Refresh the page and try again.' : e instanceof Error ? e.message : 'The request could not be completed.';
 const RULE_REQUIRED = 'Add at least one operational event rule before saving. Choose a rule from the list.';
 function decimal(raw: string, label: string) {
   if (!/^\d+(\.\d{1,4})?$/.test(raw.trim()) || !Number.isFinite(Number(raw))) throw new Error(label + ' must be a non-negative number with at most 4 decimal places.');
@@ -451,7 +451,7 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
       {loading && <p className={s.help} role="status">Loading configuration…</p>}
       {error && !deleting && <p className={s.alertBox} role="alert">{error}</p>}
       {notice && <p className={s.saved} role="status">{notice}</p>}
-      {loadFailed && <Button variant="secondary" onClick={reloadSaved}>Reload saved configuration</Button>}
+      {loadFailed && <Button variant="secondary" onClick={reloadSaved}>Retry</Button>}
 
       {!loading && !loadFailed && !showForm && <>
         {editing && active && <p className={s.help}>An active configuration cannot be edited. Deactivate it first.</p>}
@@ -489,7 +489,6 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
           </div> : <p className={s.missingBox}>This configuration has no operational event rules. Edit it and add at least one rule.</p>}
           <div className={s.actions}>
             <Button disabled={busy || active} onClick={() => { fillForm(config); setReview(null); setPreviewCameraId(null); setPolicyRuleId(null); setError(''); setNotice(''); onOpen(true); }}>Edit configuration</Button>
-            <Button variant="secondary" disabled={busy} onClick={reloadSaved}>Reload saved configuration</Button>
             <Button variant="secondary" className={s.deleteButton} disabled={busy || active} onClick={() => { setError(''); setNotice(''); setDeleting(config); }}>Delete configuration</Button>
           </div>
           {active && <p className={s.help}>This configuration is active. Deactivate it before changing confidence or rules.</p>}
@@ -605,7 +604,6 @@ function ZoneConfig({ zone, floorName, types, editing, onOpen, onBack, onChanged
           }}>Cancel</Button>
           {dirty && <span className={s.help}>Unsaved changes</span>}
         </div>
-        <div className={s.actions}><Button variant="secondary" disabled={busy} onClick={reloadSaved}>Reload saved configuration</Button></div>
       </form>}
     </section>
 

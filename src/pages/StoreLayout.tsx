@@ -442,7 +442,7 @@ export default function StoreLayout() {
 
         <div className={s.source}>
           <Overline>FLOOR PLAN SOURCE</Overline>
-          <p className={s.sourceName}>{selectedFloor?.mapAssetUrl ? 'Authenticated uploaded asset' : 'No floor plan uploaded'}</p>
+          {!selectedFloor?.mapAssetUrl && <p className={s.sourceName}>No floor plan uploaded</p>}
           {selectedFloor?.mapWidth && selectedFloor.mapHeight && <p className={s.meta}>{selectedFloor.mapWidth} × {selectedFloor.mapHeight} px</p>}
           <input
             ref={fileInput}

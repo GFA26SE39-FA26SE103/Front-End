@@ -127,7 +127,12 @@ describe('Users & Roles account integration', () => {
     await user.type(screen.getByLabelText('Full name'), 'Queue Staff');
     await user.type(screen.getByLabelText('Email'), 'queue.staff@example.test');
     await user.type(screen.getByLabelText(/Password/), 'TestPassword123!');
+    expect(screen.queryByText('Please select a specialty')).not.toBeInTheDocument();
+    await user.click(screen.getAllByRole('button', { name: 'Create account' })[1]);
+    expect(screen.getByText('Please select a specialty')).toBeVisible();
+    expect(requests.some((request) => request.method === 'POST' && request.path === '/api/users')).toBe(false);
     await user.selectOptions(screen.getByLabelText('Staff specialty'), 'specialty-queue');
+    expect(screen.queryByText('Please select a specialty')).not.toBeInTheDocument();
     await user.click(screen.getAllByRole('button', { name: 'Create account' })[1]);
     await screen.findByText('Account created. The user can now sign in.');
     expect(requests.find((request) => request.method === 'POST' && request.path === '/api/users')).toMatchObject({

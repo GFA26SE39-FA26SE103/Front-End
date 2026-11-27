@@ -282,7 +282,7 @@ describe('API-backed monitoring configuration', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Delete configuration' }));
     const dialog = screen.getByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete configuration' }));
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Configuration changed; reload before deleting.');
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Configuration changed. Refresh the page and try again.');
     expect(screen.queryByText('Configuration deleted. This zone is now not configured.')).not.toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(screen.getByText('Queue monitoring')).toBeInTheDocument();
@@ -389,7 +389,7 @@ describe('API-backed monitoring configuration', () => {
     failLoad = true; show(); await screen.findByText('Configuration could not be loaded.');
     expect(screen.queryByRole('button', { name: 'Create configuration' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save configuration' })).not.toBeInTheDocument(); expect(writes).toHaveLength(0);
-    failLoad = false; fireEvent.click(screen.getByRole('button', { name: 'Reload saved configuration' }));
+    failLoad = false; fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await screen.findByRole('button', { name: 'Create configuration' });
   });
 
