@@ -30,6 +30,7 @@ export type Recommendation = {
   reviewedByUserId: string | null;
   reviewedAt: string | null;
   historicalEvidence?: HistoricalRecommendationEvidence | null;
+  historicalModel?: string | null;
   guidance: {
     rationale: string;
     immediateSteps: string[];
@@ -72,5 +73,5 @@ export const generateRecommendation = (eventId: string, signal: AbortSignal) =>
 
 export const generateHistoricalRecommendations = (query: AnalyticsQuery, signal: AbortSignal) =>
   apiFetch<HistoricalGenerationResult>(`${base('manager')}/generate-historical`, {
-    method: 'POST', body: JSON.stringify(query), signal,
+    method: 'POST', body: JSON.stringify(query), timeoutMs: 125000, signal,
   });
