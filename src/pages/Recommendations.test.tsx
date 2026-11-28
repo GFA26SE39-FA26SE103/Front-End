@@ -43,6 +43,22 @@ function view(initial: string) {
 describe('D14 recommendation screens', () => {
   beforeEach(() => { signIn('MANAGER'); });
 
+  it('shows historical evidence and directs accepted coverage advice to Schedule', async () => {
+    const historical: Recommendation = {
+      ...row, eventId: null, recommendationType: 'REVIEW_HISTORICAL_CHECKOUT_COVERAGE', evidence: null, guidance: null,
+      historicalEvidence: { from: '2026-11-01', to: '2026-11-12', timeZone: 'Asia/Ho_Chi_Minh', zoneName: 'Checkout',
+        eventTypeName: 'Excessive wait', localHour: 17, eventCount: 6, daysWithEvents: 4, periodDays: 12,
+        evidenceVersion: 'historical-pattern-v1' },
+    };
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_, options) => options?.method === 'POST'
+      ? json({ ...historical, status: 'ACCEPTED' }) : json(historical));
+    view(`/manager/recommendations/${id}`);
+    expect(await screen.findByRole('heading', { name: 'Historical evidence' })).toBeInTheDocument();
+    expect(screen.getByText('6 cleared events from 17:00 to 18:00 on 4 of 12 selected days.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Save decision' }));
+    expect(await screen.findByRole('link', { name: 'Open Schedule' })).toHaveAttribute('href', '/manager/schedule');
+  });
+
   it('generates from an active event and lets a Manager accept after reviewing the evidence', async () => {
     const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, options) => {
       const path = new URL(String(url)).pathname;

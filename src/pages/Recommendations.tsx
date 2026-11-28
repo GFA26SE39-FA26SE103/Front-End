@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'reac
 import { ApiError } from '../api/client';
 import { getOperationalEvent, type OperationalEvent } from '../api/operationalEvents';
 import { decideRecommendation, generateRecommendation, getRecommendation, listRecommendations,
-  type Recommendation, type RecommendationDecision, type RecommendationStatus, type RecommendationWorkspace } from '../api/recommendations';
+  type HistoricalRecommendationEvidence, type Recommendation, type RecommendationDecision, type RecommendationStatus, type RecommendationWorkspace } from '../api/recommendations';
 import { ManagerLayout } from '../components/ManagerLayout';
 import { OperatorLayout } from '../components/OperatorLayout';
 import { Button, Card, Chip } from '../components/ui';
@@ -34,6 +34,15 @@ function Status({ status }: { status: RecommendationStatus }) {
   return <Chip tone={status === 'ACCEPTED' ? 'success' : status === 'AVAILABLE' ? 'primary' : status === 'DEFERRED' ? 'warning' : 'neutral'}>
     {statusLabels[status] ?? status}
   </Chip>;
+}
+
+export function HistoricalEvidenceSummary({ evidence }: { evidence: HistoricalRecommendationEvidence }) {
+  const hour = (value: number) => `${String(value).padStart(2, '0')}:00`;
+  return <>
+    <p><strong>{evidence.zoneName} · {evidence.eventTypeName}</strong></p>
+    <p>{evidence.eventCount} cleared events from {hour(evidence.localHour)} to {hour(evidence.localHour + 1)} on {evidence.daysWithEvents} of {evidence.periodDays} selected days.</p>
+    <p className={s.muted}>{evidence.from} — {evidence.to} · {evidence.timeZone} · Evidence {evidence.evidenceVersion}</p>
+  </>;
 }
 
 function useResource<T>(load: (signal: AbortSignal) => Promise<T>) {
@@ -155,6 +164,7 @@ function Detail({ workspace, id }: { workspace: RecommendationWorkspace; id: str
 }
 
 function RecommendationReview({ workspace, value, onSaved }: { workspace: RecommendationWorkspace; value: Recommendation; onSaved?: (item: Recommendation) => void }) {
+  const goesToSchedule = value.recommendationType === 'REVIEW_HISTORICAL_CHECKOUT_COVERAGE';
   return <>
       <Card>
         <p className={s.eyebrow}>Recommended action</p>
@@ -179,6 +189,7 @@ function RecommendationReview({ workspace, value, onSaved }: { workspace: Recomm
           {workspace === 'manager' && value.eventId && <div><dt>Source</dt><dd><Link to={`/manager/events/${encodeURIComponent(value.eventId)}`}>Open operational event</Link></dd></div>}
         </dl>
       </Card>
+      {value.historicalEvidence && <Card><h3>Historical evidence</h3><HistoricalEvidenceSummary evidence={value.historicalEvidence} /></Card>}
       {value.evidence && <Card><details className={s.evidence}>
         <summary>Supporting evidence</summary>
         <dl className={s.facts}>
@@ -194,9 +205,11 @@ function RecommendationReview({ workspace, value, onSaved }: { workspace: Recomm
         </dl>
       </details></Card>}
       {workspace === 'manager' && onSaved && (value.status === 'AVAILABLE' || value.status === 'DEFERRED') && <DecisionForm item={value} onSaved={onSaved} />}
-      {workspace === 'manager' && value.status === 'ACCEPTED' && <p className={s.notice} role="status">Accepted and available for Operator review.</p>}
+      {workspace === 'manager' && value.status === 'ACCEPTED' && (goesToSchedule
+        ? <p className={s.notice} role="status">Accepted. <Link to="/manager/schedule">Open Schedule</Link> to review staffing for this time window.</p>
+        : <p className={s.notice} role="status">Accepted and available for Operator review.</p>)}
       {workspace === 'operator' && (value.eventId ? <CurrentEvent key={value.eventId} eventId={value.eventId} />
-        : <Card><h3>Current event</h3><p className={s.muted}>No source event is linked to this recommendation.</p></Card>)}
+        : !value.historicalEvidence && <Card><h3>Current event</h3><p className={s.muted}>No source event is linked to this recommendation.</p></Card>)}
   </>;
 }
 
@@ -241,11 +254,16 @@ function DecisionForm({ item, onSaved }: { item: Recommendation; onSaved: (item:
       setDecision('ACCEPTED'); setReason(''); onSaved(saved);
     } catch (error: unknown) {
       setError(error instanceof ApiError && error.code === 'RECOMMENDATION_EVIDENCE_UNAVAILABLE'
-        ? 'The source evidence changed or expired. Open the source event and request a new recommendation.' : message(error));
+        ? (item.historicalEvidence
+          ? 'The historical evidence changed. Generate a new recommendation from Analytics.'
+          : 'The source evidence changed or expired. Open the source event and request a new recommendation.')
+        : message(error));
     } finally { setBusy(false); }
   }
   return <Card><h3>Manager decision</h3>
-    <p className={s.muted}>Accepting sends the recommendation to Operator review. Task creation requires a separate action.</p>
+    <p className={s.muted}>{item.recommendationType === 'REVIEW_HISTORICAL_CHECKOUT_COVERAGE'
+      ? 'Accepting records your decision and lets you continue to the regular Schedule workflow.'
+      : 'Accepting sends the recommendation to Operator review. Task creation requires a separate action.'}</p>
     <form className={s.form} onSubmit={event => void submit(event)}>
       <label className={s.field}>Decision<select value={decision} disabled={busy} onChange={event => setDecision(event.target.value as RecommendationDecision)}>
         <option value="ACCEPTED">Accept</option>{item.status === 'AVAILABLE' && <option value="DEFERRED">Defer</option>}<option value="DISMISSED">Dismiss</option>

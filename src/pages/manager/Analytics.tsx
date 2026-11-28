@@ -1,14 +1,16 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError } from '../../api/client';
 import {
   exportAnalyticsReport, getAnalyticsOverview, getAnalyticsTrends, getAnalyticsZones,
   type AnalyticsExportFormat,
   type AnalyticsDuration, type AnalyticsOverview, type AnalyticsQuery, type AnalyticsSla,
-  type AnalyticsTrends, type AnalyticsZones,
+  type AnalyticsPeriod, type AnalyticsTrends, type AnalyticsZones,
 } from '../../api/analytics';
+import { generateHistoricalRecommendations, type HistoricalGenerationResult } from '../../api/recommendations';
 import { ManagerLayout } from '../../components/ManagerLayout';
 import { Button, Card } from '../../components/ui';
+import { HistoricalEvidenceSummary } from '../Recommendations';
 import s from './Analytics.module.css';
 
 type Result = { key: string; data?: { overview: AnalyticsOverview; trends: AnalyticsTrends; zones: AnalyticsZones }; error?: string };
@@ -46,6 +48,59 @@ function SlaCard({ title, value }: { title: string; value: AnalyticsSla }) {
       <div><dt>Unavailable</dt><dd>{number(value.unavailable)}</dd></div>
     </dl>
   </section>;
+}
+
+function HistoricalRecommendations({ period }: { period: AnalyticsPeriod }) {
+  const [result, setResult] = useState<HistoricalGenerationResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const request = useRef<AbortController | null>(null);
+  useEffect(() => () => request.current?.abort(), []);
+
+  async function generate() {
+    if (busy) return;
+    const controller = new AbortController();
+    request.current = controller;
+    setBusy(true);
+    setError('');
+    setResult(null);
+    try {
+      const generated = await generateHistoricalRecommendations({
+        from: period.from, to: period.to, ...(period.zoneId ? { zoneId: period.zoneId } : {}),
+      }, controller.signal);
+      if (!controller.signal.aborted) setResult(generated);
+    } catch (reason) {
+      if (!controller.signal.aborted)
+        setError(reason instanceof ApiError ? reason.message : 'Could not generate historical recommendations. Try again.');
+    } finally {
+      if (!controller.signal.aborted) setBusy(false);
+    }
+  }
+
+  return <section aria-labelledby="historical-recommendations"><Card>
+    <div className={s.recommendationHeader}>
+      <div><h2 id="historical-recommendations">Historical recommendations</h2>
+        <p className={s.muted}>Review recurring checkout or congestion events in the selected period and zone.</p></div>
+      <Button type="button" disabled={busy} onClick={() => void generate()}>
+        {busy ? 'Checking historical records…' : 'Generate recommendations'}
+      </Button>
+    </div>
+    {error && <p role="alert" className={s.error}>{error}</p>}
+    {result && !result.recommendations.length && <p role="status" className={s.muted}>
+      {result.reason === 'PERIOD_TOO_SHORT'
+        ? 'Choose at least 2 calendar days to look for a recurring pattern.'
+        : 'No matching event type occurred in the same active zone and hour on at least 2 separate days.'}
+    </p>}
+    {!!result?.recommendations.length && <ul className={s.recommendations}>
+      {result.recommendations.map(item => <li key={item.recommendationId}>
+        <h3>{item.title}</h3>
+        {item.historicalEvidence && <HistoricalEvidenceSummary evidence={item.historicalEvidence} />}
+        <p>{item.description}</p>
+        <Link to={`/manager/recommendations/${encodeURIComponent(item.recommendationId)}`}
+          aria-label={`Review recommendation: ${item.historicalEvidence?.eventTypeName ?? item.title}`}>Review recommendation</Link>
+      </li>)}
+    </ul>}
+  </Card></section>;
 }
 
 export default function Analytics() {
@@ -181,6 +236,8 @@ export default function Analytics() {
           </Card>
           <Card><h2>Task progress</h2><div className={s.statuses}>{entries.map(([status, count]) => <div key={status}><div className={s.statusLabel}><span>{statusLabels[status] ?? status}</span><strong>{number(count)}</strong></div><div className={s.statusTrack}><div className={status === 'VERIFIED' ? s.verifiedBar : s.statusBar} style={{ width: `${summary.tasks.total ? count / summary.tasks.total * 100 : 0}%` }} /></div></div>)}</div></Card>
         </div>
+
+        <HistoricalRecommendations key={key} period={period} />
 
         <Card><div className={s.sectionHeading}><div><h2>Service levels</h2></div></div>
           <div className={s.slaGrid}><SlaCard title="Response SLA" value={summary.tasks.responseSla} /><SlaCard title="Resolution SLA" value={summary.tasks.resolutionSla} /></div>

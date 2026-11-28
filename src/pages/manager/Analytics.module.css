@@ -26,6 +26,11 @@
 .kpi > span { font-size: 11px; color: var(--color-text-muted); line-height: 1.5; }
 .highlight { border-top: 3px solid var(--color-primary); padding-top: 18px; }
 .visualRow { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(280px, 1fr); gap: 16px; align-items: start; }
+.recommendationHeader { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; }
+.recommendationHeader p { margin-top: 4px; }
+.recommendations { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; padding: 0; margin: 0; list-style: none; }
+.recommendations li { display: grid; justify-items: start; align-content: start; gap: 8px; padding: 14px; border: 1px solid var(--color-border); border-radius: 8px; font-size: 13px; line-height: 1.5; }
+.recommendations a { color: var(--color-primary); font-weight: 600; }
 .chartScroll { overflow-x: auto; margin-top: 18px; }
 .chart { height: 195px; display: flex; align-items: stretch; gap: 8px; padding-top: 16px; }
 .chartColumn { display: flex; flex: 1; min-width: 0; flex-direction: column; align-items: center; gap: 8px; }

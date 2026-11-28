@@ -1,8 +1,22 @@
 import { apiFetch } from './client';
+import type { AnalyticsQuery } from './analytics';
 
 export type RecommendationWorkspace = 'manager' | 'operator';
 export type RecommendationStatus = 'AVAILABLE' | 'DEFERRED' | 'ACCEPTED' | 'DISMISSED' | 'EXPIRED';
 export type RecommendationDecision = 'ACCEPTED' | 'DEFERRED' | 'DISMISSED';
+export type HistoricalRecommendationEvidence = {
+  from: string;
+  to: string;
+  timeZone: string;
+  zoneName: string;
+  eventTypeName: string;
+  localHour: number;
+  eventCount: number;
+  daysWithEvents: number;
+  periodDays: number;
+  evidenceVersion: string;
+};
+
 export type Recommendation = {
   recommendationId: string;
   zoneId: string | null;
@@ -15,6 +29,7 @@ export type Recommendation = {
   expiresAt: string | null;
   reviewedByUserId: string | null;
   reviewedAt: string | null;
+  historicalEvidence?: HistoricalRecommendationEvidence | null;
   guidance: {
     rationale: string;
     immediateSteps: string[];
@@ -32,6 +47,7 @@ export type Recommendation = {
 
 type RecommendationPage = { items: Recommendation[]; page: number; pageSize: number; hasMore: boolean };
 type GenerationResult = { recommendation: Recommendation | null; reason: string | null };
+export type HistoricalGenerationResult = { recommendations: Recommendation[]; reason: string | null };
 const base = (workspace: RecommendationWorkspace) => `/api/${workspace}/recommendations`;
 
 export function listRecommendations(workspace: RecommendationWorkspace, page: number, status: RecommendationStatus | '', signal: AbortSignal, zoneId?: string) {
@@ -52,4 +68,9 @@ export const decideRecommendation = (id: string, decision: RecommendationDecisio
 export const generateRecommendation = (eventId: string, signal: AbortSignal) =>
   apiFetch<GenerationResult>(`${base('manager')}/generate`, {
     method: 'POST', body: JSON.stringify({ eventId }), timeoutMs: 125000, signal,
+  });
+
+export const generateHistoricalRecommendations = (query: AnalyticsQuery, signal: AbortSignal) =>
+  apiFetch<HistoricalGenerationResult>(`${base('manager')}/generate-historical`, {
+    method: 'POST', body: JSON.stringify(query), signal,
   });

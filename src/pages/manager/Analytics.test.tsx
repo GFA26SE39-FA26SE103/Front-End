@@ -60,6 +60,39 @@ afterEach(() => {
 function show() { return render(<MemoryRouter><Analytics /></MemoryRouter>); }
 
 describe('Manager analytics', () => {
+  it('generates historical recommendations using the applied report dates and zone', async () => {
+    const priorFetch = vi.mocked(globalThis.fetch).getMockImplementation()!;
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      if (!String(input).endsWith('/generate-historical')) return priorFetch(input, init);
+      expect(JSON.parse(String(init?.body))).toEqual({ from: period.from, to: period.to, zoneId: 'checkout' });
+      return json({ reason: null, recommendations: [{
+        recommendationId: 'historical-1', title: 'Review checkout coverage for long queues',
+        description: 'Review staffing before the queue usually starts.',
+        historicalEvidence: { from: period.from, to: period.to, timeZone: period.timeZone, zoneName: 'Checkout',
+          eventTypeName: 'Long queue', localHour: 18, eventCount: 5, daysWithEvents: 3, periodDays: 7,
+          evidenceVersion: 'historical-pattern-v1' },
+      }] });
+    });
+    stats.events.active = 0;
+    show();
+    await screen.findByRole('heading', { name: 'Daily activity' });
+    fireEvent.change(screen.getByLabelText('Zone'), { target: { value: 'checkout' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply filters' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Generate recommendations' }));
+    const section = screen.getByRole('region', { name: 'Historical recommendations' });
+    expect(await within(section).findByText('5 cleared events from 18:00 to 19:00 on 3 of 7 selected days.')).toBeInTheDocument();
+    expect(within(section).getByRole('link', { name: 'Review recommendation: Long queue' })).toHaveAttribute('href', '/manager/recommendations/historical-1');
+  });
+
+  it('explains when the selected records do not show a recurring pattern', async () => {
+    const priorFetch = vi.mocked(globalThis.fetch).getMockImplementation()!;
+    vi.mocked(globalThis.fetch).mockImplementation((input, init) => String(input).endsWith('/generate-historical')
+      ? Promise.resolve(json({ recommendations: [], reason: 'NO_RECURRING_PATTERN' })) : priorFetch(input, init));
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Generate recommendations' }));
+    expect(await screen.findByText(/same active zone and hour on at least 2 separate days/)).toBeInTheDocument();
+  });
+
   it('loads all three authenticated endpoints and presents real values, sample counts and accessible daily data', async () => {
     show();
     expect(screen.getByRole('status')).toHaveTextContent('Loading analytics');
